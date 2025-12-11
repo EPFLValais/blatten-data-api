@@ -1,0 +1,223 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+      ],
+      "id": "04Ba00",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "04 - DEFOX Birchgletscher - a - Scale up to 8Px/d",
+        "description": "All Deformation analyses, varied frequency",
+        "start_datetime": "2025-05-30T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z",
+        "blatten:code": "04Ba00",
+        "blatten:sensor": "04 - DEFOX Birchgletscher",
+        "blatten:product_type": "B - Deformation Analysis - Image",
+        "blatten:dataset": "a - Scale up to 8Px/d",
+        "blatten:bundle": "0 - All Frames",
+        "blatten:source": "Geoprevent",
+        "blatten:processing_level": 3,
+        "blatten:phase": "3-4",
+        "blatten:continued": true,
+        "blatten:format": "JPG",
+        "blatten:storage_mb": 168.2177734375,
+        "blatten:has_subsets": true
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba00",
+          "type": "application/geo+json"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis",
+          "type": "application/json"
+        },
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "${STAC_BASE_URL}/stac/catalog.json",
+          "type": "application/json"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${STAC_BASE_URL}/s3/data/04Ba00_DEFOX_all.zip",
+          "type": "application/zip",
+          "title": "04Ba00 Data Archive",
+          "roles": [
+            "data"
+          ],
+          "file:size": 176389120
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+      ],
+      "id": "04Ba01",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "04 - DEFOX Birchgletscher - a - Scale up to 8Px/d",
+        "description": "Deformation analyses, processed 2-3 times per day",
+        "start_datetime": "2025-05-30T00:00:00Z",
+        "end_datetime": "2025-06-09T23:59:59Z",
+        "blatten:code": "04Ba01",
+        "blatten:sensor": "04 - DEFOX Birchgletscher",
+        "blatten:product_type": "B - Deformation Analysis - Image",
+        "blatten:dataset": "a - Scale up to 8Px/d",
+        "blatten:bundle": "1 - Phase 3, 2-3x/d",
+        "blatten:source": "Geoprevent",
+        "blatten:processing_level": 3,
+        "blatten:phase": "3",
+        "blatten:frequency": "2-3x/d",
+        "blatten:continued": false,
+        "blatten:format": "JPG",
+        "blatten:storage_mb": 84.5
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01",
+          "type": "application/geo+json"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis",
+          "type": "application/json"
+        },
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "${STAC_BASE_URL}/stac/catalog.json",
+          "type": "application/json"
+        },
+        {
+          "rel": "derived_from",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba00",
+          "type": "application/geo+json",
+          "title": "Parent dataset 04Ba00"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${STAC_BASE_URL}/s3/data/04Ba01_DEFOX_2to3_per_d.zip",
+          "type": "application/zip",
+          "title": "04Ba01 Data Archive",
+          "roles": [
+            "data"
+          ],
+          "file:size": 88604672
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+      ],
+      "id": "04Ba02",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "04 - DEFOX Birchgletscher - a - Scale up to 8Px/d",
+        "description": "Deformation analyses, processed once per day",
+        "start_datetime": "2025-06-10T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z",
+        "blatten:code": "04Ba02",
+        "blatten:sensor": "04 - DEFOX Birchgletscher",
+        "blatten:product_type": "B - Deformation Analysis - Image",
+        "blatten:dataset": "a - Scale up to 8Px/d",
+        "blatten:bundle": "2 - Phase 3-4, 1d interval",
+        "blatten:source": "Geoprevent",
+        "blatten:processing_level": 3,
+        "blatten:phase": "3-4",
+        "blatten:frequency": "1d",
+        "blatten:continued": true,
+        "blatten:format": "JPG",
+        "blatten:storage_mb": 83.7197265625
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02",
+          "type": "application/geo+json"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis",
+          "type": "application/json"
+        },
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "${STAC_BASE_URL}/stac/catalog.json",
+          "type": "application/json"
+        },
+        {
+          "rel": "derived_from",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba00",
+          "type": "application/geo+json",
+          "title": "Parent dataset 04Ba00"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${STAC_BASE_URL}/s3/data/04Ba02_DEFOX_1_per_d.zip",
+          "type": "application/zip",
+          "title": "04Ba02 Data Archive",
+          "roles": [
+            "data"
+          ],
+          "file:size": 87786496
+        }
+      },
+      "collection": "deformation-analysis"
+    }
+  ],
+  "numberMatched": 3,
+  "numberReturned": 3,
+  "links": [
+    {
+      "rel": "self",
+      "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items",
+      "type": "application/geo+json"
+    },
+    {
+      "rel": "collection",
+      "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis",
+      "type": "application/json"
+    }
+  ]
+}

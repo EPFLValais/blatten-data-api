@@ -1,0 +1,595 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+      ],
+      "id": "10Ma00",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "10 - GNSS Weissenried - a - Position Weissenried WRI1",
+        "description": "Position, distance from origin, raw velocity, last azimuth.",
+        "start_datetime": "2025-06-04T00:00:00Z",
+        "end_datetime": "2025-09-22T23:59:59Z",
+        "blatten:code": "10Ma00",
+        "blatten:sensor": "10 - GNSS Weissenried",
+        "blatten:product_type": "M - GPS-Data",
+        "blatten:dataset": "a - Position Weissenried WRI1",
+        "blatten:bundle": "0 - Whole Period",
+        "blatten:source": "Glaciorisk",
+        "blatten:processing_level": 1,
+        "blatten:phase": "4",
+        "blatten:frequency": "1h",
+        "blatten:continued": true,
+        "blatten:format": "CSV",
+        "blatten:storage_mb": 0.0126953125
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/gnss-data/items/10Ma00",
+          "type": "application/geo+json"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/gnss-data",
+          "type": "application/json"
+        },
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/gnss-data",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "${STAC_BASE_URL}/stac/catalog.json",
+          "type": "application/json"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${STAC_BASE_URL}/s3/data/10M_11M_GNSS.zip",
+          "type": "application/zip",
+          "title": "10Ma00 Data Archive",
+          "roles": [
+            "data"
+          ],
+          "file:size": 13312
+        }
+      },
+      "collection": "gnss-data"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+      ],
+      "id": "11Ma00",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "11 - GNSS Blatten - a - Position Kleines Nesthorn NES1",
+        "description": "Position, distance from origin, raw velocity, last azimuth",
+        "start_datetime": "2025-05-16T00:00:00Z",
+        "end_datetime": "2025-05-19T23:59:59Z",
+        "blatten:code": "11Ma00",
+        "blatten:sensor": "11 - GNSS Blatten",
+        "blatten:product_type": "M - GPS-Data",
+        "blatten:dataset": "a - Position Kleines Nesthorn NES1",
+        "blatten:bundle": "0 - Whole Period",
+        "blatten:source": "Glaciorisk",
+        "blatten:processing_level": 1,
+        "blatten:phase": "1",
+        "blatten:frequency": "1h",
+        "blatten:continued": false,
+        "blatten:format": "CSV",
+        "blatten:storage_mb": 0.003
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/gnss-data/items/11Ma00",
+          "type": "application/geo+json"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/gnss-data",
+          "type": "application/json"
+        },
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/gnss-data",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "${STAC_BASE_URL}/stac/catalog.json",
+          "type": "application/json"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${STAC_BASE_URL}/s3/data/10M_11M_GNSS.zip",
+          "type": "application/zip",
+          "title": "11Ma00 Data Archive",
+          "roles": [
+            "data"
+          ],
+          "file:size": 3145
+        }
+      },
+      "collection": "gnss-data"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+      ],
+      "id": "11Mb00",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "11 - GNSS Blatten - b - Position Blatten 1 BLAT1",
+        "description": "Position, distance from origin, raw velocity, last azimuth",
+        "start_datetime": "2025-07-30T00:00:00Z",
+        "end_datetime": "2025-09-22T23:59:59Z",
+        "blatten:code": "11Mb00",
+        "blatten:sensor": "11 - GNSS Blatten",
+        "blatten:product_type": "M - GPS-Data",
+        "blatten:dataset": "b - Position Blatten 1 BLAT1",
+        "blatten:bundle": "0 - Whole Period",
+        "blatten:source": "Glaciorisk",
+        "blatten:processing_level": 1,
+        "blatten:phase": "4",
+        "blatten:frequency": "1h",
+        "blatten:continued": true,
+        "blatten:format": "CSV",
+        "blatten:storage_mb": 0.0087890625
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/gnss-data/items/11Mb00",
+          "type": "application/geo+json"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/gnss-data",
+          "type": "application/json"
+        },
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/gnss-data",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "${STAC_BASE_URL}/stac/catalog.json",
+          "type": "application/json"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${STAC_BASE_URL}/s3/data/10M_11M_GNSS.zip",
+          "type": "application/zip",
+          "title": "11Mb00 Data Archive",
+          "roles": [
+            "data"
+          ],
+          "file:size": 9216
+        }
+      },
+      "collection": "gnss-data"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+      ],
+      "id": "11Mc00",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "11 - GNSS Blatten - c - Position Blatten 2 BLAT2",
+        "description": "Position, distance from origin, raw velocity, last azimuth",
+        "start_datetime": "2025-07-30T00:00:00Z",
+        "end_datetime": "2025-09-22T23:59:59Z",
+        "blatten:code": "11Mc00",
+        "blatten:sensor": "11 - GNSS Blatten",
+        "blatten:product_type": "M - GPS-Data",
+        "blatten:dataset": "c - Position Blatten 2 BLAT2",
+        "blatten:bundle": "0 - Whole Period",
+        "blatten:source": "Glaciorisk",
+        "blatten:processing_level": 1,
+        "blatten:phase": "4",
+        "blatten:frequency": "1h",
+        "blatten:continued": true,
+        "blatten:format": "CSV",
+        "blatten:storage_mb": 0.0087890625
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/gnss-data/items/11Mc00",
+          "type": "application/geo+json"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/gnss-data",
+          "type": "application/json"
+        },
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/gnss-data",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "${STAC_BASE_URL}/stac/catalog.json",
+          "type": "application/json"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${STAC_BASE_URL}/s3/data/10M_11M_GNSS.zip",
+          "type": "application/zip",
+          "title": "11Mc00 Data Archive",
+          "roles": [
+            "data"
+          ],
+          "file:size": 9216
+        }
+      },
+      "collection": "gnss-data"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+      ],
+      "id": "11Md00",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "11 - GNSS Blatten - d - Position Blatten 3 BLAT3",
+        "description": "Position, distance from origin, raw velocity, last azimuth",
+        "start_datetime": "2025-07-30T00:00:00Z",
+        "end_datetime": "2025-09-22T23:59:59Z",
+        "blatten:code": "11Md00",
+        "blatten:sensor": "11 - GNSS Blatten",
+        "blatten:product_type": "M - GPS-Data",
+        "blatten:dataset": "d - Position Blatten 3 BLAT3",
+        "blatten:bundle": "0 - Whole Period",
+        "blatten:source": "Glaciorisk",
+        "blatten:processing_level": 1,
+        "blatten:phase": "4",
+        "blatten:frequency": "1h",
+        "blatten:continued": true,
+        "blatten:format": "CSV",
+        "blatten:storage_mb": 0.0068359375
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/gnss-data/items/11Md00",
+          "type": "application/geo+json"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/gnss-data",
+          "type": "application/json"
+        },
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/gnss-data",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "${STAC_BASE_URL}/stac/catalog.json",
+          "type": "application/json"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${STAC_BASE_URL}/s3/data/10M_11M_GNSS.zip",
+          "type": "application/zip",
+          "title": "11Md00 Data Archive",
+          "roles": [
+            "data"
+          ],
+          "file:size": 7168
+        }
+      },
+      "collection": "gnss-data"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+      ],
+      "id": "11Me00",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "11 - GNSS Blatten - e - Position Blatten 4 BLAT4",
+        "description": "Position, distance from origin, raw velocity, last azimuth",
+        "start_datetime": "2025-07-30T00:00:00Z",
+        "end_datetime": "2025-08-16T23:59:59Z",
+        "blatten:code": "11Me00",
+        "blatten:sensor": "11 - GNSS Blatten",
+        "blatten:product_type": "M - GPS-Data",
+        "blatten:dataset": "e - Position Blatten 4 BLAT4",
+        "blatten:bundle": "0 - Whole Period",
+        "blatten:source": "Glaciorisk",
+        "blatten:processing_level": 1,
+        "blatten:phase": "4",
+        "blatten:frequency": "1h",
+        "blatten:continued": false,
+        "blatten:format": "CSV",
+        "blatten:storage_mb": 0.0029296875
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/gnss-data/items/11Me00",
+          "type": "application/geo+json"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/gnss-data",
+          "type": "application/json"
+        },
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/gnss-data",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "${STAC_BASE_URL}/stac/catalog.json",
+          "type": "application/json"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${STAC_BASE_URL}/s3/data/10M_11M_GNSS.zip",
+          "type": "application/zip",
+          "title": "11Me00 Data Archive",
+          "roles": [
+            "data"
+          ],
+          "file:size": 3072
+        }
+      },
+      "collection": "gnss-data"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+      ],
+      "id": "11Mf00",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "11 - GNSS Blatten - f - Position Blatten 5 BLAT5",
+        "description": "Position, distance from origin, raw velocity, last azimuth",
+        "start_datetime": "2025-07-30T00:00:00Z",
+        "end_datetime": "2025-09-22T23:59:59Z",
+        "blatten:code": "11Mf00",
+        "blatten:sensor": "11 - GNSS Blatten",
+        "blatten:product_type": "M - GPS-Data",
+        "blatten:dataset": "f - Position Blatten 5 BLAT5",
+        "blatten:bundle": "0 - Whole Period",
+        "blatten:source": "Glaciorisk",
+        "blatten:processing_level": 1,
+        "blatten:phase": "4",
+        "blatten:frequency": "1h",
+        "blatten:continued": true,
+        "blatten:format": "CSV",
+        "blatten:storage_mb": 0.0087890625
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/gnss-data/items/11Mf00",
+          "type": "application/geo+json"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/gnss-data",
+          "type": "application/json"
+        },
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/gnss-data",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "${STAC_BASE_URL}/stac/catalog.json",
+          "type": "application/json"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${STAC_BASE_URL}/s3/data/10M_11M_GNSS.zip",
+          "type": "application/zip",
+          "title": "11Mf00 Data Archive",
+          "roles": [
+            "data"
+          ],
+          "file:size": 9216
+        }
+      },
+      "collection": "gnss-data"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+      ],
+      "id": "11Mg00",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "11 - GNSS Blatten - g - Position Blatten 6 BLAT6",
+        "description": "Position, distance from origin, raw velocity, last azimuth",
+        "start_datetime": "2025-07-30T00:00:00Z",
+        "end_datetime": "2025-09-22T23:59:59Z",
+        "blatten:code": "11Mg00",
+        "blatten:sensor": "11 - GNSS Blatten",
+        "blatten:product_type": "M - GPS-Data",
+        "blatten:dataset": "g - Position Blatten 6 BLAT6",
+        "blatten:bundle": "0 - Whole Period",
+        "blatten:source": "Glaciorisk",
+        "blatten:processing_level": 1,
+        "blatten:phase": "4",
+        "blatten:frequency": "1h",
+        "blatten:continued": true,
+        "blatten:format": "CSV",
+        "blatten:storage_mb": 0.0087890625
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/gnss-data/items/11Mg00",
+          "type": "application/geo+json"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/gnss-data",
+          "type": "application/json"
+        },
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/gnss-data",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "${STAC_BASE_URL}/stac/catalog.json",
+          "type": "application/json"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${STAC_BASE_URL}/s3/data/10M_11M_GNSS.zip",
+          "type": "application/zip",
+          "title": "11Mg00 Data Archive",
+          "roles": [
+            "data"
+          ],
+          "file:size": 9216
+        }
+      },
+      "collection": "gnss-data"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+      ],
+      "id": "11Mh00",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "11 - GNSS Blatten - h - Position Blatten 7 BLAT7",
+        "description": "Position, distance from origin, raw velocity, last azimuth",
+        "start_datetime": "2025-08-06T00:00:00Z",
+        "end_datetime": "2025-08-11T23:59:59Z",
+        "blatten:code": "11Mh00",
+        "blatten:sensor": "11 - GNSS Blatten",
+        "blatten:product_type": "M - GPS-Data",
+        "blatten:dataset": "h - Position Blatten 7 BLAT7",
+        "blatten:bundle": "0 - Whole Period",
+        "blatten:source": "Glaciorisk",
+        "blatten:processing_level": 1,
+        "blatten:phase": "4",
+        "blatten:frequency": "1h",
+        "blatten:continued": false,
+        "blatten:format": "CSV",
+        "blatten:storage_mb": 0.001953125
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/gnss-data/items/11Mh00",
+          "type": "application/geo+json"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/gnss-data",
+          "type": "application/json"
+        },
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/gnss-data",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "${STAC_BASE_URL}/stac/catalog.json",
+          "type": "application/json"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${STAC_BASE_URL}/s3/data/10M_11M_GNSS.zip",
+          "type": "application/zip",
+          "title": "11Mh00 Data Archive",
+          "roles": [
+            "data"
+          ],
+          "file:size": 2048
+        }
+      },
+      "collection": "gnss-data"
+    }
+  ],
+  "numberMatched": 9,
+  "numberReturned": 9,
+  "links": [
+    {
+      "rel": "self",
+      "href": "${STAC_BASE_URL}/stac/collections/gnss-data/items",
+      "type": "application/geo+json"
+    },
+    {
+      "rel": "collection",
+      "href": "${STAC_BASE_URL}/stac/collections/gnss-data",
+      "type": "application/json"
+    }
+  ]
+}

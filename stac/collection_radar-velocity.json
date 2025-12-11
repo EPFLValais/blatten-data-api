@@ -1,0 +1,55 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/file/v2.1.0/schema.json",
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+      ],
+      "id": "06Ha00_Radar_Velocities_ROI",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "Median, max and inverse velocities per ROI, incl. rainfall data at Blatten, Jeizinen, Bruchji, Baltschieder",
+        "description": "Median, max and inverse velocities per ROI, incl. rainfall data at Blatten, Jeizinen, Bruchji, Baltschieder",
+        "datetime": "2025-05-19",
+        "start_datetime": "2025-05-19",
+        "end_datetime": "2025-06-30",
+        "blatten:source": "Geoprevent",
+        "blatten:processing_level": 4,
+        "blatten:frequency": "1h",
+        "blatten:phase": "1-3",
+        "blatten:format": "CSV",
+        "blatten:sensor": "06 - Interferometric Radar Kleines Nesthorn",
+        "blatten:product_type": "H - Radar Velocity - ROI Zones",
+        "blatten:file_count": 1,
+        "blatten:total_size": 21760
+      },
+      "collection": "radar-velocity",
+      "assets": {
+        "06Ha00_GP-GRAVX-velocity-trends-excerpt_06Ha00_GP-GRAVX-velocity-trends-excerpt.csv": {
+          "href": "/s3/assets/06Ha00_Radar_Velocities_ROI/06Ha00_GP-GRAVX-velocity-trends-excerpt/06Ha00_GP-GRAVX-velocity-trends-excerpt.csv",
+          "type": "text/csv",
+          "title": "06Ha00_GP-GRAVX-velocity-trends-excerpt.csv",
+          "roles": [
+            "data"
+          ],
+          "file:size": 16397
+        },
+        "archive": {
+          "href": "/s3/archives/06Ha00_Radar_Velocities_ROI.zip",
+          "type": "application/zip",
+          "title": "Complete archive (06Ha00_Radar_Velocities_ROI.zip)",
+          "roles": [
+            "data",
+            "archive"
+          ],
+          "file:size": 5363
+        }
+      },
+      "links": []
+    }
+  ]
+}

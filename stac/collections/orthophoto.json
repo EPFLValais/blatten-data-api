@@ -1,0 +1,90 @@
+{
+  "type": "Collection",
+  "id": "orthophoto",
+  "stac_version": "1.0.0",
+  "stac_extensions": [
+    "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+    "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
+    "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+  ],
+  "title": "Orthophotos",
+  "description": "Orthorectified aerial and drone imagery",
+  "license": "CC-BY-NC-SA-4.0",
+  "keywords": [
+    "Birch Glacier",
+    "Blatten",
+    "Switzerland",
+    "glacier collapse",
+    "landslide",
+    "orthophotos"
+  ],
+  "providers": [
+    {
+      "name": "Canton du Valais",
+      "roles": [
+        "licensor",
+        "host"
+      ],
+      "url": "https://www.vs.ch/"
+    },
+    {
+      "name": "EPFL ALPOLE",
+      "roles": [
+        "processor",
+        "host"
+      ],
+      "url": "https://www.epfl.ch/research/domains/alpole/"
+    }
+  ],
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [
+          7.7865834,
+          46.3949819,
+          7.8489044,
+          46.4210874
+        ]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          "2025-05-19T00:00:00Z",
+          "2025-07-14T23:59:59Z"
+        ]
+      ]
+    }
+  },
+  "summaries": {
+    "processing_level": [
+      3
+    ],
+    "source": [
+      "Terradata"
+    ]
+  },
+  "links": [
+    {
+      "rel": "self",
+      "href": "${STAC_BASE_URL}/stac/collections/orthophoto",
+      "type": "application/json"
+    },
+    {
+      "rel": "root",
+      "href": "${STAC_BASE_URL}/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "${STAC_BASE_URL}/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "items",
+      "href": "${STAC_BASE_URL}/stac/collections/orthophoto/items",
+      "type": "application/geo+json"
+    }
+  ],
+  "assets": {}
+}

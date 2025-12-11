@@ -1,0 +1,99 @@
+{
+  "type": "Collection",
+  "id": "point-cloud",
+  "stac_version": "1.0.0",
+  "stac_extensions": [
+    "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+    "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
+    "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+  ],
+  "title": "Point Clouds",
+  "description": "LiDAR and photogrammetric point cloud data",
+  "license": "CC-BY-NC-SA-4.0",
+  "keywords": [
+    "Birch Glacier",
+    "Blatten",
+    "Switzerland",
+    "glacier collapse",
+    "landslide",
+    "point clouds"
+  ],
+  "providers": [
+    {
+      "name": "Canton du Valais",
+      "roles": [
+        "licensor",
+        "host"
+      ],
+      "url": "https://www.vs.ch/"
+    },
+    {
+      "name": "EPFL ALPOLE",
+      "roles": [
+        "processor",
+        "host"
+      ],
+      "url": "https://www.epfl.ch/research/domains/alpole/"
+    }
+  ],
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [
+          7.82138639820329,
+          46.4242054434844,
+          7.82239826061982,
+          46.4249865759509
+        ]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          "2025-07-11T00:00:00Z",
+          "2025-07-11T23:59:59Z"
+        ]
+      ]
+    }
+  },
+  "summaries": {
+    "processing_level": [
+      3
+    ],
+    "source": [
+      "Terradata"
+    ]
+  },
+  "links": [
+    {
+      "rel": "self",
+      "href": "${STAC_BASE_URL}/stac/collections/point-cloud",
+      "type": "application/json"
+    },
+    {
+      "rel": "root",
+      "href": "${STAC_BASE_URL}/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "${STAC_BASE_URL}/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "items",
+      "href": "${STAC_BASE_URL}/stac/collections/point-cloud/items",
+      "type": "application/geo+json"
+    }
+  ],
+  "assets": {
+    "archive": {
+      "href": "${STAC_BASE_URL}/s3/data/14Ka04.zip",
+      "type": "application/zip",
+      "title": "Full Point Clouds Archive",
+      "roles": [
+        "data"
+      ]
+    }
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+      ],
+      "id": "14La02",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "14 - Helimap - a - Kleines Nesthorn",
+        "description": "Sketchfab 3D visualization",
+        "datetime": "2025-05-29T00:00:00Z",
+        "blatten:code": "14La02",
+        "blatten:sensor": "14 - Helimap",
+        "blatten:product_type": "L - 3D-Model",
+        "blatten:dataset": "a - Kleines Nesthorn",
+        "blatten:bundle": "2 - 29.05.2025",
+        "blatten:source": "Terradata",
+        "blatten:processing_level": 4,
+        "blatten:phase": "3",
+        "blatten:continued": false,
+        "blatten:format": "OBJ",
+        "blatten:storage_mb": 457.0
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/3d-model/items/14La02",
+          "type": "application/geo+json"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/3d-model",
+          "type": "application/json"
+        },
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/3d-model",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "${STAC_BASE_URL}/stac/catalog.json",
+          "type": "application/json"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${STAC_BASE_URL}/s3/data/14La02.zip",
+          "type": "application/zip",
+          "title": "14La02 Data Archive",
+          "roles": [
+            "data"
+          ],
+          "file:size": 479199232
+        }
+      },
+      "collection": "3d-model"
+    }
+  ],
+  "numberMatched": 1,
+  "numberReturned": 1,
+  "links": [
+    {
+      "rel": "self",
+      "href": "${STAC_BASE_URL}/stac/collections/3d-model/items",
+      "type": "application/geo+json"
+    },
+    {
+      "rel": "collection",
+      "href": "${STAC_BASE_URL}/stac/collections/3d-model",
+      "type": "application/json"
+    }
+  ]
+}

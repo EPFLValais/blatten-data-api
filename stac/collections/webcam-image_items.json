@@ -1,0 +1,288 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+      ],
+      "id": "02Ah00",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "02 - FlexCam Birchgletscher - h - Birchbach - Channel",
+        "description": "All images zoomed to the channel below Lower Birchgletscher, taken hourly during daylight hours",
+        "start_datetime": "2025-05-27T00:00:00Z",
+        "end_datetime": "2025-06-04T23:59:59Z",
+        "blatten:code": "02Ah00",
+        "blatten:sensor": "02 - FlexCam Birchgletscher",
+        "blatten:product_type": "A - Webcam-Image",
+        "blatten:dataset": "h - Birchbach - Channel",
+        "blatten:bundle": "0 - All images",
+        "blatten:source": "Geoprevent",
+        "blatten:processing_level": 2,
+        "blatten:phase": "2-4",
+        "blatten:frequency": "1h",
+        "blatten:continued": true,
+        "blatten:format": "JPG",
+        "blatten:storage_mb": 163.1678991317749
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/webcam-image/items/02Ah00",
+          "type": "application/geo+json"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/webcam-image",
+          "type": "application/json"
+        },
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/webcam-image",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "${STAC_BASE_URL}/stac/catalog.json",
+          "type": "application/json"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${STAC_BASE_URL}/s3/data/02Ah00_FlexCam_Birchgletscher_BirchbachChannel_SAMPLE.zip",
+          "type": "application/zip",
+          "title": "02Ah00 Data Archive",
+          "roles": [
+            "data"
+          ],
+          "file:size": 171093943
+        }
+      },
+      "collection": "webcam-image"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+      ],
+      "id": "08Aa00",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "08 - Webcam Lonza - View from SW - a - Deposition Birchmatt\u00e4 Blatten",
+        "description": "All images of deposition area - taken with varied frequency",
+        "start_datetime": "2025-05-29T00:00:00Z",
+        "end_datetime": "2025-09-23T23:59:59Z",
+        "blatten:code": "08Aa00",
+        "blatten:sensor": "08 - Webcam Lonza - View from SW",
+        "blatten:product_type": "A - Webcam-Image",
+        "blatten:dataset": "a - Deposition Birchmatt\u00e4 Blatten",
+        "blatten:bundle": "0 - All images",
+        "blatten:source": "Guardaval",
+        "blatten:processing_level": 2,
+        "blatten:phase": "3-4",
+        "blatten:frequency": "30min",
+        "blatten:continued": true,
+        "blatten:format": "JPG",
+        "blatten:storage_mb": 6015.6640625,
+        "blatten:has_subsets": true
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/webcam-image/items/08Aa00",
+          "type": "application/geo+json"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/webcam-image",
+          "type": "application/json"
+        },
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/webcam-image",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "${STAC_BASE_URL}/stac/catalog.json",
+          "type": "application/json"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${STAC_BASE_URL}/s3/data/08Aa00_Webcam_Lonza_all.7z",
+          "type": "application/x-7z-compressed",
+          "title": "08Aa00 Data Archive",
+          "roles": [
+            "data"
+          ],
+          "file:size": 6307880960
+        }
+      },
+      "collection": "webcam-image"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+      ],
+      "id": "08Aa01",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "08 - Webcam Lonza - View from SW - a - Deposition Birchmatt\u00e4 Blatten",
+        "description": "Images of deposition area - taken hourly",
+        "start_datetime": "2025-05-29T00:00:00Z",
+        "end_datetime": "2025-06-01T23:59:59Z",
+        "blatten:code": "08Aa01",
+        "blatten:sensor": "08 - Webcam Lonza - View from SW",
+        "blatten:product_type": "A - Webcam-Image",
+        "blatten:dataset": "a - Deposition Birchmatt\u00e4 Blatten",
+        "blatten:bundle": "1 - 1h interval",
+        "blatten:source": "Guardaval",
+        "blatten:processing_level": 2,
+        "blatten:phase": "3",
+        "blatten:frequency": "1h",
+        "blatten:continued": false,
+        "blatten:format": "JPG",
+        "blatten:storage_mb": 78.3525390625
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/webcam-image/items/08Aa01",
+          "type": "application/geo+json"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/webcam-image",
+          "type": "application/json"
+        },
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/webcam-image",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "${STAC_BASE_URL}/stac/catalog.json",
+          "type": "application/json"
+        },
+        {
+          "rel": "derived_from",
+          "href": "${STAC_BASE_URL}/stac/collections/webcam-image/items/08Aa00",
+          "type": "application/geo+json",
+          "title": "Parent dataset 08Aa00"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${STAC_BASE_URL}/s3/data/08Aa01_Webcam_Lonza_1h.zip",
+          "type": "application/zip",
+          "title": "08Aa01 Data Archive",
+          "roles": [
+            "data"
+          ],
+          "file:size": 82158592
+        }
+      },
+      "collection": "webcam-image"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+      ],
+      "id": "08Aa02",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "08 - Webcam Lonza - View from SW - a - Deposition Birchmatt\u00e4 Blatten",
+        "description": "Images of deposition area - taken every 30 minutes",
+        "start_datetime": "2025-06-01T00:00:00Z",
+        "end_datetime": "2025-09-23T23:59:59Z",
+        "blatten:code": "08Aa02",
+        "blatten:sensor": "08 - Webcam Lonza - View from SW",
+        "blatten:product_type": "A - Webcam-Image",
+        "blatten:dataset": "a - Deposition Birchmatt\u00e4 Blatten",
+        "blatten:bundle": "2 - 30min interval",
+        "blatten:source": "Guardaval",
+        "blatten:processing_level": 2,
+        "blatten:phase": "3-4",
+        "blatten:frequency": "30min",
+        "blatten:continued": true,
+        "blatten:format": "JPG",
+        "blatten:storage_mb": 3009.619140625
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/webcam-image/items/08Aa02",
+          "type": "application/geo+json"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/webcam-image",
+          "type": "application/json"
+        },
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/webcam-image",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "${STAC_BASE_URL}/stac/catalog.json",
+          "type": "application/json"
+        },
+        {
+          "rel": "derived_from",
+          "href": "${STAC_BASE_URL}/stac/collections/webcam-image/items/08Aa00",
+          "type": "application/geo+json",
+          "title": "Parent dataset 08Aa00"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${STAC_BASE_URL}/s3/data/08Aa02_Webcam_Lonza_30min.7z",
+          "type": "application/x-7z-compressed",
+          "title": "08Aa02 Data Archive",
+          "roles": [
+            "data"
+          ],
+          "file:size": 3155814400
+        }
+      },
+      "collection": "webcam-image"
+    }
+  ],
+  "numberMatched": 4,
+  "numberReturned": 4,
+  "links": [
+    {
+      "rel": "self",
+      "href": "${STAC_BASE_URL}/stac/collections/webcam-image/items",
+      "type": "application/geo+json"
+    },
+    {
+      "rel": "collection",
+      "href": "${STAC_BASE_URL}/stac/collections/webcam-image",
+      "type": "application/json"
+    }
+  ]
+}

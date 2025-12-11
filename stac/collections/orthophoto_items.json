@@ -1,0 +1,215 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+      ],
+      "id": "13Db06",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.7866122,
+              46.410731
+            ],
+            [
+              7.7865834,
+              46.4062332
+            ],
+            [
+              7.7930854,
+              46.4062131
+            ],
+            [
+              7.7931147,
+              46.4107109
+            ],
+            [
+              7.7866122,
+              46.410731
+            ]
+          ]
+        ]
+      },
+      "bbox": [
+        7.7865834,
+        46.4062131,
+        7.7931147,
+        46.410731
+      ],
+      "properties": {
+        "title": "13 - Drone Survey - b - Rockfall area",
+        "description": "Drone-based Orthophoto of rockfall area",
+        "datetime": "2025-07-14T00:00:00Z",
+        "blatten:code": "13Db06",
+        "blatten:sensor": "13 - Drone Survey",
+        "blatten:product_type": "D - Orthophoto",
+        "blatten:dataset": "b - Rockfall area",
+        "blatten:bundle": "6 - 14.07. 15:00",
+        "blatten:source": "Terradata",
+        "blatten:processing_level": 3,
+        "blatten:phase": "4",
+        "blatten:continued": false,
+        "blatten:format": "TIF",
+        "blatten:storage_mb": 5190.0,
+        "proj:epsg": 2056,
+        "proj:shape": [
+          10000,
+          10000
+        ]
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/orthophoto/items/13Db06",
+          "type": "application/geo+json"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/orthophoto",
+          "type": "application/json"
+        },
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/orthophoto",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "${STAC_BASE_URL}/stac/catalog.json",
+          "type": "application/json"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${STAC_BASE_URL}/s3/data/13Db06.7z",
+          "type": "application/x-7z-compressed",
+          "title": "13Db06 Data Archive",
+          "roles": [
+            "data"
+          ],
+          "file:size": 5442109440
+        }
+      },
+      "collection": "orthophoto"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+      ],
+      "id": "15Da01",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.8067093,
+              46.4210874
+            ],
+            [
+              7.8065336,
+              46.3951263
+            ],
+            [
+              7.8487085,
+              46.3949819
+            ],
+            [
+              7.8489044,
+              46.4209429
+            ],
+            [
+              7.8067093,
+              46.4210874
+            ]
+          ]
+        ]
+      },
+      "bbox": [
+        7.8065336,
+        46.3949819,
+        7.8489044,
+        46.4210874
+      ],
+      "properties": {
+        "title": "15 - Rapid Mapping - a - Rockfall area",
+        "description": "RapidMapping Orthophoto acquired on May 19th, 2025",
+        "datetime": "2025-05-19T00:00:00Z",
+        "blatten:code": "15Da01",
+        "blatten:sensor": "15 - Rapid Mapping",
+        "blatten:product_type": "D - Orthophoto",
+        "blatten:dataset": "a - Rockfall area",
+        "blatten:bundle": "1 - 19.05.2025",
+        "blatten:source": "Terradata",
+        "blatten:processing_level": 3,
+        "blatten:phase": "1",
+        "blatten:continued": false,
+        "blatten:format": "TIF",
+        "blatten:storage_mb": 130.0,
+        "proj:epsg": 2056,
+        "proj:shape": [
+          10813,
+          9620
+        ]
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/orthophoto/items/15Da01",
+          "type": "application/geo+json"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/orthophoto",
+          "type": "application/json"
+        },
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/orthophoto",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "${STAC_BASE_URL}/stac/catalog.json",
+          "type": "application/json"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${STAC_BASE_URL}/s3/data/15Da01.zip",
+          "type": "application/zip",
+          "title": "15Da01 Data Archive",
+          "roles": [
+            "data"
+          ],
+          "file:size": 136314880
+        }
+      },
+      "collection": "orthophoto"
+    }
+  ],
+  "numberMatched": 2,
+  "numberReturned": 2,
+  "links": [
+    {
+      "rel": "self",
+      "href": "${STAC_BASE_URL}/stac/collections/orthophoto/items",
+      "type": "application/geo+json"
+    },
+    {
+      "rel": "collection",
+      "href": "${STAC_BASE_URL}/stac/collections/orthophoto",
+      "type": "application/json"
+    }
+  ]
+}

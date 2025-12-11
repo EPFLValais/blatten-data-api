@@ -1,0 +1,215 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+      ],
+      "id": "13Ib06",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.7866986,
+              46.4242238
+            ],
+            [
+              7.7865835,
+              46.4062328
+            ],
+            [
+              7.8125915,
+              46.4061501
+            ],
+            [
+              7.8127153,
+              46.4241412
+            ],
+            [
+              7.7866986,
+              46.4242238
+            ]
+          ]
+        ]
+      },
+      "bbox": [
+        7.7865835,
+        46.4061501,
+        7.8127153,
+        46.4242238
+      ],
+      "properties": {
+        "title": "13 - Drone Survey - b - Rockfall area",
+        "description": "Drone-based DSM of rockfall area",
+        "datetime": "2025-07-14T00:00:00Z",
+        "blatten:code": "13Ib06",
+        "blatten:sensor": "13 - Drone Survey",
+        "blatten:product_type": "I - Digital Surface Model DSM",
+        "blatten:dataset": "b - Rockfall area",
+        "blatten:bundle": "6 - 14.07. 15:00",
+        "blatten:source": "Terradata",
+        "blatten:processing_level": 3,
+        "blatten:phase": "4",
+        "blatten:continued": false,
+        "blatten:format": "TIF",
+        "blatten:storage_mb": 320.419921875,
+        "proj:epsg": 2056,
+        "proj:shape": [
+          10000,
+          10000
+        ]
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/dsm/items/13Ib06",
+          "type": "application/geo+json"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/dsm",
+          "type": "application/json"
+        },
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/dsm",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "${STAC_BASE_URL}/stac/catalog.json",
+          "type": "application/json"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${STAC_BASE_URL}/s3/data/13Ib06.zip",
+          "type": "application/zip",
+          "title": "13Ib06 Data Archive",
+          "roles": [
+            "data"
+          ],
+          "file:size": 335984640
+        }
+      },
+      "collection": "dsm"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+      ],
+      "id": "14Ia04",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.754128,
+              46.4080675
+            ],
+            [
+              7.7540237,
+              46.3900764
+            ],
+            [
+              7.780024,
+              46.3900012
+            ],
+            [
+              7.7801369,
+              46.4079923
+            ],
+            [
+              7.754128,
+              46.4080675
+            ]
+          ]
+        ]
+      },
+      "bbox": [
+        7.7540237,
+        46.3900012,
+        7.7801369,
+        46.4080675
+      ],
+      "properties": {
+        "title": "14 - Helimap - a - Rockfall area",
+        "description": "Heliborne DSM of rockfall area",
+        "datetime": "2025-07-11T00:00:00Z",
+        "blatten:code": "14Ia04",
+        "blatten:sensor": "14 - Helimap",
+        "blatten:product_type": "I - Digital Surface Model DSM",
+        "blatten:dataset": "a - Rockfall area",
+        "blatten:bundle": "4 - 11.07. 09:00",
+        "blatten:source": "Terradata",
+        "blatten:processing_level": 3,
+        "blatten:phase": "4",
+        "blatten:continued": false,
+        "blatten:format": "TIF",
+        "blatten:storage_mb": 949.107421875,
+        "proj:epsg": 2056,
+        "proj:shape": [
+          10000,
+          10000
+        ]
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/dsm/items/14Ia04",
+          "type": "application/geo+json"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/dsm",
+          "type": "application/json"
+        },
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/dsm",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "${STAC_BASE_URL}/stac/catalog.json",
+          "type": "application/json"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${STAC_BASE_URL}/s3/data/14Ia04.zip",
+          "type": "application/zip",
+          "title": "14Ia04 Data Archive",
+          "roles": [
+            "data"
+          ],
+          "file:size": 995211264
+        }
+      },
+      "collection": "dsm"
+    }
+  ],
+  "numberMatched": 2,
+  "numberReturned": 2,
+  "links": [
+    {
+      "rel": "self",
+      "href": "${STAC_BASE_URL}/stac/collections/dsm/items",
+      "type": "application/geo+json"
+    },
+    {
+      "rel": "collection",
+      "href": "${STAC_BASE_URL}/stac/collections/dsm",
+      "type": "application/json"
+    }
+  ]
+}

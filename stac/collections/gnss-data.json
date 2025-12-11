@@ -1,0 +1,99 @@
+{
+  "type": "Collection",
+  "id": "gnss-data",
+  "stac_version": "1.0.0",
+  "stac_extensions": [
+    "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+    "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
+    "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+  ],
+  "title": "GNSS Position Data",
+  "description": "High-precision GNSS/GPS position time series",
+  "license": "CC-BY-NC-SA-4.0",
+  "keywords": [
+    "Birch Glacier",
+    "Blatten",
+    "Switzerland",
+    "glacier collapse",
+    "landslide",
+    "gnss position data"
+  ],
+  "providers": [
+    {
+      "name": "Canton du Valais",
+      "roles": [
+        "licensor",
+        "host"
+      ],
+      "url": "https://www.vs.ch/"
+    },
+    {
+      "name": "EPFL ALPOLE",
+      "roles": [
+        "processor",
+        "host"
+      ],
+      "url": "https://www.epfl.ch/research/domains/alpole/"
+    }
+  ],
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [
+          null,
+          null,
+          null,
+          null
+        ]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          "2025-05-16T00:00:00Z",
+          "2025-09-22T23:59:59Z"
+        ]
+      ]
+    }
+  },
+  "summaries": {
+    "processing_level": [
+      1
+    ],
+    "source": [
+      "Glaciorisk"
+    ]
+  },
+  "links": [
+    {
+      "rel": "self",
+      "href": "${STAC_BASE_URL}/stac/collections/gnss-data",
+      "type": "application/json"
+    },
+    {
+      "rel": "root",
+      "href": "${STAC_BASE_URL}/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "${STAC_BASE_URL}/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "items",
+      "href": "${STAC_BASE_URL}/stac/collections/gnss-data/items",
+      "type": "application/geo+json"
+    }
+  ],
+  "assets": {
+    "archive": {
+      "href": "${STAC_BASE_URL}/s3/data/10M_11M_GNSS.zip",
+      "type": "application/zip",
+      "title": "Full GNSS Position Data Archive",
+      "roles": [
+        "data"
+      ]
+    }
+  }
+}

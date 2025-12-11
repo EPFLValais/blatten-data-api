@@ -1,0 +1,989 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/file/v2.1.0/schema.json",
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+      ],
+      "id": "04Ba00_DEFOX_all",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "All Deformation analyses, varied frequency",
+        "description": "All Deformation analyses, varied frequency",
+        "datetime": "2025-05-30",
+        "start_datetime": "2025-05-30",
+        "end_datetime": "2025-06-30",
+        "blatten:source": "Geoprevent",
+        "blatten:processing_level": 3,
+        "blatten:phase": "3-4",
+        "blatten:continued": true,
+        "blatten:format": "JPG",
+        "blatten:sensor": "04 - DEFOX Birchgletscher",
+        "blatten:product_type": "B - Deformation Analysis - Image",
+        "blatten:file_count": 43,
+        "blatten:total_size": 354066079
+      },
+      "collection": "deformation-analysis",
+      "assets": {
+        "04Ba00_DEFOX_all_20250530T190000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250530T190000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250530T190000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 3782679
+        },
+        "04Ba00_DEFOX_all_20250531T120000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250531T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250531T120000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4109465
+        },
+        "04Ba00_DEFOX_all_20250531T200000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250531T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250531T200000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 3696722
+        },
+        "04Ba00_DEFOX_all_20250601T120000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250601T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250601T120000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4105956
+        },
+        "04Ba00_DEFOX_all_20250601T200000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250601T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250601T200000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4020492
+        },
+        "04Ba00_DEFOX_all_20250602T120000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250602T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250602T120000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4068345
+        },
+        "04Ba00_DEFOX_all_20250602T200000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250602T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250602T200000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 3863512
+        },
+        "04Ba00_DEFOX_all_20250603T120000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250603T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250603T120000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 3982115
+        },
+        "04Ba00_DEFOX_all_20250603T200000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250603T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250603T200000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4011406
+        },
+        "04Ba00_DEFOX_all_20250604T120000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250604T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250604T120000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4206914
+        },
+        "04Ba00_DEFOX_all_20250604T200000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250604T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250604T200000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4166317
+        },
+        "04Ba00_DEFOX_all_20250605T120000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250605T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250605T120000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 3895026
+        },
+        "04Ba00_DEFOX_all_20250605T200000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250605T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250605T200000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4045551
+        },
+        "04Ba00_DEFOX_all_20250606T120000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250606T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250606T120000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4054039
+        },
+        "04Ba00_DEFOX_all_20250606T200000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250606T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250606T200000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4057402
+        },
+        "04Ba00_DEFOX_all_20250607T120000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250607T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250607T120000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4118263
+        },
+        "04Ba00_DEFOX_all_20250607T200000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250607T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250607T200000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4099654
+        },
+        "04Ba00_DEFOX_all_20250608T120000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250608T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250608T120000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 3909767
+        },
+        "04Ba00_DEFOX_all_20250608T200000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250608T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250608T200000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4193792
+        },
+        "04Ba00_DEFOX_all_20250609T110000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250609T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250609T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4334671
+        },
+        "04Ba00_DEFOX_all_20250609T120000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250609T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250609T120000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4184515
+        },
+        "04Ba00_DEFOX_all_20250609T200000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250609T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250609T200000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4331732
+        },
+        "04Ba00_DEFOX_all_20250610T110000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250610T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250610T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4352939
+        },
+        "04Ba00_DEFOX_all_20250611T110000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250611T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250611T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4316744
+        },
+        "04Ba00_DEFOX_all_20250612T110000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250612T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250612T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 3842821
+        },
+        "04Ba00_DEFOX_all_20250613T110000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250613T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250613T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 3716994
+        },
+        "04Ba00_DEFOX_all_20250614T110000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250614T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250614T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 3697930
+        },
+        "04Ba00_DEFOX_all_20250615T110000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250615T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250615T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4236883
+        },
+        "04Ba00_DEFOX_all_20250616T110000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250616T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250616T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4128467
+        },
+        "04Ba00_DEFOX_all_20250617T110000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250617T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250617T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4307644
+        },
+        "04Ba00_DEFOX_all_20250618T110000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250618T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250618T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4304037
+        },
+        "04Ba00_DEFOX_all_20250619T110000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250619T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250619T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4274257
+        },
+        "04Ba00_DEFOX_all_20250620T110000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250620T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250620T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4374642
+        },
+        "04Ba00_DEFOX_all_20250621T110000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250621T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250621T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 3926602
+        },
+        "04Ba00_DEFOX_all_20250622T110000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250622T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250622T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4238934
+        },
+        "04Ba00_DEFOX_all_20250623T110000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250623T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250623T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4399329
+        },
+        "04Ba00_DEFOX_all_20250624T110000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250624T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250624T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4404420
+        },
+        "04Ba00_DEFOX_all_20250625T110000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250625T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250625T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4401374
+        },
+        "04Ba00_DEFOX_all_20250626T110000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250626T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250626T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4021355
+        },
+        "04Ba00_DEFOX_all_20250627T110000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250627T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250627T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4177312
+        },
+        "04Ba00_DEFOX_all_20250628T110000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250628T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250628T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4524491
+        },
+        "04Ba00_DEFOX_all_20250629T110000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250629T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250629T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4536126
+        },
+        "04Ba00_DEFOX_all_20250630T110000Z.jpg": {
+          "href": "/s3/assets/04Ba00_DEFOX_all/04Ba00_DEFOX_all/20250630T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250630T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4255802
+        },
+        "archive": {
+          "href": "/s3/archives/04Ba00_DEFOX_all.zip",
+          "type": "application/zip",
+          "title": "Complete archive (04Ba00_DEFOX_all.zip)",
+          "roles": [
+            "data",
+            "archive"
+          ],
+          "file:size": 176388641
+        }
+      },
+      "links": []
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/file/v2.1.0/schema.json",
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+      ],
+      "id": "04Ba01_DEFOX_2to3_per_d",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "Deformation analyses, processed 2-3 times per day",
+        "description": "Deformation analyses, processed 2-3 times per day",
+        "datetime": "2025-05-30",
+        "start_datetime": "2025-05-30",
+        "end_datetime": "2025-06-09",
+        "blatten:source": "Geoprevent",
+        "blatten:processing_level": 3,
+        "blatten:frequency": "2-3x/d",
+        "blatten:phase": "3",
+        "blatten:format": "JPG",
+        "blatten:sensor": "04 - DEFOX Birchgletscher",
+        "blatten:product_type": "B - Deformation Analysis - Image",
+        "blatten:file_count": 22,
+        "blatten:total_size": 177842065
+      },
+      "collection": "deformation-analysis",
+      "assets": {
+        "04Ba01_DEFOX_2to3_per_d_20250530T190000Z.jpg": {
+          "href": "/s3/assets/04Ba01_DEFOX_2to3_per_d/04Ba01_DEFOX_2to3_per_d/20250530T190000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250530T190000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 3782679
+        },
+        "04Ba01_DEFOX_2to3_per_d_20250531T120000Z.jpg": {
+          "href": "/s3/assets/04Ba01_DEFOX_2to3_per_d/04Ba01_DEFOX_2to3_per_d/20250531T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250531T120000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4109465
+        },
+        "04Ba01_DEFOX_2to3_per_d_20250531T200000Z.jpg": {
+          "href": "/s3/assets/04Ba01_DEFOX_2to3_per_d/04Ba01_DEFOX_2to3_per_d/20250531T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250531T200000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 3696722
+        },
+        "04Ba01_DEFOX_2to3_per_d_20250601T120000Z.jpg": {
+          "href": "/s3/assets/04Ba01_DEFOX_2to3_per_d/04Ba01_DEFOX_2to3_per_d/20250601T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250601T120000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4105956
+        },
+        "04Ba01_DEFOX_2to3_per_d_20250601T200000Z.jpg": {
+          "href": "/s3/assets/04Ba01_DEFOX_2to3_per_d/04Ba01_DEFOX_2to3_per_d/20250601T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250601T200000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4020492
+        },
+        "04Ba01_DEFOX_2to3_per_d_20250602T120000Z.jpg": {
+          "href": "/s3/assets/04Ba01_DEFOX_2to3_per_d/04Ba01_DEFOX_2to3_per_d/20250602T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250602T120000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4068345
+        },
+        "04Ba01_DEFOX_2to3_per_d_20250602T200000Z.jpg": {
+          "href": "/s3/assets/04Ba01_DEFOX_2to3_per_d/04Ba01_DEFOX_2to3_per_d/20250602T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250602T200000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 3863512
+        },
+        "04Ba01_DEFOX_2to3_per_d_20250603T120000Z.jpg": {
+          "href": "/s3/assets/04Ba01_DEFOX_2to3_per_d/04Ba01_DEFOX_2to3_per_d/20250603T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250603T120000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 3982115
+        },
+        "04Ba01_DEFOX_2to3_per_d_20250603T200000Z.jpg": {
+          "href": "/s3/assets/04Ba01_DEFOX_2to3_per_d/04Ba01_DEFOX_2to3_per_d/20250603T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250603T200000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4011406
+        },
+        "04Ba01_DEFOX_2to3_per_d_20250604T120000Z.jpg": {
+          "href": "/s3/assets/04Ba01_DEFOX_2to3_per_d/04Ba01_DEFOX_2to3_per_d/20250604T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250604T120000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4206914
+        },
+        "04Ba01_DEFOX_2to3_per_d_20250604T200000Z.jpg": {
+          "href": "/s3/assets/04Ba01_DEFOX_2to3_per_d/04Ba01_DEFOX_2to3_per_d/20250604T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250604T200000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4166317
+        },
+        "04Ba01_DEFOX_2to3_per_d_20250605T120000Z.jpg": {
+          "href": "/s3/assets/04Ba01_DEFOX_2to3_per_d/04Ba01_DEFOX_2to3_per_d/20250605T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250605T120000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 3895026
+        },
+        "04Ba01_DEFOX_2to3_per_d_20250605T200000Z.jpg": {
+          "href": "/s3/assets/04Ba01_DEFOX_2to3_per_d/04Ba01_DEFOX_2to3_per_d/20250605T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250605T200000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4045551
+        },
+        "04Ba01_DEFOX_2to3_per_d_20250606T120000Z.jpg": {
+          "href": "/s3/assets/04Ba01_DEFOX_2to3_per_d/04Ba01_DEFOX_2to3_per_d/20250606T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250606T120000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4054039
+        },
+        "04Ba01_DEFOX_2to3_per_d_20250606T200000Z.jpg": {
+          "href": "/s3/assets/04Ba01_DEFOX_2to3_per_d/04Ba01_DEFOX_2to3_per_d/20250606T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250606T200000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4057402
+        },
+        "04Ba01_DEFOX_2to3_per_d_20250607T120000Z.jpg": {
+          "href": "/s3/assets/04Ba01_DEFOX_2to3_per_d/04Ba01_DEFOX_2to3_per_d/20250607T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250607T120000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4118263
+        },
+        "04Ba01_DEFOX_2to3_per_d_20250607T200000Z.jpg": {
+          "href": "/s3/assets/04Ba01_DEFOX_2to3_per_d/04Ba01_DEFOX_2to3_per_d/20250607T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250607T200000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4099654
+        },
+        "04Ba01_DEFOX_2to3_per_d_20250608T120000Z.jpg": {
+          "href": "/s3/assets/04Ba01_DEFOX_2to3_per_d/04Ba01_DEFOX_2to3_per_d/20250608T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250608T120000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 3909767
+        },
+        "04Ba01_DEFOX_2to3_per_d_20250608T200000Z.jpg": {
+          "href": "/s3/assets/04Ba01_DEFOX_2to3_per_d/04Ba01_DEFOX_2to3_per_d/20250608T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250608T200000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4193792
+        },
+        "04Ba01_DEFOX_2to3_per_d_20250609T110000Z.jpg": {
+          "href": "/s3/assets/04Ba01_DEFOX_2to3_per_d/04Ba01_DEFOX_2to3_per_d/20250609T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250609T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4334671
+        },
+        "04Ba01_DEFOX_2to3_per_d_20250609T120000Z.jpg": {
+          "href": "/s3/assets/04Ba01_DEFOX_2to3_per_d/04Ba01_DEFOX_2to3_per_d/20250609T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250609T120000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4184515
+        },
+        "04Ba01_DEFOX_2to3_per_d_20250609T200000Z.jpg": {
+          "href": "/s3/assets/04Ba01_DEFOX_2to3_per_d/04Ba01_DEFOX_2to3_per_d/20250609T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250609T200000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4331732
+        },
+        "archive": {
+          "href": "/s3/archives/04Ba01_DEFOX_2to3_per_d.zip",
+          "type": "application/zip",
+          "title": "Complete archive (04Ba01_DEFOX_2to3_per_d.zip)",
+          "roles": [
+            "data",
+            "archive"
+          ],
+          "file:size": 88603730
+        }
+      },
+      "links": []
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/file/v2.1.0/schema.json",
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+      ],
+      "id": "04Ba02_DEFOX_1_per_d",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "Deformation analyses, processed once per day",
+        "description": "Deformation analyses, processed once per day",
+        "datetime": "2025-06-10",
+        "start_datetime": "2025-06-10",
+        "end_datetime": "2025-06-30",
+        "blatten:source": "Geoprevent",
+        "blatten:processing_level": 3,
+        "blatten:frequency": "1d",
+        "blatten:phase": "3-4",
+        "blatten:continued": true,
+        "blatten:format": "JPG",
+        "blatten:sensor": "04 - DEFOX Birchgletscher",
+        "blatten:product_type": "B - Deformation Analysis - Image",
+        "blatten:file_count": 21,
+        "blatten:total_size": 176224700
+      },
+      "collection": "deformation-analysis",
+      "assets": {
+        "04Ba02_DEFOX_1_per_d_20250610T110000Z.jpg": {
+          "href": "/s3/assets/04Ba02_DEFOX_1_per_d/04Ba02_DEFOX_1_per_d/20250610T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250610T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4352939
+        },
+        "04Ba02_DEFOX_1_per_d_20250611T110000Z.jpg": {
+          "href": "/s3/assets/04Ba02_DEFOX_1_per_d/04Ba02_DEFOX_1_per_d/20250611T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250611T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4316744
+        },
+        "04Ba02_DEFOX_1_per_d_20250612T110000Z.jpg": {
+          "href": "/s3/assets/04Ba02_DEFOX_1_per_d/04Ba02_DEFOX_1_per_d/20250612T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250612T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 3842821
+        },
+        "04Ba02_DEFOX_1_per_d_20250613T110000Z.jpg": {
+          "href": "/s3/assets/04Ba02_DEFOX_1_per_d/04Ba02_DEFOX_1_per_d/20250613T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250613T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 3716994
+        },
+        "04Ba02_DEFOX_1_per_d_20250614T110000Z.jpg": {
+          "href": "/s3/assets/04Ba02_DEFOX_1_per_d/04Ba02_DEFOX_1_per_d/20250614T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250614T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 3697930
+        },
+        "04Ba02_DEFOX_1_per_d_20250615T110000Z.jpg": {
+          "href": "/s3/assets/04Ba02_DEFOX_1_per_d/04Ba02_DEFOX_1_per_d/20250615T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250615T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4236883
+        },
+        "04Ba02_DEFOX_1_per_d_20250616T110000Z.jpg": {
+          "href": "/s3/assets/04Ba02_DEFOX_1_per_d/04Ba02_DEFOX_1_per_d/20250616T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250616T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4128467
+        },
+        "04Ba02_DEFOX_1_per_d_20250617T110000Z.jpg": {
+          "href": "/s3/assets/04Ba02_DEFOX_1_per_d/04Ba02_DEFOX_1_per_d/20250617T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250617T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4307644
+        },
+        "04Ba02_DEFOX_1_per_d_20250618T110000Z.jpg": {
+          "href": "/s3/assets/04Ba02_DEFOX_1_per_d/04Ba02_DEFOX_1_per_d/20250618T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250618T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4304037
+        },
+        "04Ba02_DEFOX_1_per_d_20250619T110000Z.jpg": {
+          "href": "/s3/assets/04Ba02_DEFOX_1_per_d/04Ba02_DEFOX_1_per_d/20250619T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250619T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4274257
+        },
+        "04Ba02_DEFOX_1_per_d_20250620T110000Z.jpg": {
+          "href": "/s3/assets/04Ba02_DEFOX_1_per_d/04Ba02_DEFOX_1_per_d/20250620T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250620T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4374642
+        },
+        "04Ba02_DEFOX_1_per_d_20250621T110000Z.jpg": {
+          "href": "/s3/assets/04Ba02_DEFOX_1_per_d/04Ba02_DEFOX_1_per_d/20250621T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250621T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 3926602
+        },
+        "04Ba02_DEFOX_1_per_d_20250622T110000Z.jpg": {
+          "href": "/s3/assets/04Ba02_DEFOX_1_per_d/04Ba02_DEFOX_1_per_d/20250622T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250622T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4238934
+        },
+        "04Ba02_DEFOX_1_per_d_20250623T110000Z.jpg": {
+          "href": "/s3/assets/04Ba02_DEFOX_1_per_d/04Ba02_DEFOX_1_per_d/20250623T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250623T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4399329
+        },
+        "04Ba02_DEFOX_1_per_d_20250624T110000Z.jpg": {
+          "href": "/s3/assets/04Ba02_DEFOX_1_per_d/04Ba02_DEFOX_1_per_d/20250624T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250624T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4404420
+        },
+        "04Ba02_DEFOX_1_per_d_20250625T110000Z.jpg": {
+          "href": "/s3/assets/04Ba02_DEFOX_1_per_d/04Ba02_DEFOX_1_per_d/20250625T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250625T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4401374
+        },
+        "04Ba02_DEFOX_1_per_d_20250626T110000Z.jpg": {
+          "href": "/s3/assets/04Ba02_DEFOX_1_per_d/04Ba02_DEFOX_1_per_d/20250626T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250626T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4021355
+        },
+        "04Ba02_DEFOX_1_per_d_20250627T110000Z.jpg": {
+          "href": "/s3/assets/04Ba02_DEFOX_1_per_d/04Ba02_DEFOX_1_per_d/20250627T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250627T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4177312
+        },
+        "04Ba02_DEFOX_1_per_d_20250628T110000Z.jpg": {
+          "href": "/s3/assets/04Ba02_DEFOX_1_per_d/04Ba02_DEFOX_1_per_d/20250628T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250628T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4524491
+        },
+        "04Ba02_DEFOX_1_per_d_20250629T110000Z.jpg": {
+          "href": "/s3/assets/04Ba02_DEFOX_1_per_d/04Ba02_DEFOX_1_per_d/20250629T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250629T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4536126
+        },
+        "04Ba02_DEFOX_1_per_d_20250630T110000Z.jpg": {
+          "href": "/s3/assets/04Ba02_DEFOX_1_per_d/04Ba02_DEFOX_1_per_d/20250630T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250630T110000Z.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 4255802
+        },
+        "archive": {
+          "href": "/s3/archives/04Ba02_DEFOX_1_per_d.zip",
+          "type": "application/zip",
+          "title": "Complete archive (04Ba02_DEFOX_1_per_d.zip)",
+          "roles": [
+            "data",
+            "archive"
+          ],
+          "file:size": 87785597
+        }
+      },
+      "links": []
+    }
+  ]
+}

@@ -1,0 +1,147 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+      ],
+      "id": "17Pa00",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "17 - Lake level - Geoazimut - a - Water surface level",
+        "description": "All data for station 17 in one file",
+        "start_datetime": "2025-05-29T00:00:00Z",
+        "end_datetime": "2025-09-24T23:59:59Z",
+        "blatten:code": "17Pa00",
+        "blatten:sensor": "17 - Lake level - Geoazimut",
+        "blatten:product_type": "P - Hydrology - Lake",
+        "blatten:dataset": "a - Water surface level",
+        "blatten:bundle": "0 - Whole Period",
+        "blatten:source": "Geoazimut",
+        "blatten:processing_level": 2,
+        "blatten:phase": "3-4",
+        "blatten:frequency": "10min",
+        "blatten:continued": true,
+        "blatten:format": "CSV",
+        "blatten:storage_mb": 0.359375
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/hydrology/items/17Pa00",
+          "type": "application/geo+json"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/hydrology",
+          "type": "application/json"
+        },
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/hydrology",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "${STAC_BASE_URL}/stac/catalog.json",
+          "type": "application/json"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${STAC_BASE_URL}/s3/data/17_LakeLevel_Geoazimut.zip",
+          "type": "application/zip",
+          "title": "17Pa00 Data Archive",
+          "roles": [
+            "data"
+          ],
+          "file:size": 376832
+        }
+      },
+      "collection": "hydrology"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+      ],
+      "id": "17Pb00",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "17 - Lake level - Geoazimut - b - Lake volume",
+        "description": "All data for station 17 in one file",
+        "start_datetime": "2025-05-29T00:00:00Z",
+        "end_datetime": "2025-09-24T23:59:59Z",
+        "blatten:code": "17Pb00",
+        "blatten:sensor": "17 - Lake level - Geoazimut",
+        "blatten:product_type": "P - Hydrology - Lake",
+        "blatten:dataset": "b - Lake volume",
+        "blatten:bundle": "0 - Whole Period",
+        "blatten:source": "Geoazimut",
+        "blatten:processing_level": 3,
+        "blatten:phase": "3-4",
+        "blatten:frequency": "10min",
+        "blatten:continued": true,
+        "blatten:format": "CSV",
+        "blatten:storage_mb": 0.0
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/hydrology/items/17Pb00",
+          "type": "application/geo+json"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/hydrology",
+          "type": "application/json"
+        },
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/hydrology",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "${STAC_BASE_URL}/stac/catalog.json",
+          "type": "application/json"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${STAC_BASE_URL}/s3/data/17_LakeLevel_Geoazimut.zip",
+          "type": "application/zip",
+          "title": "17Pb00 Data Archive",
+          "roles": [
+            "data"
+          ],
+          "file:size": 0
+        }
+      },
+      "collection": "hydrology"
+    }
+  ],
+  "numberMatched": 2,
+  "numberReturned": 2,
+  "links": [
+    {
+      "rel": "self",
+      "href": "${STAC_BASE_URL}/stac/collections/hydrology/items",
+      "type": "application/geo+json"
+    },
+    {
+      "rel": "collection",
+      "href": "${STAC_BASE_URL}/stac/collections/hydrology",
+      "type": "application/json"
+    }
+  ]
+}

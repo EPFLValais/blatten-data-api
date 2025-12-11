@@ -1,0 +1,313 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/file/v2.1.0/schema.json",
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+      ],
+      "id": "14La02",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "Sketchfab 3D visualization",
+        "description": "Sketchfab 3D visualization",
+        "datetime": "2025-05-29",
+        "start_datetime": "2025-05-29",
+        "blatten:source": "Terradata",
+        "blatten:processing_level": 4,
+        "blatten:phase": "3",
+        "blatten:format": "OBJ",
+        "blatten:sensor": "14 - Helimap",
+        "blatten:product_type": "L - 3D-Model",
+        "blatten:file_count": 27,
+        "blatten:total_size": 1102739449
+      },
+      "collection": "3d-model",
+      "assets": {
+        "14La02_sketchfab_klnh_2.jpg": {
+          "href": "/s3/assets/14La02/14La02/sketchfab/klnh_2.jpg",
+          "type": "image/jpeg",
+          "title": "klnh_2.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 16819284
+        },
+        "14La02_sketchfab_klnh_2.mtl": {
+          "href": "/s3/assets/14La02/14La02/sketchfab/klnh_2.mtl",
+          "type": "text/plain",
+          "title": "klnh_2.mtl",
+          "roles": [
+            "data"
+          ],
+          "file:size": 2866
+        },
+        "14La02_sketchfab_klnh_2.obj": {
+          "href": "/s3/assets/14La02/14La02/sketchfab/klnh_2.obj",
+          "type": "model/obj",
+          "title": "klnh_2.obj",
+          "roles": [
+            "data",
+            "3d-model"
+          ],
+          "file:size": 174745228
+        },
+        "14La02_sketchfab_klnh_21.jpg": {
+          "href": "/s3/assets/14La02/14La02/sketchfab/klnh_21.jpg",
+          "type": "image/jpeg",
+          "title": "klnh_21.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 18025681
+        },
+        "14La02_sketchfab_klnh_210.jpg": {
+          "href": "/s3/assets/14La02/14La02/sketchfab/klnh_210.jpg",
+          "type": "image/jpeg",
+          "title": "klnh_210.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 17480925
+        },
+        "14La02_sketchfab_klnh_211.jpg": {
+          "href": "/s3/assets/14La02/14La02/sketchfab/klnh_211.jpg",
+          "type": "image/jpeg",
+          "title": "klnh_211.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 17367030
+        },
+        "14La02_sketchfab_klnh_212.jpg": {
+          "href": "/s3/assets/14La02/14La02/sketchfab/klnh_212.jpg",
+          "type": "image/jpeg",
+          "title": "klnh_212.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 18564808
+        },
+        "14La02_sketchfab_klnh_213.jpg": {
+          "href": "/s3/assets/14La02/14La02/sketchfab/klnh_213.jpg",
+          "type": "image/jpeg",
+          "title": "klnh_213.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 17545451
+        },
+        "14La02_sketchfab_klnh_214.jpg": {
+          "href": "/s3/assets/14La02/14La02/sketchfab/klnh_214.jpg",
+          "type": "image/jpeg",
+          "title": "klnh_214.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 17545157
+        },
+        "14La02_sketchfab_klnh_215.jpg": {
+          "href": "/s3/assets/14La02/14La02/sketchfab/klnh_215.jpg",
+          "type": "image/jpeg",
+          "title": "klnh_215.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 16931807
+        },
+        "14La02_sketchfab_klnh_216.jpg": {
+          "href": "/s3/assets/14La02/14La02/sketchfab/klnh_216.jpg",
+          "type": "image/jpeg",
+          "title": "klnh_216.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 17168323
+        },
+        "14La02_sketchfab_klnh_217.jpg": {
+          "href": "/s3/assets/14La02/14La02/sketchfab/klnh_217.jpg",
+          "type": "image/jpeg",
+          "title": "klnh_217.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 17373580
+        },
+        "14La02_sketchfab_klnh_218.jpg": {
+          "href": "/s3/assets/14La02/14La02/sketchfab/klnh_218.jpg",
+          "type": "image/jpeg",
+          "title": "klnh_218.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 17434799
+        },
+        "14La02_sketchfab_klnh_219.jpg": {
+          "href": "/s3/assets/14La02/14La02/sketchfab/klnh_219.jpg",
+          "type": "image/jpeg",
+          "title": "klnh_219.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 17628065
+        },
+        "14La02_sketchfab_klnh_22.jpg": {
+          "href": "/s3/assets/14La02/14La02/sketchfab/klnh_22.jpg",
+          "type": "image/jpeg",
+          "title": "klnh_22.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 18039014
+        },
+        "14La02_sketchfab_klnh_220.jpg": {
+          "href": "/s3/assets/14La02/14La02/sketchfab/klnh_220.jpg",
+          "type": "image/jpeg",
+          "title": "klnh_220.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 17946554
+        },
+        "14La02_sketchfab_klnh_221.jpg": {
+          "href": "/s3/assets/14La02/14La02/sketchfab/klnh_221.jpg",
+          "type": "image/jpeg",
+          "title": "klnh_221.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 17287178
+        },
+        "14La02_sketchfab_klnh_222.jpg": {
+          "href": "/s3/assets/14La02/14La02/sketchfab/klnh_222.jpg",
+          "type": "image/jpeg",
+          "title": "klnh_222.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 17741677
+        },
+        "14La02_sketchfab_klnh_223.jpg": {
+          "href": "/s3/assets/14La02/14La02/sketchfab/klnh_223.jpg",
+          "type": "image/jpeg",
+          "title": "klnh_223.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 17540491
+        },
+        "14La02_sketchfab_klnh_224.jpg": {
+          "href": "/s3/assets/14La02/14La02/sketchfab/klnh_224.jpg",
+          "type": "image/jpeg",
+          "title": "klnh_224.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 16618746
+        },
+        "14La02_sketchfab_klnh_23.jpg": {
+          "href": "/s3/assets/14La02/14La02/sketchfab/klnh_23.jpg",
+          "type": "image/jpeg",
+          "title": "klnh_23.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 17808478
+        },
+        "14La02_sketchfab_klnh_24.jpg": {
+          "href": "/s3/assets/14La02/14La02/sketchfab/klnh_24.jpg",
+          "type": "image/jpeg",
+          "title": "klnh_24.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 18415830
+        },
+        "14La02_sketchfab_klnh_25.jpg": {
+          "href": "/s3/assets/14La02/14La02/sketchfab/klnh_25.jpg",
+          "type": "image/jpeg",
+          "title": "klnh_25.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 20230167
+        },
+        "14La02_sketchfab_klnh_26.jpg": {
+          "href": "/s3/assets/14La02/14La02/sketchfab/klnh_26.jpg",
+          "type": "image/jpeg",
+          "title": "klnh_26.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 16908501
+        },
+        "14La02_sketchfab_klnh_27.jpg": {
+          "href": "/s3/assets/14La02/14La02/sketchfab/klnh_27.jpg",
+          "type": "image/jpeg",
+          "title": "klnh_27.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 18439520
+        },
+        "14La02_sketchfab_klnh_28.jpg": {
+          "href": "/s3/assets/14La02/14La02/sketchfab/klnh_28.jpg",
+          "type": "image/jpeg",
+          "title": "klnh_28.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 18181472
+        },
+        "14La02_sketchfab_klnh_29.jpg": {
+          "href": "/s3/assets/14La02/14La02/sketchfab/klnh_29.jpg",
+          "type": "image/jpeg",
+          "title": "klnh_29.jpg",
+          "roles": [
+            "data",
+            "visual"
+          ],
+          "file:size": 17122131
+        },
+        "archive": {
+          "href": "/s3/archives/14La02.zip",
+          "type": "application/zip",
+          "title": "Complete archive (14La02.zip)",
+          "roles": [
+            "data",
+            "archive"
+          ],
+          "file:size": 485826686
+        }
+      },
+      "links": []
+    }
+  ]
+}

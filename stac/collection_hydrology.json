@@ -1,0 +1,46 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/file/v2.1.0/schema.json",
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+      ],
+      "id": "17_LakeLevel_Geoazimut",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "17_LakeLevel_Geoazimut",
+        "description": "",
+        "datetime": null,
+        "blatten:file_count": 1,
+        "blatten:total_size": 3075710
+      },
+      "collection": "hydrology",
+      "assets": {
+        "17_LakeLevel_Geoazimut_17_LakeLevel_Geoazimut.csv": {
+          "href": "/s3/assets/17_LakeLevel_Geoazimut/17_LakeLevel_Geoazimut/17_LakeLevel_Geoazimut.csv",
+          "type": "text/csv",
+          "title": "17_LakeLevel_Geoazimut.csv",
+          "roles": [
+            "data"
+          ],
+          "file:size": 2699024
+        },
+        "archive": {
+          "href": "/s3/archives/17_LakeLevel_Geoazimut.zip",
+          "type": "application/zip",
+          "title": "Complete archive (17_LakeLevel_Geoazimut.zip)",
+          "roles": [
+            "data",
+            "archive"
+          ],
+          "file:size": 376686
+        }
+      },
+      "links": []
+    }
+  ]
+}
