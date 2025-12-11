@@ -1,0 +1,32 @@
+[package]
+name = "blatten-data-api"
+version = "0.1.0"
+edition = "2021"
+description = "STAC API server for the Birch Glacier Collapse Dataset"
+license = "MIT"
+repository = "https://github.com/ALPOLE/blatten-data-api"
+
+[dependencies]
+# Web framework
+axum = "0.7"
+tokio = { version = "1", features = ["full"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Configuration
+dotenvy = "0.15"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Error handling
+anyhow = "1"
+
+[profile.release]
+lto = true
+codegen-units = 1

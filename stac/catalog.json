@@ -1,0 +1,8 @@
+{
+  "type": "Catalog",
+  "stac_version": "1.0.0",
+  "id": "blatten-glacier-collapse",
+  "title": "Birch Glacier Collapse Dataset",
+  "description": "Dataset collected during the 2025 Birch glacier collapse and landslide at Blatten, CH-VS",
+  "links": []
+}

@@ -1,0 +1,90 @@
+{
+  "type": "Collection",
+  "id": "dsm",
+  "stac_version": "1.0.0",
+  "stac_extensions": [
+    "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+    "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
+    "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
+  ],
+  "title": "Digital Surface Models",
+  "description": "Digital Surface Models (DSM) from drone and heliborne surveys",
+  "license": "CC-BY-NC-SA-4.0",
+  "keywords": [
+    "Birch Glacier",
+    "Blatten",
+    "Switzerland",
+    "glacier collapse",
+    "landslide",
+    "digital surface models"
+  ],
+  "providers": [
+    {
+      "name": "Canton du Valais",
+      "roles": [
+        "licensor",
+        "host"
+      ],
+      "url": "https://www.vs.ch/"
+    },
+    {
+      "name": "EPFL ALPOLE",
+      "roles": [
+        "processor",
+        "host"
+      ],
+      "url": "https://www.epfl.ch/research/domains/alpole/"
+    }
+  ],
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [
+          7.7540237,
+          46.3900012,
+          7.8127153,
+          46.4242238
+        ]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          "2025-07-11T00:00:00Z",
+          "2025-07-14T23:59:59Z"
+        ]
+      ]
+    }
+  },
+  "summaries": {
+    "processing_level": [
+      3
+    ],
+    "source": [
+      "Terradata"
+    ]
+  },
+  "links": [
+    {
+      "rel": "self",
+      "href": "${STAC_BASE_URL}/stac/collections/dsm",
+      "type": "application/json"
+    },
+    {
+      "rel": "root",
+      "href": "${STAC_BASE_URL}/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "${STAC_BASE_URL}/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "items",
+      "href": "${STAC_BASE_URL}/stac/collections/dsm/items",
+      "type": "application/geo+json"
+    }
+  ],
+  "assets": {}
+}
