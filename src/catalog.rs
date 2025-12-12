@@ -1,16 +1,16 @@
 //! STAC Catalog data structures and loading
 //!
-//! This module provides loading and indexing of STAC catalogs from JSON files.
-//! It uses the official `stac` crate types for STAC 1.1.0 compliance.
+//! This module uses the official `stac` crate types for STAC 1.1.0 compliance.
+//! It provides loading, indexing, and validation of STAC catalogs.
 
 use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::HashMap, fs, path::Path};
 use tracing::{debug, info, warn};
 
-/// STAC specification version
-pub const STAC_VERSION: &str = "1.1.0";
+// Re-export stac types we use
+pub use stac::item::Item as StacItem;
+pub use stac::{Catalog as StacCatalogRoot, Collection as StacCollection};
 
 /// Maximum items per page (prevents memory DoS)
 pub const MAX_LIMIT: usize = 1000;
@@ -21,11 +21,14 @@ pub const DEFAULT_LIMIT: usize = 100;
 /// Valid processing levels for this dataset
 pub const VALID_PROCESSING_LEVELS: std::ops::RangeInclusive<i32> = 1..=4;
 
+/// STAC version string (from stac crate)
+pub const STAC_VERSION: &str = "1.1.0";
+
 /// Root STAC Catalog with indexed collections and items
 #[derive(Debug, Clone)]
 pub struct StacCatalog {
-    /// Root catalog JSON (for direct serving)
-    pub root: Value,
+    /// Root catalog (from stac crate)
+    pub root: StacCatalogRoot,
     /// Collections indexed by ID
     pub collections: HashMap<String, StacCollection>,
     /// All items (flat list for searching)
@@ -34,149 +37,6 @@ pub struct StacCatalog {
     pub items_index: HashMap<(String, String), usize>,
     /// Items grouped by collection for efficient collection queries
     pub items_by_collection: HashMap<String, Vec<usize>>,
-}
-
-/// STAC Collection (1.1.0 compliant)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StacCollection {
-    #[serde(rename = "type")]
-    pub type_: String,
-    pub id: String,
-    pub stac_version: String,
-    #[serde(default)]
-    pub stac_extensions: Vec<String>,
-    pub title: Option<String>,
-    pub description: String,
-    pub license: String,
-    #[serde(default)]
-    pub keywords: Vec<String>,
-    #[serde(default)]
-    pub providers: Vec<Provider>,
-    pub extent: Extent,
-    #[serde(default)]
-    pub summaries: HashMap<String, Value>,
-    #[serde(default)]
-    pub links: Vec<Link>,
-    #[serde(default)]
-    pub assets: HashMap<String, Asset>,
-    /// Item assets definition (new in STAC 1.1.0 core)
-    #[serde(default)]
-    pub item_assets: HashMap<String, ItemAssetDefinition>,
-}
-
-/// STAC Item (Feature) - 1.1.0 compliant
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StacItem {
-    #[serde(rename = "type")]
-    pub type_: String,
-    pub stac_version: String,
-    #[serde(default)]
-    pub stac_extensions: Vec<String>,
-    pub id: String,
-    pub geometry: Option<Value>,
-    pub bbox: Option<Vec<f64>>,
-    pub properties: HashMap<String, Value>,
-    #[serde(default)]
-    pub links: Vec<Link>,
-    #[serde(default)]
-    pub assets: HashMap<String, Asset>,
-    pub collection: Option<String>,
-}
-
-impl StacItem {
-    /// Get the datetime property as a string
-    pub fn datetime(&self) -> Option<&str> {
-        self.properties.get("datetime").and_then(|v| v.as_str())
-    }
-
-    /// Get start_datetime property
-    pub fn start_datetime(&self) -> Option<&str> {
-        self.properties
-            .get("start_datetime")
-            .and_then(|v| v.as_str())
-    }
-
-    /// Get end_datetime property
-    pub fn end_datetime(&self) -> Option<&str> {
-        self.properties.get("end_datetime").and_then(|v| v.as_str())
-    }
-}
-
-/// STAC Provider
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Provider {
-    pub name: String,
-    #[serde(default)]
-    pub roles: Vec<String>,
-    pub url: Option<String>,
-    pub description: Option<String>,
-}
-
-/// STAC Extent
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Extent {
-    pub spatial: SpatialExtent,
-    pub temporal: TemporalExtent,
-}
-
-/// Spatial Extent
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SpatialExtent {
-    pub bbox: Vec<Vec<Option<f64>>>,
-}
-
-/// Temporal Extent
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TemporalExtent {
-    pub interval: Vec<Vec<Option<String>>>,
-}
-
-/// STAC Link (1.1.0 compliant with method/headers/body support)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Link {
-    pub rel: String,
-    pub href: String,
-    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
-    pub type_: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub method: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub headers: Option<HashMap<String, String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub body: Option<Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub merge: Option<bool>,
-}
-
-/// STAC Asset
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Asset {
-    pub href: String,
-    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
-    pub type_: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub roles: Vec<String>,
-    #[serde(rename = "file:size", skip_serializing_if = "Option::is_none")]
-    pub file_size: Option<i64>,
-}
-
-/// Item Asset Definition (new in STAC 1.1.0 core - was extension before)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ItemAssetDefinition {
-    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
-    pub type_: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub roles: Vec<String>,
 }
 
 impl StacCatalog {
@@ -189,11 +49,17 @@ impl StacCatalog {
         let catalog_json = fs::read_to_string(&catalog_path)
             .with_context(|| format!("Failed to read {:?}", catalog_path))?;
 
-        // Replace base URL placeholder and upgrade version
-        let catalog_json = catalog_json
-            .replace("${STAC_BASE_URL}", base_url)
-            .replace("\"1.0.0\"", &format!("\"{}\"", STAC_VERSION));
-        let root: Value = serde_json::from_str(&catalog_json)?;
+        // Replace base URL placeholder
+        let catalog_json = catalog_json.replace("${STAC_BASE_URL}", base_url);
+
+        let root: StacCatalogRoot = serde_json::from_str(&catalog_json)
+            .with_context(|| "Failed to parse catalog.json")?;
+
+        info!(
+            "Loaded catalog: {} (STAC {})",
+            root.id,
+            stac::STAC_VERSION
+        );
 
         // Load collections
         let collections_dir = dir.join("collections");
@@ -215,14 +81,10 @@ impl StacCatalog {
                     debug!("Loading collection from {:?}", path);
 
                     let json = fs::read_to_string(&path)?;
-                    let json = json
-                        .replace("${STAC_BASE_URL}", base_url)
-                        .replace("\"1.0.0\"", &format!("\"{}\"", STAC_VERSION));
+                    let json = json.replace("${STAC_BASE_URL}", base_url);
 
                     match serde_json::from_str::<StacCollection>(&json) {
-                        Ok(mut collection) => {
-                            // Ensure STAC version is 1.1.0
-                            collection.stac_version = STAC_VERSION.to_string();
+                        Ok(collection) => {
                             info!("Loaded collection: {}", collection.id);
                             collections.insert(collection.id.clone(), collection);
                         }
@@ -240,9 +102,7 @@ impl StacCatalog {
             info!("Loading items from {:?}", all_items_path);
 
             let json = fs::read_to_string(&all_items_path)?;
-            let json = json
-                .replace("${STAC_BASE_URL}", base_url)
-                .replace("\"1.0.0\"", &format!("\"{}\"", STAC_VERSION));
+            let json = json.replace("${STAC_BASE_URL}", base_url);
 
             let feature_collection: Value = serde_json::from_str(&json)?;
 
@@ -250,11 +110,7 @@ impl StacCatalog {
                 features
                     .iter()
                     .filter_map(|f| match serde_json::from_value::<StacItem>(f.clone()) {
-                        Ok(mut item) => {
-                            // Ensure STAC version is 1.1.0
-                            item.stac_version = STAC_VERSION.to_string();
-                            Some(item)
-                        }
+                        Ok(item) => Some(item),
                         Err(e) => {
                             warn!("Failed to parse item: {}", e);
                             None
@@ -314,6 +170,48 @@ impl StacCatalog {
     }
 }
 
+/// Extension trait for StacItem to access common properties
+pub trait ItemExt {
+    /// Get a custom property from additional_fields
+    fn get_property(&self, key: &str) -> Option<&Value>;
+    /// Get the bounding box as a 4-element array [west, south, east, north]
+    fn bbox_array(&self) -> Option<[f64; 4]>;
+}
+
+impl ItemExt for StacItem {
+    fn get_property(&self, key: &str) -> Option<&Value> {
+        self.properties.additional_fields.get(key)
+    }
+
+    fn bbox_array(&self) -> Option<[f64; 4]> {
+        self.bbox.as_ref().map(|b| match b {
+            stac::Bbox::TwoDimensional(arr) => *arr,
+            stac::Bbox::ThreeDimensional(arr) => [arr[0], arr[1], arr[3], arr[4]],
+        })
+    }
+}
+
+/// Helper trait to access parsed datetime values from Properties
+pub trait PropertiesDatetimeExt {
+    fn start_datetime(&self) -> Option<chrono::DateTime<chrono::Utc>>;
+    fn end_datetime(&self) -> Option<chrono::DateTime<chrono::Utc>>;
+    fn datetime(&self) -> Option<chrono::DateTime<chrono::Utc>>;
+}
+
+impl PropertiesDatetimeExt for StacItem {
+    fn start_datetime(&self) -> Option<chrono::DateTime<chrono::Utc>> {
+        self.properties.start_datetime
+    }
+
+    fn end_datetime(&self) -> Option<chrono::DateTime<chrono::Utc>> {
+        self.properties.end_datetime
+    }
+
+    fn datetime(&self) -> Option<chrono::DateTime<chrono::Utc>> {
+        self.properties.datetime
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -337,21 +235,21 @@ mod tests {
         let item: StacItem = serde_json::from_str(json).unwrap();
         assert_eq!(item.id, "test-item");
         assert_eq!(item.collection, Some("test-collection".to_string()));
-        assert_eq!(item.stac_version, "1.1.0");
     }
 
     #[test]
-    fn test_item_datetime_accessors() {
+    fn test_item_ext_trait() {
         let json = r#"{
             "type": "Feature",
             "stac_version": "1.1.0",
             "id": "test-item",
             "geometry": null,
-            "bbox": null,
+            "bbox": [7.8, 46.3, 7.9, 46.4],
             "properties": {
                 "datetime": null,
                 "start_datetime": "2025-01-01T00:00:00Z",
-                "end_datetime": "2025-12-31T23:59:59Z"
+                "end_datetime": "2025-12-31T23:59:59Z",
+                "blatten:source": "Terradata"
             },
             "links": [],
             "assets": {},
@@ -359,8 +257,21 @@ mod tests {
         }"#;
 
         let item: StacItem = serde_json::from_str(json).unwrap();
-        assert!(item.datetime().is_none());
-        assert_eq!(item.start_datetime(), Some("2025-01-01T00:00:00Z"));
-        assert_eq!(item.end_datetime(), Some("2025-12-31T23:59:59Z"));
+
+        // Test parsed datetime access (the stac crate parses these into DateTime<Utc>)
+        assert!(item.start_datetime().is_some());
+        assert!(item.end_datetime().is_some());
+
+        // Test additional fields access
+        assert!(item.get_property("blatten:source").is_some());
+        assert_eq!(
+            item.get_property("blatten:source").and_then(|v| v.as_str()),
+            Some("Terradata")
+        );
+
+        // Test bbox
+        let bbox = item.bbox_array().unwrap();
+        assert_eq!(bbox.len(), 4);
+        assert!((bbox[0] - 7.8).abs() < 0.001);
     }
 }
