@@ -11,11 +11,19 @@ repository = "https://github.com/ALPOLE/blatten-data-api"
 axum = "0.7"
 tokio = { version = "1", features = ["full"] }
 tower = "0.4"
-tower-http = { version = "0.5", features = ["cors", "trace"] }
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+
+# STAC types (official implementation)
+stac = "0.10"
+stac-api = "0.6"
+geojson = "0.24"
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+# Date/time handling
+chrono = { version = "0.4", features = ["serde"] }
 
 # Configuration
 dotenvy = "0.15"
@@ -26,6 +34,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Error handling
 anyhow = "1"
+thiserror = "2"
 
 [profile.release]
 lto = true
