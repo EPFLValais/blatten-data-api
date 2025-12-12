@@ -11,12 +11,13 @@ use anyhow::{Context, Result};
 use calamine::{open_workbook, Data, Reader, Xlsx};
 use chrono::{NaiveDate, Utc};
 use clap::{Parser, Subcommand};
+use gdal::spatial_ref::{CoordTransform, SpatialRef};
+use gdal::Dataset;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 const STAC_VERSION: &str = "1.1.0";
 
@@ -222,49 +223,24 @@ struct ExtractedGeometry {
     source: String,
 }
 
-/// Transform coordinates from a source EPSG to WGS84 using gdaltransform subprocess
+/// Transform coordinates from a source EPSG to WGS84 using GDAL
 fn transform_to_wgs84(minx: f64, miny: f64, maxx: f64, maxy: f64, epsg: i32) -> Option<Vec<f64>> {
-    use std::io::Write;
+    let source_srs = SpatialRef::from_epsg(epsg as u32).ok()?;
+    let target_srs = SpatialRef::from_epsg(4326).ok()?;
+    let transform = CoordTransform::new(&source_srs, &target_srs).ok()?;
 
-    let input = format!("{} {}\n{} {}\n", minx, miny, maxx, maxy);
+    // Transform all four corners for accuracy
+    let mut xs = [minx, maxx, maxx, minx];
+    let mut ys = [miny, miny, maxy, maxy];
+    let mut zs = [0.0; 4];
 
-    let mut child = Command::new("gdaltransform")
-        .args(["-s_srs", &format!("EPSG:{}", epsg), "-t_srs", "EPSG:4326"])
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .ok()?;
-
-    // Write input to stdin
-    if let Some(ref mut stdin) = child.stdin {
-        stdin.write_all(input.as_bytes()).ok()?;
-    }
-
-    let output = child.wait_with_output().ok()?;
-
-    if !output.status.success() {
-        return None;
-    }
-
-    let stdout = String::from_utf8(output.stdout).ok()?;
-    let lines: Vec<&str> = stdout.trim().lines().collect();
-    if lines.len() < 2 {
-        return None;
-    }
-
-    let p1: Vec<f64> = lines[0].split_whitespace().take(2).filter_map(|s| s.parse().ok()).collect();
-    let p2: Vec<f64> = lines[1].split_whitespace().take(2).filter_map(|s| s.parse().ok()).collect();
-
-    if p1.len() < 2 || p2.len() < 2 {
-        return None;
-    }
+    transform.transform_coords(&mut xs, &mut ys, &mut zs).ok()?;
 
     Some(vec![
-        p1[0].min(p2[0]),
-        p1[1].min(p2[1]),
-        p1[0].max(p2[0]),
-        p1[1].max(p2[1]),
+        xs.iter().cloned().fold(f64::INFINITY, f64::min),
+        ys.iter().cloned().fold(f64::INFINITY, f64::min),
+        xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+        ys.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
     ])
 }
 
@@ -298,62 +274,59 @@ fn extract_epsg_from_crs(crs: &str) -> Option<String> {
     None
 }
 
-/// Extract geometry from a GeoTIFF file using gdalinfo
+/// Extract geometry from a GeoTIFF file using GDAL
 fn extract_geotiff_geometry(path: &Path) -> Option<ExtractedGeometry> {
-    let output = Command::new("gdalinfo")
-        .args(["-json", path.to_str()?])
-        .output()
-        .ok()?;
+    let dataset = Dataset::open(path).ok()?;
 
-    if !output.status.success() {
-        return None;
-    }
+    // Get geotransform: [origin_x, pixel_width, rotation_x, origin_y, rotation_y, pixel_height]
+    let gt = dataset.geo_transform().ok()?;
+    let (width, height) = dataset.raster_size();
 
-    let info: serde_json::Value = serde_json::from_slice(&output.stdout).ok()?;
+    // Calculate corners from geotransform
+    let minx = gt[0];
+    let maxy = gt[3];
+    let maxx = minx + (width as f64 * gt[1]);
+    let miny = maxy + (height as f64 * gt[5]); // gt[5] is typically negative
 
-    // Check for WGS84 extent first (preferred)
-    if let Some(extent) = info.get("wgs84Extent") {
-        if let Some(coords) = extent.get("coordinates").and_then(|c| c.get(0)).and_then(|c| c.as_array()) {
-            let lons: Vec<f64> = coords.iter().filter_map(|c| c.get(0).and_then(|v| v.as_f64())).collect();
-            let lats: Vec<f64> = coords.iter().filter_map(|c| c.get(1).and_then(|v| v.as_f64())).collect();
+    // Ensure correct ordering
+    let (minx, maxx) = (minx.min(maxx), minx.max(maxx));
+    let (miny, maxy) = (miny.min(maxy), miny.max(maxy));
 
-            if !lons.is_empty() && !lats.is_empty() {
-                let bbox = vec![
-                    lons.iter().cloned().fold(f64::INFINITY, f64::min),
-                    lats.iter().cloned().fold(f64::INFINITY, f64::min),
-                    lons.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
-                    lats.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
-                ];
-                let geometry = extent.clone();
+    // Get CRS and transform to WGS84
+    let spatial_ref = dataset.spatial_ref().ok()?;
+    let target_srs = SpatialRef::from_epsg(4326).ok()?;
 
-                return Some(ExtractedGeometry {
-                    bbox,
-                    geometry,
-                    source: format!("GeoTIFF: {}", path.file_name()?.to_string_lossy()),
-                });
-            }
+    let bbox = if let Ok(transform) = CoordTransform::new(&spatial_ref, &target_srs) {
+        // Transform all four corners
+        let mut xs = [minx, maxx, maxx, minx];
+        let mut ys = [miny, miny, maxy, maxy];
+        let mut zs = [0.0; 4];
+
+        if transform.transform_coords(&mut xs, &mut ys, &mut zs).is_ok() {
+            vec![
+                xs.iter().cloned().fold(f64::INFINITY, f64::min),
+                ys.iter().cloned().fold(f64::INFINITY, f64::min),
+                xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+                ys.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+            ]
+        } else {
+            // Fallback: try to extract EPSG and use our transform function
+            let wkt = spatial_ref.to_wkt().ok()?;
+            let epsg_str = extract_epsg_from_crs(&wkt)?;
+            let epsg: i32 = epsg_str.strip_prefix("EPSG:")?.parse().ok()?;
+            transform_to_wgs84(minx, miny, maxx, maxy, epsg)?
         }
-    }
-
-    // Fall back to corner coordinates with CRS transformation
-    let corners = info.get("cornerCoordinates")?;
-    let ul = corners.get("upperLeft").and_then(|v| v.as_array())?;
-    let lr = corners.get("lowerRight").and_then(|v| v.as_array())?;
-
-    let minx = ul.get(0).and_then(|v| v.as_f64())?;
-    let maxy = ul.get(1).and_then(|v| v.as_f64())?;
-    let maxx = lr.get(0).and_then(|v| v.as_f64())?;
-    let miny = lr.get(1).and_then(|v| v.as_f64())?;
-
-    // Get CRS and transform
-    let crs_wkt = info.get("coordinateSystem").and_then(|c| c.get("wkt")).and_then(|w| w.as_str())?;
-    let epsg_str = extract_epsg_from_crs(crs_wkt)?;
-    let epsg: i32 = epsg_str.strip_prefix("EPSG:")?.parse().ok()?;
-
-    let bbox = if epsg == 4326 {
-        vec![minx.min(maxx), miny.min(maxy), minx.max(maxx), miny.max(maxy)]
     } else {
-        transform_to_wgs84(minx.min(maxx), miny.min(maxy), minx.max(maxx), miny.max(maxy), epsg)?
+        // Try extracting EPSG from WKT
+        let wkt = spatial_ref.to_wkt().ok()?;
+        let epsg_str = extract_epsg_from_crs(&wkt)?;
+        let epsg: i32 = epsg_str.strip_prefix("EPSG:")?.parse().ok()?;
+
+        if epsg == 4326 {
+            vec![minx, miny, maxx, maxy]
+        } else {
+            transform_to_wgs84(minx, miny, maxx, maxy, epsg)?
+        }
     };
 
     let geometry = bbox_to_polygon(&bbox);

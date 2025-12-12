@@ -37,7 +37,8 @@ chrono = { version = "0.4", features = ["serde"] }
 # Excel parsing
 calamine = "0.26"
 
-# Geospatial - use las crate for point clouds, subprocess for GDAL
+# Geospatial
+gdal = { git = "https://github.com/georust/gdal", features = ["bindgen"] }
 las = { version = "0.9", features = ["laz"] }
 zip = "2"
 regex = "1"
