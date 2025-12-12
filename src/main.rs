@@ -20,7 +20,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod catalog;
 
-use catalog::{StacCatalog, StacItem, DEFAULT_LIMIT, MAX_LIMIT, STAC_VERSION, VALID_PROCESSING_LEVELS};
+use catalog::{ItemExt, PropertiesDatetimeExt, StacCatalog, StacItem, DEFAULT_LIMIT, MAX_LIMIT, STAC_VERSION, VALID_PROCESSING_LEVELS};
 
 // ============================================================================
 // Application State
@@ -251,16 +251,9 @@ impl DatetimeInterval {
 
     /// Check if an item's temporal extent overlaps with this interval
     fn matches_item(&self, item: &StacItem) -> bool {
-        // Get item's temporal bounds
-        let item_start = item
-            .start_datetime()
-            .or_else(|| item.datetime())
-            .and_then(|s| Self::parse_single(s).ok());
-
-        let item_end = item
-            .end_datetime()
-            .or_else(|| item.datetime())
-            .and_then(|s| Self::parse_single(s).ok());
+        // Get item's temporal bounds using the parsed datetime values from stac crate
+        let item_start = item.start_datetime().or_else(|| item.datetime());
+        let item_end = item.end_datetime().or_else(|| item.datetime());
 
         // If item has no temporal info, exclude from temporal searches
         if item_start.is_none() && item_end.is_none() {
@@ -432,9 +425,9 @@ fn item_to_json(item: &StacItem, exclude_assets: bool) -> serde_json::Value {
 fn filter_item(item: &StacItem, params: &ValidatedSearch) -> bool {
     // Bbox filter
     if let Some(ref bbox) = params.bbox {
-        match &item.bbox {
+        match item.bbox_array() {
             Some(item_bbox) => {
-                if !bbox.intersects(item_bbox) {
+                if !bbox.intersects(&item_bbox) {
                     return false;
                 }
             }
@@ -452,8 +445,7 @@ fn filter_item(item: &StacItem, params: &ValidatedSearch) -> bool {
     // Source filter
     if let Some(ref source) = params.source {
         let item_source = item
-            .properties
-            .get("blatten:source")
+            .get_property("blatten:source")
             .and_then(|v| v.as_str());
         if item_source != Some(source.as_str()) {
             return false;
@@ -463,8 +455,7 @@ fn filter_item(item: &StacItem, params: &ValidatedSearch) -> bool {
     // Processing level filter
     if let Some(level) = params.processing_level {
         let item_level = item
-            .properties
-            .get("blatten:processing_level")
+            .get_property("blatten:processing_level")
             .and_then(|v| v.as_i64());
         if item_level != Some(level as i64) {
             return false;
