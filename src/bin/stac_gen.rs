@@ -13,13 +13,63 @@ use chrono::{NaiveDate, Utc};
 use clap::{Parser, Subcommand};
 use gdal::spatial_ref::{CoordTransform, SpatialRef};
 use gdal::Dataset;
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use tracing::{debug, error, info, warn};
+use walkdir::WalkDir;
 
 const STAC_VERSION: &str = "1.1.0";
+
+// =============================================================================
+// File Overrides / Patches
+// =============================================================================
+//
+// Known issues with source files that require manual overrides.
+// These are applied during geometry extraction and reported in the summary.
+//
+// Add entries here for files with:
+// - Missing or incorrect CRS metadata
+// - Known coordinate issues
+// - Other metadata problems that need patching
+//
+
+/// Override configuration for a specific file
+#[derive(Debug, Clone)]
+struct FileOverride {
+    /// Filename pattern to match (exact match on filename, not path)
+    filename: &'static str,
+    /// EPSG code to use for CRS (if file has missing/broken CRS)
+    crs_epsg: Option<i32>,
+    /// Description of why this override exists
+    reason: &'static str,
+}
+
+/// Get the list of file overrides for known issues
+fn get_file_overrides() -> Vec<FileOverride> {
+    vec![
+        // =====================================================================
+        // Terradata DEM files with missing CRS metadata
+        // =====================================================================
+        FileOverride {
+            filename: "DTM_250711_GRID_20cm_LV95_NF02.tif",
+            crs_epsg: Some(2056), // Swiss LV95
+            reason: "File has ENGCRS['unnamed'] instead of EPSG:2056. Coordinates are valid LV95.",
+        },
+        // Add more overrides here as needed:
+        // FileOverride {
+        //     filename: "some_other_file.tif",
+        //     crs_epsg: Some(2056),
+        //     reason: "Description of the issue",
+        // },
+    ]
+}
+
 
 // =============================================================================
 // CLI Definition
@@ -45,23 +95,55 @@ enum Commands {
         #[arg(short, long, default_value = "stac")]
         output: PathBuf,
 
-        /// Base URL for STAC links (use ${STAC_BASE_URL} for placeholder)
-        #[arg(short, long, default_value = "${STAC_BASE_URL}")]
+        /// Base URL for STAC links
+        #[arg(short, long, default_value = "https://blatten-data.epfl.ch")]
         base_url: String,
+
+        /// S3 base URL for file assets
+        #[arg(long, default_value = "/s3")]
+        s3_base_url: String,
 
         /// Save intermediate metadata JSON
         #[arg(long)]
         save_metadata: Option<PathBuf>,
 
-        /// Data directory containing archives for geometry extraction
-        #[arg(short, long)]
-        data_dir: Option<PathBuf>,
+        /// Data directory containing provider folders (DNAGE/, Geopraevent/, Terradata/).
+        /// This is the FINAL_Data directory with geospatial files for geometry extraction.
+        #[arg(short = 'd', long)]
+        data: Option<PathBuf>,
 
-        /// Sensor locations JSON for manual coordinates
-        #[arg(long)]
+        /// Archives directory containing .zip files
+        #[arg(short = 'a', long)]
+        archives_dir: Option<PathBuf>,
+
+        /// Sensor locations JSON for manual coordinates (LV95).
+        /// Required for items without extractable geometry (webcams, GNSS, hydrology, radar).
+        /// Coordinates are automatically converted from LV95 (EPSG:2056) to WGS84.
+        /// Default: data/sensor_locations.json
+        #[arg(short = 's', long)]
         sensors_file: Option<PathBuf>,
+
+        /// DNAGE folder mappings JSON
+        #[arg(long)]
+        dnage_mappings: Option<PathBuf>,
+
+        /// Validate that files exist on S3 (requires S3 access)
+        #[arg(long)]
+        validate_s3: bool,
+
+        /// Number of parallel threads for geometry extraction
+        #[arg(long, default_value = "4")]
+        threads: usize,
+
+        /// Verbose output
+        #[arg(short, long)]
+        verbose: bool,
+
+        /// Run validation after generation (exits with code 1 if errors found)
+        #[arg(long)]
+        validate: bool,
     },
-    /// Validate an existing STAC catalog
+    /// Validate an existing STAC catalog (for CI/CD pipelines)
     Validate {
         /// Catalog directory
         #[arg(short, long, default_value = "stac")]
@@ -72,6 +154,80 @@ enum Commands {
 // =============================================================================
 // Data Structures
 // =============================================================================
+
+/// Result of geometry extraction
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+enum ExtractionResult {
+    /// Geometry extracted from geospatial file
+    Extracted { source: String, bbox: Vec<f64>, geometry: serde_json::Value, override_reason: Option<String> },
+    /// Manual coordinates from sensor_locations.json
+    Manual { sensor_name: String, lon: f64, lat: f64, bbox: Vec<f64>, geometry: serde_json::Value },
+    /// No geometry available
+    NoGeometry { reason: String },
+    /// Extraction failed with error
+    Failed { error: String },
+}
+
+/// Data quality issue for reporting
+#[allow(dead_code)]
+#[derive(Debug, Clone, Serialize)]
+struct QualityIssue {
+    item_code: String,
+    severity: IssueSeverity,
+    category: IssueCategory,
+    message: String,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum IssueSeverity {
+    Error,
+    Warning,
+    Info,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum IssueCategory {
+    MissingGeometry,
+    MissingArchive,
+    MissingData,
+    OrphanFolder,
+    InvalidData,
+    ExtractionError,
+}
+
+/// File information with geometry (for assets)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct FileInfo {
+    path: PathBuf,
+    size: u64,
+    /// WGS84 bbox for STAC compatibility [min_lon, min_lat, max_lon, max_lat]
+    bbox: Option<Vec<f64>>,
+    /// WGS84 geometry as GeoJSON
+    geometry: Option<serde_json::Value>,
+    /// LV95 bbox for Projection Extension [min_x, min_y, max_x, max_y]
+    #[serde(default)]
+    bbox_lv95: Option<Vec<f64>>,
+    /// LV95 geometry as GeoJSON for Projection Extension
+    #[serde(default)]
+    geometry_lv95: Option<serde_json::Value>,
+}
+
+/// Scanned folder information
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+struct ScannedFolder {
+    code: String,
+    path: PathBuf,
+    provider: String,
+    files: Vec<PathBuf>,
+    archive_path: Option<PathBuf>,
+    archive_size: Option<u64>,
+}
 
 /// Collection definition
 #[derive(Debug, Clone)]
@@ -99,6 +255,21 @@ fn get_collections() -> HashMap<&'static str, CollectionDef> {
             title: "Orthophotos",
             description: "Orthorectified aerial and drone imagery",
         }),
+        ("E", CollectionDef {
+            id: "radar-displacement",
+            title: "Radar Displacement",
+            description: "Interferometric radar displacement measurements",
+        }),
+        ("F", CollectionDef {
+            id: "radar-amplitude",
+            title: "Radar Amplitude",
+            description: "Interferometric radar amplitude data",
+        }),
+        ("G", CollectionDef {
+            id: "radar-coherence",
+            title: "Radar Coherence",
+            description: "Interferometric radar coherence data",
+        }),
         ("H", CollectionDef {
             id: "radar-velocity",
             title: "Radar Velocity Data",
@@ -108,6 +279,11 @@ fn get_collections() -> HashMap<&'static str, CollectionDef> {
             id: "dsm",
             title: "Digital Surface Models",
             description: "Digital Surface Models (DSM) from drone and heliborne surveys",
+        }),
+        ("J", CollectionDef {
+            id: "dem",
+            title: "Digital Elevation Models",
+            description: "Digital Elevation Models (DEM) from surveys",
         }),
         ("K", CollectionDef {
             id: "point-cloud",
@@ -129,10 +305,20 @@ fn get_collections() -> HashMap<&'static str, CollectionDef> {
             title: "Thermal Imagery",
             description: "Heliborne thermal infrared imagery",
         }),
-        ("P", CollectionDef {
+        ("O", CollectionDef {
             id: "hydrology",
             title: "Hydrology Data",
+            description: "River discharge and water flow measurements",
+        }),
+        ("P", CollectionDef {
+            id: "lake-level",
+            title: "Lake Level",
             description: "Lake level and volume measurements",
+        }),
+        ("U", CollectionDef {
+            id: "radar-timeseries",
+            title: "Radar Timeseries",
+            description: "Interferometric radar time series data",
         }),
     ]
     .into_iter()
@@ -177,17 +363,48 @@ fn get_code_to_file() -> HashMap<&'static str, &'static str> {
 // Sensor Locations (for items without extractable geometry)
 // =============================================================================
 
-/// Sensor location with manual coordinates
+/// Sensor location with manual coordinates (supports both LV95 and WGS84)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SensorLocation {
     name: Option<String>,
+    /// LV95 X coordinate (easting)
+    x: Option<f64>,
+    /// LV95 Y coordinate (northing)
+    y: Option<f64>,
+    /// WGS84 longitude (derived from x,y or provided directly)
+    #[serde(default)]
     lon: Option<f64>,
+    /// WGS84 latitude (derived from x,y or provided directly)
+    #[serde(default)]
     lat: Option<f64>,
     elevation_m: Option<f64>,
+    #[serde(default)]
     items: Vec<String>,
 }
 
-/// Load sensor locations from JSON file
+/// Convert LV95 (EPSG:2056) coordinates to WGS84 (EPSG:4326) using GDAL
+/// Returns (longitude, latitude) in GeoJSON order
+fn lv95_to_wgs84(x: f64, y: f64) -> Option<(f64, f64)> {
+    let source_srs = SpatialRef::from_epsg(2056).ok()?;
+    let mut target_srs = SpatialRef::from_epsg(4326).ok()?;
+
+    // Force traditional GIS axis order (lon, lat) instead of EPSG standard (lat, lon)
+    // This ensures compatibility with GeoJSON which requires [longitude, latitude]
+    target_srs.set_axis_mapping_strategy(gdal::spatial_ref::AxisMappingStrategy::TraditionalGisOrder);
+
+    let transform = CoordTransform::new(&source_srs, &target_srs).ok()?;
+
+    let mut xs = [x];
+    let mut ys = [y];
+    let mut zs = [0.0];
+
+    transform.transform_coords(&mut xs, &mut ys, &mut zs).ok()?;
+
+    // xs[0] = longitude, ys[0] = latitude (due to TraditionalGisOrder)
+    Some((xs[0], ys[0]))
+}
+
+/// Load sensor locations from JSON file and convert LV95 to WGS84
 fn load_sensor_locations(path: &Path) -> Result<HashMap<String, SensorLocation>> {
     if !path.exists() {
         return Ok(HashMap::new());
@@ -199,7 +416,18 @@ fn load_sensor_locations(path: &Path) -> Result<HashMap<String, SensorLocation>>
     let mut lookup = HashMap::new();
     if let Some(sensors) = data.get("sensors").and_then(|s| s.as_object()) {
         for (sensor_id, sensor_data) in sensors {
-            let sensor: SensorLocation = serde_json::from_value(sensor_data.clone())?;
+            let mut sensor: SensorLocation = serde_json::from_value(sensor_data.clone())?;
+
+            // Convert LV95 to WGS84 if x,y are available but lon,lat are not
+            if sensor.lon.is_none() && sensor.lat.is_none() {
+                if let (Some(x), Some(y)) = (sensor.x, sensor.y) {
+                    if let Some((lon, lat)) = lv95_to_wgs84(x, y) {
+                        sensor.lon = Some(lon);
+                        sensor.lat = Some(lat);
+                    }
+                }
+            }
+
             for item_code in &sensor.items {
                 lookup.insert(item_code.clone(), sensor.clone());
             }
@@ -218,15 +446,27 @@ fn load_sensor_locations(path: &Path) -> Result<HashMap<String, SensorLocation>>
 /// Extracted geometry information
 #[derive(Debug, Clone)]
 struct ExtractedGeometry {
+    /// WGS84 bbox [min_lon, min_lat, max_lon, max_lat]
     bbox: Vec<f64>,
+    /// WGS84 geometry as GeoJSON
     geometry: serde_json::Value,
+    /// Source description for debugging
     source: String,
+    /// LV95 bbox [min_x, min_y, max_x, max_y] for Projection Extension
+    bbox_lv95: Option<Vec<f64>>,
+    /// LV95 geometry as GeoJSON for Projection Extension
+    geometry_lv95: Option<serde_json::Value>,
 }
 
 /// Transform coordinates from a source EPSG to WGS84 using GDAL
+/// Returns bbox in GeoJSON order: [min_lon, min_lat, max_lon, max_lat]
 fn transform_to_wgs84(minx: f64, miny: f64, maxx: f64, maxy: f64, epsg: i32) -> Option<Vec<f64>> {
     let source_srs = SpatialRef::from_epsg(epsg as u32).ok()?;
-    let target_srs = SpatialRef::from_epsg(4326).ok()?;
+    let mut target_srs = SpatialRef::from_epsg(4326).ok()?;
+
+    // Force traditional GIS axis order (lon, lat) instead of EPSG standard (lat, lon)
+    target_srs.set_axis_mapping_strategy(gdal::spatial_ref::AxisMappingStrategy::TraditionalGisOrder);
+
     let transform = CoordTransform::new(&source_srs, &target_srs).ok()?;
 
     // Transform all four corners for accuracy
@@ -236,11 +476,12 @@ fn transform_to_wgs84(minx: f64, miny: f64, maxx: f64, maxy: f64, epsg: i32) -> 
 
     transform.transform_coords(&mut xs, &mut ys, &mut zs).ok()?;
 
+    // xs = longitudes, ys = latitudes (due to TraditionalGisOrder)
     Some(vec![
-        xs.iter().cloned().fold(f64::INFINITY, f64::min),
-        ys.iter().cloned().fold(f64::INFINITY, f64::min),
-        xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
-        ys.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+        xs.iter().cloned().fold(f64::INFINITY, f64::min),   // min_lon (west)
+        ys.iter().cloned().fold(f64::INFINITY, f64::min),   // min_lat (south)
+        xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max), // max_lon (east)
+        ys.iter().cloned().fold(f64::NEG_INFINITY, f64::max), // max_lat (north)
     ])
 }
 
@@ -275,14 +516,28 @@ fn extract_epsg_from_crs(crs: &str) -> Option<String> {
 }
 
 /// Extract geometry from a GeoTIFF file using GDAL
-fn extract_geotiff_geometry(path: &Path) -> Option<ExtractedGeometry> {
-    let dataset = Dataset::open(path).ok()?;
+/// Returns (ExtractedGeometry, Option<override_reason>) - the second value indicates if an override was applied
+/// ExtractedGeometry includes both WGS84 (for STAC item) and LV95 (for Projection Extension) coordinates
+fn extract_geotiff_geometry(path: &Path) -> (Option<ExtractedGeometry>, Option<String>) {
+    let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+    let overrides = get_file_overrides();
+
+    // Check if there's an override for this file
+    let file_override = overrides.iter().find(|o| o.filename == filename);
+
+    let dataset = match Dataset::open(path) {
+        Ok(ds) => ds,
+        Err(_) => return (None, None),
+    };
 
     // Get geotransform: [origin_x, pixel_width, rotation_x, origin_y, rotation_y, pixel_height]
-    let gt = dataset.geo_transform().ok()?;
+    let gt = match dataset.geo_transform() {
+        Ok(gt) => gt,
+        Err(_) => return (None, None),
+    };
     let (width, height) = dataset.raster_size();
 
-    // Calculate corners from geotransform
+    // Calculate corners from geotransform (native CRS coordinates)
     let minx = gt[0];
     let maxy = gt[3];
     let maxx = minx + (width as f64 * gt[1]);
@@ -292,53 +547,166 @@ fn extract_geotiff_geometry(path: &Path) -> Option<ExtractedGeometry> {
     let (minx, maxx) = (minx.min(maxx), minx.max(maxx));
     let (miny, maxy) = (miny.min(maxy), miny.max(maxy));
 
-    // Get CRS and transform to WGS84
-    let spatial_ref = dataset.spatial_ref().ok()?;
-    let target_srs = SpatialRef::from_epsg(4326).ok()?;
-
-    let bbox = if let Ok(transform) = CoordTransform::new(&spatial_ref, &target_srs) {
-        // Transform all four corners
-        let mut xs = [minx, maxx, maxx, minx];
-        let mut ys = [miny, miny, maxy, maxy];
-        let mut zs = [0.0; 4];
-
-        if transform.transform_coords(&mut xs, &mut ys, &mut zs).is_ok() {
-            vec![
-                xs.iter().cloned().fold(f64::INFINITY, f64::min),
-                ys.iter().cloned().fold(f64::INFINITY, f64::min),
-                xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
-                ys.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
-            ]
+    // Determine the source EPSG code
+    let source_epsg: Option<i32> = if let Some(ovr) = file_override {
+        ovr.crs_epsg
+    } else if let Ok(spatial_ref) = dataset.spatial_ref() {
+        if let Ok(wkt) = spatial_ref.to_wkt() {
+            extract_epsg_from_crs(&wkt)
+                .and_then(|s| s.strip_prefix("EPSG:").and_then(|n| n.parse().ok()))
         } else {
-            // Fallback: try to extract EPSG and use our transform function
-            let wkt = spatial_ref.to_wkt().ok()?;
-            let epsg_str = extract_epsg_from_crs(&wkt)?;
-            let epsg: i32 = epsg_str.strip_prefix("EPSG:")?.parse().ok()?;
-            transform_to_wgs84(minx, miny, maxx, maxy, epsg)?
+            None
         }
+    } else if looks_like_lv95(minx, miny, maxx, maxy) {
+        Some(2056) // Swiss LV95
     } else {
-        // Try extracting EPSG from WKT
-        let wkt = spatial_ref.to_wkt().ok()?;
-        let epsg_str = extract_epsg_from_crs(&wkt)?;
-        let epsg: i32 = epsg_str.strip_prefix("EPSG:")?.parse().ok()?;
-
-        if epsg == 4326 {
-            vec![minx, miny, maxx, maxy]
-        } else {
-            transform_to_wgs84(minx, miny, maxx, maxy, epsg)?
-        }
+        None
     };
 
-    let geometry = bbox_to_polygon(&bbox);
+    // If we have a CRS override, use that directly
+    if let Some(ovr) = file_override {
+        if let Some(epsg) = ovr.crs_epsg {
+            if let Some(bbox_wgs84) = transform_to_wgs84(minx, miny, maxx, maxy, epsg) {
+                if is_valid_wgs84_bbox(&bbox_wgs84) {
+                    let geometry_wgs84 = bbox_to_polygon(&bbox_wgs84);
+                    let source = format!("GeoTIFF: {} (OVERRIDE: EPSG:{})", filename, epsg);
 
-    Some(ExtractedGeometry {
-        bbox,
-        geometry,
-        source: format!("GeoTIFF: {}", path.file_name()?.to_string_lossy()),
-    })
+                    // Store LV95 coordinates if source is LV95
+                    let (bbox_lv95, geometry_lv95) = if epsg == 2056 {
+                        let native_bbox = vec![minx, miny, maxx, maxy];
+                        (Some(native_bbox.clone()), Some(bbox_to_polygon(&native_bbox)))
+                    } else {
+                        (None, None)
+                    };
+
+                    return (
+                        Some(ExtractedGeometry {
+                            bbox: bbox_wgs84,
+                            geometry: geometry_wgs84,
+                            source,
+                            bbox_lv95,
+                            geometry_lv95,
+                        }),
+                        Some(ovr.reason.to_string()),
+                    );
+                }
+            }
+        }
+    }
+
+    // Try to transform using embedded CRS
+    let (bbox_wgs84, detected_epsg) = if let Ok(spatial_ref) = dataset.spatial_ref() {
+        let mut target_srs = match SpatialRef::from_epsg(4326) {
+            Ok(srs) => srs,
+            Err(_) => return (None, None),
+        };
+        // Force traditional GIS axis order (lon, lat) for GeoJSON compatibility
+        target_srs.set_axis_mapping_strategy(gdal::spatial_ref::AxisMappingStrategy::TraditionalGisOrder);
+
+        let (maybe_bbox, epsg) = if let Ok(transform) = CoordTransform::new(&spatial_ref, &target_srs) {
+            // Transform all four corners
+            let mut xs = [minx, maxx, maxx, minx];
+            let mut ys = [miny, miny, maxy, maxy];
+            let mut zs = [0.0; 4];
+
+            if transform.transform_coords(&mut xs, &mut ys, &mut zs).is_ok() {
+                // xs = longitudes, ys = latitudes (due to TraditionalGisOrder)
+                (Some(vec![
+                    xs.iter().cloned().fold(f64::INFINITY, f64::min),   // min_lon
+                    ys.iter().cloned().fold(f64::INFINITY, f64::min),   // min_lat
+                    xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max), // max_lon
+                    ys.iter().cloned().fold(f64::NEG_INFINITY, f64::max), // max_lat
+                ]), source_epsg)
+            } else {
+                (None, None)
+            }
+        } else {
+            // Try extracting EPSG from WKT
+            if let Ok(wkt) = spatial_ref.to_wkt() {
+                if let Some(epsg_str) = extract_epsg_from_crs(&wkt) {
+                    if let Ok(epsg) = epsg_str.strip_prefix("EPSG:").unwrap_or("").parse::<i32>() {
+                        if epsg == 4326 {
+                            (Some(vec![minx, miny, maxx, maxy]), Some(4326))
+                        } else {
+                            (transform_to_wgs84(minx, miny, maxx, maxy, epsg), Some(epsg))
+                        }
+                    } else {
+                        (None, None)
+                    }
+                } else {
+                    (None, None)
+                }
+            } else {
+                (None, None)
+            }
+        };
+
+        // If transformation succeeded and looks valid, use it
+        if let Some(ref b) = maybe_bbox {
+            if is_valid_wgs84_bbox(b) {
+                (maybe_bbox, epsg)
+            } else {
+                // Transformed coordinates are invalid - CRS issue
+                warn!(
+                    "GeoTIFF {}: transformed coordinates are invalid (bbox: {:?}). Fix the CRS in the source file or add an override.",
+                    filename, b
+                );
+                (None, None)
+            }
+        } else {
+            (None, None)
+        }
+    } else {
+        // No valid CRS - report the issue
+        if looks_like_lv95(minx, miny, maxx, maxy) {
+            warn!(
+                "GeoTIFF {}: no valid CRS but coordinates look like LV95 (EPSG:2056). Fix the CRS metadata in the source file. Bounds: ({:.0}, {:.0}) - ({:.0}, {:.0})",
+                path.file_name().unwrap_or_default().to_string_lossy(),
+                minx, miny, maxx, maxy
+            );
+        } else {
+            warn!(
+                "GeoTIFF {}: no valid CRS. Fix the CRS metadata in the source file. Bounds: ({:.6}, {:.6}) - ({:.6}, {:.6})",
+                path.file_name().unwrap_or_default().to_string_lossy(),
+                minx, miny, maxx, maxy
+            );
+        }
+        (None, None)
+    };
+
+    // Return None if no valid bbox could be computed
+    let bbox_wgs84 = match bbox_wgs84 {
+        Some(b) => b,
+        None => return (None, None),
+    };
+
+    // Final validation
+    if !is_valid_wgs84_bbox(&bbox_wgs84) {
+        return (None, None);
+    }
+
+    let geometry_wgs84 = bbox_to_polygon(&bbox_wgs84);
+    let source = format!("GeoTIFF: {}", filename);
+
+    // Store LV95 coordinates if source CRS is LV95
+    let (bbox_lv95, geometry_lv95) = if detected_epsg == Some(2056) {
+        let native_bbox = vec![minx, miny, maxx, maxy];
+        (Some(native_bbox.clone()), Some(bbox_to_polygon(&native_bbox)))
+    } else {
+        (None, None)
+    };
+
+    (Some(ExtractedGeometry {
+        bbox: bbox_wgs84,
+        geometry: geometry_wgs84,
+        source,
+        bbox_lv95,
+        geometry_lv95,
+    }), None)
 }
 
 /// Extract geometry from a LAZ/LAS file
+/// Returns ExtractedGeometry with both WGS84 and LV95 coordinates when applicable
 fn extract_las_geometry(path: &Path) -> Option<ExtractedGeometry> {
     let file = File::open(path).ok()?;
     let reader = BufReader::new(file);
@@ -369,18 +737,33 @@ fn extract_las_geometry(path: &Path) -> Option<ExtractedGeometry> {
 
     let epsg: i32 = epsg_str.strip_prefix("EPSG:").and_then(|s| s.parse().ok()).unwrap_or(2056);
 
-    let bbox = if epsg == 4326 {
+    let bbox_wgs84 = if epsg == 4326 {
         vec![minx, miny, maxx, maxy]
     } else {
         transform_to_wgs84(minx, miny, maxx, maxy, epsg)?
     };
 
-    let geometry = bbox_to_polygon(&bbox);
+    // Validate the transformed coordinates are reasonable
+    if !is_valid_wgs84_bbox(&bbox_wgs84) {
+        return None; // CRS transformation failed or produced garbage
+    }
+
+    let geometry_wgs84 = bbox_to_polygon(&bbox_wgs84);
+
+    // Store LV95 coordinates if source CRS is LV95
+    let (bbox_lv95, geometry_lv95) = if epsg == 2056 {
+        let native_bbox = vec![minx, miny, maxx, maxy];
+        (Some(native_bbox.clone()), Some(bbox_to_polygon(&native_bbox)))
+    } else {
+        (None, None)
+    };
 
     Some(ExtractedGeometry {
-        bbox,
-        geometry,
+        bbox: bbox_wgs84,
+        geometry: geometry_wgs84,
         source: format!("LAZ/LAS: {} (EPSG:{})", path.file_name()?.to_string_lossy(), epsg),
+        bbox_lv95,
+        geometry_lv95,
     })
 }
 
@@ -397,6 +780,36 @@ fn bbox_to_polygon(bbox: &[f64]) -> serde_json::Value {
             [west, south]
         ]]
     })
+}
+
+/// Validate that bbox coordinates are in valid WGS84 range for Switzerland area
+/// Returns true if coordinates look reasonable (roughly Europe/Switzerland)
+fn is_valid_wgs84_bbox(bbox: &[f64]) -> bool {
+    if bbox.len() != 4 {
+        return false;
+    }
+    let (west, south, east, north) = (bbox[0], bbox[1], bbox[2], bbox[3]);
+
+    // Check valid WGS84 ranges
+    let valid_lon = west >= -180.0 && west <= 180.0 && east >= -180.0 && east <= 180.0;
+    let valid_lat = south >= -90.0 && south <= 90.0 && north >= -90.0 && north <= 90.0;
+
+    // Check ordering
+    let valid_order = west <= east && south <= north;
+
+    // Check roughly in European/Swiss region (lon: 5-11, lat: 45-48)
+    // Use wider bounds to be safe
+    let roughly_swiss = west >= -20.0 && east <= 30.0 && south >= 30.0 && north <= 60.0;
+
+    valid_lon && valid_lat && valid_order && roughly_swiss
+}
+
+/// Check if coordinates look like Swiss LV95 (EPSG:2056)
+/// LV95 has X (Easting) ~2.4M-2.9M and Y (Northing) ~1.0M-1.4M
+fn looks_like_lv95(minx: f64, miny: f64, maxx: f64, maxy: f64) -> bool {
+    let x_in_range = minx >= 2_400_000.0 && maxx <= 2_900_000.0;
+    let y_in_range = miny >= 1_000_000.0 && maxy <= 1_400_000.0;
+    x_in_range && y_in_range
 }
 
 /// Create a point geometry with a small buffer for bbox
@@ -448,73 +861,12 @@ fn extract_from_zip(archive_path: &Path, tmpdir: &Path) -> Option<ExtractedGeome
 
     let name_lower = outpath.to_string_lossy().to_lowercase();
     if name_lower.ends_with(".tif") || name_lower.ends_with(".tiff") {
-        extract_geotiff_geometry(&outpath)
+        extract_geotiff_geometry(&outpath).0 // Ignore override tracking for zip extraction
     } else if name_lower.ends_with(".laz") || name_lower.ends_with(".las") {
         extract_las_geometry(&outpath)
     } else {
         None
     }
-}
-
-/// Extract geometry for an item
-fn extract_geometry_for_item(
-    item: &mut ItemMetadata,
-    data_dir: &Path,
-    sensors: &HashMap<String, SensorLocation>,
-    tmpdir: &Path,
-) -> Result<Option<String>> {
-    let code = &item.code;
-    let data_format = item.format.as_deref().unwrap_or("").to_uppercase();
-
-    // Check if format has extractable geometry
-    let is_geospatial = matches!(data_format.as_str(), "TIF" | "TIFF" | "LAZ" | "LAS");
-
-    // Get archive file
-    let archive_name = match &item.archive_file {
-        Some(name) => name.clone(),
-        None => return Ok(None),
-    };
-
-    let archive_path = data_dir.join(&archive_name);
-    if !archive_path.exists() {
-        // Try dummy folder
-        let dummy_path = data_dir.join("dummy").join(&archive_name);
-        if !dummy_path.exists() {
-            return Ok(Some(format!("Archive not found: {}", archive_name)));
-        }
-    }
-
-    let archive_path = if archive_path.exists() {
-        archive_path
-    } else {
-        data_dir.join("dummy").join(&archive_name)
-    };
-
-    if is_geospatial && archive_path.extension().map(|e| e == "zip").unwrap_or(false) {
-        // Try extracting from zip
-        if let Some(geo) = extract_from_zip(&archive_path, tmpdir) {
-            item.bbox = Some(geo.bbox);
-            item.geometry = Some(geo.geometry);
-            return Ok(Some(format!("Extracted: {}", geo.source)));
-        }
-    }
-
-    // Fall back to manual coordinates
-    if let Some(sensor) = sensors.get(code) {
-        if let (Some(lon), Some(lat)) = (sensor.lon, sensor.lat) {
-            let (bbox, geometry) = point_to_geometry(lon, lat, sensor.elevation_m);
-            item.bbox = Some(bbox);
-            item.geometry = Some(geometry);
-            return Ok(Some(format!(
-                "Manual: {} at [{}, {}]",
-                sensor.name.as_deref().unwrap_or(code),
-                lon,
-                lat
-            )));
-        }
-    }
-
-    Ok(None)
 }
 
 /// Parsed item metadata from XLSX
@@ -548,6 +900,12 @@ struct ItemMetadata {
     geometry: Option<serde_json::Value>,
     bbox: Option<Vec<f64>>,
     archive_file: Option<String>,
+    archive_size: Option<u64>,
+    // File tracking (for hierarchical items)
+    #[serde(default)]
+    files: Vec<FileInfo>,
+    #[serde(default)]
+    file_count: usize,
 }
 
 /// Validation issue
@@ -634,14 +992,25 @@ fn excel_date_to_iso(serial: f64) -> Option<String> {
     Some(date.format("%Y-%m-%d").to_string())
 }
 
-/// Parse the Test_Data sheet from XLSX
+/// Parse the Data sheet from XLSX (prefers Data > Test_Data > All_Data > first sheet)
 fn parse_xlsx(path: &PathBuf) -> Result<Vec<ItemMetadata>> {
     let mut workbook: Xlsx<_> = open_workbook(path)
         .with_context(|| format!("Failed to open XLSX: {:?}", path))?;
 
+    // Get sheet names and find preferred sheet (like Python: Data > Test_Data > All_Data > first)
+    let sheet_names = workbook.sheet_names().to_vec();
+    let preferred_sheets = ["Data", "Test_Data", "All_Data"];
+    let sheet_name = preferred_sheets
+        .iter()
+        .find(|&name| sheet_names.contains(&name.to_string()))
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| sheet_names.first().cloned().unwrap_or_default());
+
+    info!("Using sheet: {} (available: {:?})", sheet_name, sheet_names);
+
     let range = workbook
-        .worksheet_range("Test_Data")
-        .with_context(|| "Sheet 'Test_Data' not found")?;
+        .worksheet_range(&sheet_name)
+        .with_context(|| format!("Sheet '{}' not found", sheet_name))?;
 
     let collections = get_collections();
     let code_to_file = get_code_to_file();
@@ -695,6 +1064,9 @@ fn parse_xlsx(path: &PathBuf) -> Result<Vec<ItemMetadata>> {
             geometry: None,
             bbox: None,
             archive_file: None,
+            archive_size: None,
+            files: Vec::new(),
+            file_count: 0,
         };
 
         // Map product_id to collection
@@ -719,8 +1091,34 @@ fn parse_xlsx(path: &PathBuf) -> Result<Vec<ItemMetadata>> {
 // STAC Generation
 // =============================================================================
 
-/// Create a STAC Item from metadata
-fn create_stac_item(item: &ItemMetadata, base_url: &str) -> serde_json::Value {
+/// Generate a sanitized asset key from filename
+/// Removes extension and replaces non-alphanumeric characters
+fn sanitize_asset_key(filename: &str) -> String {
+    let name = std::path::Path::new(filename)
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| filename.to_string());
+
+    // Replace non-alphanumeric characters with hyphens, collapse multiple hyphens
+    let mut key = String::new();
+    let mut last_was_hyphen = false;
+    for c in name.chars() {
+        if c.is_alphanumeric() {
+            key.push(c.to_ascii_lowercase());
+            last_was_hyphen = false;
+        } else if !last_was_hyphen {
+            key.push('-');
+            last_was_hyphen = true;
+        }
+    }
+    key.trim_matches('-').to_string()
+}
+
+/// Create a STAC Item from metadata with all files as assets
+/// This creates STAC 1.1.0 compliant items with:
+/// - Item-level geometry in WGS84 (combined extent of all files)
+/// - Per-asset geometry using Projection Extension (LV95 when available)
+fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str) -> serde_json::Value {
     let collection_id = item.collection_id.as_deref().unwrap_or("unknown");
 
     // Build datetime fields
@@ -740,12 +1138,17 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str) -> serde_json::Value {
         (serde_json::Value::Null, None, None)
     };
 
-    // Build title
+    // Build title (matching Python: "{sensor_id} - {sensor} - {dataset_id} - {location}")
     let title = format!(
-        "{} - {}",
+        "{} - {} - {} - {}",
+        item.sensor_id.as_deref().unwrap_or(""),
         item.sensor.as_deref().unwrap_or(""),
-        item.dataset.as_deref().unwrap_or("")
+        item.dataset_id.as_deref().unwrap_or(""),
+        item.location.as_deref().unwrap_or("")
     )
+    .trim_matches(|c| c == ' ' || c == '-')
+    .replace(" -  - ", " - ")
+    .replace(" - - ", " - ")
     .trim_matches(|c| c == ' ' || c == '-')
     .to_string();
     let title = if title.is_empty() { item.code.clone() } else { title };
@@ -754,6 +1157,7 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str) -> serde_json::Value {
     let mut properties = serde_json::json!({
         "title": title,
         "datetime": datetime,
+        "blatten:code": item.code,
     });
 
     if let Some(ref desc) = item.description {
@@ -766,8 +1170,7 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str) -> serde_json::Value {
         properties["end_datetime"] = serde_json::json!(ed);
     }
 
-    // Custom properties
-    properties["blatten:code"] = serde_json::json!(item.code);
+    // Custom properties (blatten namespace)
     if let Some(ref s) = item.sensor {
         properties["blatten:sensor"] = serde_json::json!(s);
     }
@@ -795,9 +1198,14 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str) -> serde_json::Value {
     if let Some(mb) = item.storage_mb {
         properties["blatten:storage_mb"] = serde_json::json!(mb);
     }
+    // File count from folder scanning
+    properties["blatten:file_count"] = serde_json::json!(item.file_count);
 
-    // Build assets
+    // Build assets - now includes all individual files
     let mut assets = serde_json::Map::new();
+    let mut has_proj_extension = false;
+
+    // Add archive asset if available
     if let Some(ref archive) = item.archive_file {
         let media_type = if archive.ends_with(".zip") {
             "application/zip"
@@ -808,17 +1216,71 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str) -> serde_json::Value {
         };
 
         let mut asset = serde_json::json!({
-            "href": format!("{}/s3/data/{}", base_url, archive),
+            "href": format!("{}/archives/{}", s3_base_url, archive),
             "type": media_type,
-            "title": format!("{} Data Archive", item.code),
-            "roles": ["data"]
+            "title": format!("{} complete archive", item.code),
+            "roles": ["data", "archive"]
         });
 
-        if let Some(mb) = item.storage_mb {
+        // Use actual archive size if available, otherwise fall back to storage_mb
+        if let Some(size) = item.archive_size {
+            asset["file:size"] = serde_json::json!(size);
+        } else if let Some(mb) = item.storage_mb {
             asset["file:size"] = serde_json::json!((mb * 1024.0 * 1024.0) as i64);
         }
 
-        assets.insert("data".to_string(), asset);
+        assets.insert("archive".to_string(), asset);
+    }
+
+    // Add individual file assets with Projection Extension fields
+    let mut used_keys: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for file_info in &item.files {
+        let filename = file_info.path.file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+
+        // Generate unique asset key
+        let base_key = sanitize_asset_key(&filename);
+        let key = {
+            let count = used_keys.entry(base_key.clone()).or_insert(0);
+            let key = if *count == 0 {
+                base_key.clone()
+            } else {
+                format!("{}-{}", base_key, count)
+            };
+            *count += 1;
+            key
+        };
+
+        // Build S3 path as {dataset_code}/{filename}
+        let rel_path = format!("{}/{}", item.code, filename);
+        let mime_type = get_mime_type(&file_info.path);
+
+        let mut asset = serde_json::json!({
+            "href": format!("{}/{}", s3_base_url, rel_path),
+            "type": mime_type,
+            "title": filename,
+            "roles": ["data"]
+        });
+
+        // Add file size
+        if file_info.size > 0 {
+            asset["file:size"] = serde_json::json!(file_info.size);
+        }
+
+        // Add Projection Extension fields if LV95 coordinates available
+        if let Some(ref bbox_lv95) = file_info.bbox_lv95 {
+            asset["proj:code"] = serde_json::json!("EPSG:2056");
+            asset["proj:bbox"] = serde_json::json!(bbox_lv95);
+            has_proj_extension = true;
+
+            if let Some(ref geometry_lv95) = file_info.geometry_lv95 {
+                asset["proj:geometry"] = geometry_lv95.clone();
+            }
+        }
+
+        assets.insert(key, asset);
     }
 
     // Build links
@@ -845,12 +1307,19 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str) -> serde_json::Value {
         }),
     ];
 
+    // Build stac_extensions list
+    let mut extensions = vec![
+        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json".to_string(),
+        "https://stac-extensions.github.io/file/v2.1.0/schema.json".to_string(),
+    ];
+    if has_proj_extension {
+        extensions.push("https://stac-extensions.github.io/projection/v2.0.0/schema.json".to_string());
+    }
+
     serde_json::json!({
         "type": "Feature",
         "stac_version": STAC_VERSION,
-        "stac_extensions": [
-            "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json"
-        ],
+        "stac_extensions": extensions,
         "id": item.code,
         "geometry": item.geometry,
         "bbox": item.bbox,
@@ -859,6 +1328,23 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str) -> serde_json::Value {
         "assets": assets,
         "collection": collection_id
     })
+}
+
+/// Get MIME type for a file extension
+fn get_mime_type(path: &Path) -> &'static str {
+    match path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase().as_str() {
+        "tif" | "tiff" => "image/tiff; application=geotiff",
+        "laz" => "application/vnd.laszip",
+        "las" => "application/vnd.las",
+        "jpg" | "jpeg" => "image/jpeg",
+        "png" => "image/png",
+        "zip" => "application/zip",
+        "csv" => "text/csv",
+        "json" => "application/json",
+        "obj" => "model/obj",
+        "ply" => "application/ply",
+        _ => "application/octet-stream",
+    }
 }
 
 /// Create a STAC Collection
@@ -977,11 +1463,14 @@ fn create_stac_collection(
 }
 
 /// Generate the complete STAC catalog
+/// Returns (num_collections, num_items, total_assets, issues)
 fn generate_catalog(
     items: &[ItemMetadata],
     output_dir: &PathBuf,
     base_url: &str,
-) -> Result<(usize, usize, Vec<ValidationIssue>)> {
+    s3_base_url: &str,
+    _data_path: Option<&Path>,
+) -> Result<(usize, usize, usize, Vec<ValidationIssue>)> {
     fs::create_dir_all(output_dir)?;
     fs::create_dir_all(output_dir.join("collections"))?;
 
@@ -1000,7 +1489,10 @@ fn generate_catalog(
     }
 
     // Generate STAC items and collections
-    let mut all_stac_items = Vec::new();
+    // Note: Files are now stored as assets within each item (STAC compliant)
+    // No separate file items are created
+    let mut all_items = Vec::new();
+    let mut total_assets: usize = 0;
     let mut stac_collections = Vec::new();
 
     for (coll_id, coll_items) in &items_by_collection {
@@ -1010,12 +1502,19 @@ fn generate_catalog(
             .find(|d| d.id == coll_id)
             .expect("Unknown collection");
 
-        // Create STAC items
-        let mut stac_items = Vec::new();
+        // Create STAC items (one per dataset, with files as assets)
+        let mut coll_stac_items = Vec::new();
+
         for item in coll_items {
-            let stac_item = create_stac_item(item, base_url);
-            stac_items.push(stac_item.clone());
-            all_stac_items.push(stac_item);
+            // Create STAC item with all files as assets
+            let stac_item = create_stac_item(item, base_url, s3_base_url);
+
+            // Count assets for stats
+            if let Some(assets) = stac_item.get("assets").and_then(|a| a.as_object()) {
+                total_assets += assets.len();
+            }
+
+            coll_stac_items.push(stac_item);
 
             // Validate
             if item.geometry.is_none() {
@@ -1025,14 +1524,16 @@ fn generate_catalog(
                     message: "Missing geometry".to_string(),
                 });
             }
-            if item.archive_file.is_none() {
+            if item.archive_file.is_none() && item.files.is_empty() {
                 issues.push(ValidationIssue {
                     item_id: item.code.clone(),
                     severity: "warning".to_string(),
-                    message: "No archive file mapped".to_string(),
+                    message: "No archive file mapped and no files found".to_string(),
                 });
             }
         }
+
+        all_items.extend(coll_stac_items.clone());
 
         // Create collection
         let collection = create_stac_collection(def, coll_items, base_url);
@@ -1046,9 +1547,9 @@ fn generate_catalog(
         let items_path = output_dir.join("collections").join(format!("{}_items.json", coll_id));
         let items_fc = serde_json::json!({
             "type": "FeatureCollection",
-            "features": stac_items,
-            "numberMatched": stac_items.len(),
-            "numberReturned": stac_items.len()
+            "features": coll_stac_items,
+            "numberMatched": coll_stac_items.len(),
+            "numberReturned": coll_stac_items.len()
         });
         fs::write(&items_path, serde_json::to_string_pretty(&items_fc)?)?;
     }
@@ -1099,9 +1600,9 @@ fn generate_catalog(
     // Write all items
     let all_items_fc = serde_json::json!({
         "type": "FeatureCollection",
-        "features": all_stac_items,
-        "numberMatched": all_stac_items.len(),
-        "numberReturned": all_stac_items.len()
+        "features": all_items,
+        "numberMatched": all_items.len(),
+        "numberReturned": all_items.len()
     });
     fs::write(
         output_dir.join("all_items.json"),
@@ -1127,23 +1628,78 @@ fn generate_catalog(
         serde_json::to_string_pretty(&collections_list)?,
     )?;
 
+    // Compute quality metrics
+    let num_items = all_items.len();
+    let items_with_geometry = all_items.iter().filter(|i| !i["geometry"].is_null()).count();
+    let items_missing_geometry = all_items.iter().filter(|i| i["geometry"].is_null()).count();
+    let items_with_archive = all_items.iter().filter(|i| {
+        i.get("assets").and_then(|a| a.get("archive")).is_some()
+    }).count();
+    let items_missing_archive = num_items - items_with_archive;
+
+    // Compute issues by severity
+    let error_count = issues.iter().filter(|i| i.severity == "error").count();
+    let warning_count = issues.iter().filter(|i| i.severity == "warning").count();
+    let info_count = issues.iter().filter(|i| i.severity == "info").count();
+
+    // Group items by collection for per-collection stats
+    let mut collection_stats: HashMap<String, serde_json::Value> = HashMap::new();
+    for item in &all_items {
+        let coll_id = item.get("collection").and_then(|c| c.as_str()).unwrap_or("unknown");
+        let num_assets = item.get("assets").and_then(|a| a.as_object()).map(|a| a.len()).unwrap_or(0);
+        let entry = collection_stats.entry(coll_id.to_string()).or_insert_with(|| {
+            serde_json::json!({
+                "total_items": 0,
+                "total_assets": 0,
+                "with_geometry": 0,
+                "with_archive": 0
+            })
+        });
+        entry["total_items"] = serde_json::json!(entry["total_items"].as_i64().unwrap_or(0) + 1);
+        entry["total_assets"] = serde_json::json!(entry["total_assets"].as_i64().unwrap_or(0) + num_assets as i64);
+        if !item["geometry"].is_null() {
+            entry["with_geometry"] = serde_json::json!(entry["with_geometry"].as_i64().unwrap_or(0) + 1);
+        }
+        if item.get("assets").and_then(|a| a.get("archive")).is_some() {
+            entry["with_archive"] = serde_json::json!(entry["with_archive"].as_i64().unwrap_or(0) + 1);
+        }
+    }
+
     // Write validation report
     let report = serde_json::json!({
         "generated_at": Utc::now().to_rfc3339(),
         "stac_version": STAC_VERSION,
-        "total_collections": stac_collections.len(),
-        "total_items": all_stac_items.len(),
-        "items_with_geometry": all_stac_items.iter().filter(|i| !i["geometry"].is_null()).count(),
-        "items_missing_geometry": all_stac_items.iter().filter(|i| i["geometry"].is_null()).count(),
+        "summary": {
+            "total_collections": stac_collections.len(),
+            "total_items": num_items,
+            "total_assets": total_assets,
+            "items_with_geometry": items_with_geometry,
+            "items_missing_geometry": items_missing_geometry,
+            "items_with_archive": items_with_archive,
+            "items_missing_archive": items_missing_archive,
+            "geometry_coverage_pct": if num_items == 0 { 0.0 } else {
+                (items_with_geometry as f64 / num_items as f64 * 100.0).round()
+            },
+            "archive_coverage_pct": if num_items == 0 { 0.0 } else {
+                (items_with_archive as f64 / num_items as f64 * 100.0).round()
+            }
+        },
+        "issues_summary": {
+            "total": issues.len(),
+            "errors": error_count,
+            "warnings": warning_count,
+            "info": info_count
+        },
+        "collection_stats": collection_stats,
         "issues": issues,
-        "validation_passed": issues.iter().all(|i| i.severity != "error")
+        "validation_passed": error_count == 0
     });
     fs::write(
         output_dir.join("validation_report.json"),
         serde_json::to_string_pretty(&report)?,
     )?;
 
-    Ok((stac_collections.len(), all_stac_items.len(), issues))
+    Ok((stac_collections.len(), num_items, total_assets, issues))
 }
 
 // =============================================================================
@@ -1219,6 +1775,14 @@ fn validate_catalog(catalog_dir: &PathBuf) -> Result<Vec<ValidationIssue>> {
 // =============================================================================
 
 fn main() -> Result<()> {
+    // Initialize tracing
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::from_default_env()
+                .add_directive(tracing::Level::INFO.into()),
+        )
+        .init();
+
     let cli = Cli::parse();
 
     match cli.command {
@@ -1226,74 +1790,267 @@ fn main() -> Result<()> {
             xlsx,
             output,
             base_url,
+            s3_base_url,
             save_metadata,
-            data_dir,
+            data,
+            archives_dir,
             sensors_file,
+            dnage_mappings,
+            validate_s3,
+            threads,
+            verbose,
+            validate,
         } => {
-            println!("=== STAC Generator (v{}) ===\n", STAC_VERSION);
+            info!("=== STAC Generator (v{}) ===", STAC_VERSION);
 
-            println!("1. Parsing XLSX metadata...");
+            // Configure rayon thread pool
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build_global()
+                .ok();
+
+            // Set up progress bars
+            let multi_progress = MultiProgress::new();
+            let spinner_style = ProgressStyle::default_spinner()
+                .template("{spinner:.green} {msg}")
+                .expect("Invalid spinner template");
+
+            // Step 1: Parse XLSX
+            let parse_pb = multi_progress.add(ProgressBar::new_spinner());
+            parse_pb.set_style(spinner_style.clone());
+            parse_pb.set_message("Parsing XLSX metadata...");
+
             let mut items = parse_xlsx(&xlsx)?;
-            println!("   Parsed {} items\n", items.len());
+            parse_pb.finish_with_message(format!("Parsed {} items from XLSX", items.len()));
 
-            // Extract geometry if data_dir is provided
-            if let Some(ref data_path) = data_dir {
-                println!("2. Extracting geometry from data files...");
+            // Step 2: Scan folders if data provided
+            let scanned_folders: HashMap<String, ScannedFolder> = if let Some(ref data_path) = data {
+                let scan_pb = multi_progress.add(ProgressBar::new_spinner());
+                scan_pb.set_style(spinner_style.clone());
+                scan_pb.set_message("Scanning data folders...");
+
+                let folders = scan_data_folders(data_path, dnage_mappings.as_deref())?;
+                scan_pb.finish_with_message(format!("Found {} data folders", folders.len()));
+                folders
+            } else {
+                HashMap::new()
+            };
+
+            // Keep a copy for quality report (before moving to Arc)
+            let scanned_folders_for_report = scanned_folders.clone();
+
+            // Track applied overrides for reporting
+            let mut applied_overrides: Vec<(String, String, String)> = Vec::new(); // (code, file, reason)
+
+            // Step 3: Extract geometry
+            let data_path = data.as_deref();
+            if data_path.is_some() || sensors_file.is_some() {
+                let extract_pb = multi_progress.add(ProgressBar::new(items.len() as u64));
+                extract_pb.set_style(
+                    ProgressStyle::default_bar()
+                        .template("{spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} {msg}")
+                        .expect("Invalid bar template")
+                        .progress_chars("#>-"),
+                );
+                extract_pb.set_message("Extracting geometry...");
 
                 // Load sensor locations
                 let sensors = if let Some(ref sensors_path) = sensors_file {
                     load_sensor_locations(sensors_path)?
-                } else {
-                    // Try default location
-                    let default_path = data_path.join("sensor_locations.json");
+                } else if let Some(ref dp) = data_path {
+                    let default_path = dp.join("sensor_locations.json");
                     if default_path.exists() {
                         load_sensor_locations(&default_path)?
                     } else {
                         HashMap::new()
                     }
+                } else {
+                    HashMap::new()
                 };
 
                 // Create temp directory for extraction
                 let tmpdir = std::env::temp_dir().join("stac-gen-extract");
                 fs::create_dir_all(&tmpdir)?;
 
+                // Extract geometry in parallel
+                let extract_pb = Arc::new(Mutex::new(extract_pb));
+                let sensors = Arc::new(sensors);
+                let scanned_folders = Arc::new(scanned_folders);
+                let tmpdir = Arc::new(tmpdir);
+
+                let results: Vec<(String, ExtractionResult)> = items
+                    .par_iter()
+                    .map(|item| {
+                        let result = extract_geometry_for_item_v2(
+                            item,
+                            data_path,
+                            &sensors,
+                            &scanned_folders,
+                            &tmpdir,
+                        );
+                        if let Ok(pb) = extract_pb.lock() {
+                            pb.inc(1);
+                        }
+                        (item.code.clone(), result)
+                    })
+                    .collect();
+
+                // Apply results and collect stats
                 let mut extracted = 0;
                 let mut manual = 0;
+                let mut no_geometry = 0;
                 let mut failed = 0;
 
-                for item in &mut items {
-                    match extract_geometry_for_item(item, data_path, &sensors, &tmpdir) {
-                        Ok(Some(msg)) => {
-                            if msg.starts_with("Extracted:") {
+                for (code, result) in results {
+                    if let Some(item) = items.iter_mut().find(|i| i.code == code) {
+                        match result {
+                            ExtractionResult::Extracted { bbox, geometry, source, override_reason } => {
+                                item.bbox = Some(bbox);
+                                item.geometry = Some(geometry);
                                 extracted += 1;
-                                println!("   [{}] {}", item.code, msg);
-                            } else if msg.starts_with("Manual:") {
-                                manual += 1;
-                                println!("   [{}] {}", item.code, msg);
-                            } else {
-                                failed += 1;
-                                println!("   [{}] Failed: {}", item.code, msg);
+                                if let Some(ref reason) = override_reason {
+                                    applied_overrides.push((code.clone(), source.clone(), reason.clone()));
+                                }
+                                if verbose {
+                                    if let Some(ref reason) = override_reason {
+                                        debug!("[{}] Extracted from {} [OVERRIDE: {}]", code, source, reason);
+                                    } else {
+                                        debug!("[{}] Extracted from {}", code, source);
+                                    }
+                                }
                             }
-                        }
-                        Ok(None) => {
-                            // No geometry extracted
-                        }
-                        Err(e) => {
-                            failed += 1;
-                            println!("   [{}] Error: {}", item.code, e);
+                            ExtractionResult::Manual { bbox, geometry, sensor_name, lon, lat } => {
+                                item.bbox = Some(bbox);
+                                item.geometry = Some(geometry);
+                                manual += 1;
+                                if verbose {
+                                    debug!("[{}] Manual: {} at [{:.4}, {:.4}]", code, sensor_name, lon, lat);
+                                }
+                            }
+                            ExtractionResult::NoGeometry { reason } => {
+                                no_geometry += 1;
+                                if verbose {
+                                    debug!("[{}] No geometry: {}", code, reason);
+                                }
+                            }
+                            ExtractionResult::Failed { error } => {
+                                failed += 1;
+                                warn!("[{}] Extraction failed: {}", code, error);
+                            }
                         }
                     }
                 }
 
-                println!("\n   Geometry extraction: {} extracted, {} manual, {} failed\n", extracted, manual, failed);
+                if let Ok(pb) = extract_pb.lock() {
+                    pb.finish_with_message(format!(
+                        "Geometry: {} extracted, {} manual, {} none, {} failed",
+                        extracted, manual, no_geometry, failed
+                    ));
+                }
 
                 // Cleanup
-                let _ = fs::remove_dir_all(&tmpdir);
+                let _ = fs::remove_dir_all(tmpdir.as_ref());
+            }
+
+            // Populate file info from scanned folders and compute combined bbox
+            let file_pb = multi_progress.add(ProgressBar::new(items.len() as u64));
+            file_pb.set_style(
+                ProgressStyle::default_bar()
+                    .template("{spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} {msg}")
+                    .expect("Invalid bar template")
+                    .progress_chars("#>-"),
+            );
+            file_pb.set_message("Extracting file geometry...");
+
+            for item in &mut items {
+                if let Some(folder) = scanned_folders_for_report.get(&item.code) {
+                    item.file_count = folder.files.len();
+                    let mut file_bboxes: Vec<Vec<f64>> = Vec::new();
+
+                    // Build FileInfo list with geometry for each file
+                    for file_path in &folder.files {
+                        let size = file_path.metadata().map(|m| m.len()).unwrap_or(0);
+                        let ext = file_path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+
+                        // Extract geometry for geospatial files (both WGS84 and LV95)
+                        let (bbox, geometry, bbox_lv95, geometry_lv95) = if ext == "tif" || ext == "tiff" {
+                            let (geo, _override_reason) = extract_geotiff_geometry(file_path);
+                            // Note: override tracking for file-level extraction is not shown in summary
+                            // to avoid duplication (dataset-level overrides are tracked)
+                            geo.map(|g| (Some(g.bbox), Some(g.geometry), g.bbox_lv95, g.geometry_lv95))
+                                .unwrap_or((None, None, None, None))
+                        } else if ext == "laz" || ext == "las" {
+                            extract_las_geometry(file_path)
+                                .map(|g| (Some(g.bbox), Some(g.geometry), g.bbox_lv95, g.geometry_lv95))
+                                .unwrap_or((None, None, None, None))
+                        } else {
+                            (None, None, None, None)
+                        };
+
+                        // Collect bbox for combined dataset bbox
+                        if let Some(ref b) = bbox {
+                            file_bboxes.push(b.clone());
+                        }
+
+                        item.files.push(FileInfo {
+                            path: file_path.clone(),
+                            size,
+                            bbox,
+                            geometry,
+                            bbox_lv95,
+                            geometry_lv95,
+                        });
+                    }
+
+                    // Compute combined dataset bbox from all file bboxes
+                    // This overwrites any single-file bbox set earlier
+                    if !file_bboxes.is_empty() {
+                        let combined_bbox = vec![
+                            file_bboxes.iter().map(|b| b[0]).fold(f64::INFINITY, f64::min),  // min_lon
+                            file_bboxes.iter().map(|b| b[1]).fold(f64::INFINITY, f64::min),  // min_lat
+                            file_bboxes.iter().map(|b| b[2]).fold(f64::NEG_INFINITY, f64::max), // max_lon
+                            file_bboxes.iter().map(|b| b[3]).fold(f64::NEG_INFINITY, f64::max), // max_lat
+                        ];
+                        item.geometry = Some(bbox_to_polygon(&combined_bbox));
+                        item.bbox = Some(combined_bbox);
+                    }
+                }
+                file_pb.inc(1);
+            }
+            file_pb.finish_with_message("File geometry extraction complete");
+
+            // Step 4: Check archive files
+            if let Some(ref arch_dir) = archives_dir {
+                let arch_pb = multi_progress.add(ProgressBar::new_spinner());
+                arch_pb.set_style(spinner_style.clone());
+                arch_pb.set_message("Checking archive files...");
+
+                let mut found = 0;
+                let mut missing = 0;
+
+                for item in &mut items {
+                    if let Some(ref archive_name) = item.archive_file {
+                        let archive_path = arch_dir.join(archive_name);
+                        if archive_path.exists() {
+                            if let Ok(metadata) = fs::metadata(&archive_path) {
+                                item.archive_size = Some(metadata.len());
+                                found += 1;
+                            }
+                        } else {
+                            missing += 1;
+                            if verbose {
+                                warn!("[{}] Archive not found: {}", item.code, archive_name);
+                            }
+                        }
+                    }
+                }
+
+                arch_pb.finish_with_message(format!("Archives: {} found, {} missing", found, missing));
             }
 
             // Save intermediate metadata if requested
             if let Some(ref meta_path) = save_metadata {
-                println!("3. Saving metadata to {:?}...", meta_path);
+                info!("Saving metadata to {:?}...", meta_path);
                 if let Some(parent) = meta_path.parent() {
                     fs::create_dir_all(parent)?;
                 }
@@ -1303,45 +2060,231 @@ fn main() -> Result<()> {
                     "items": items
                 });
                 fs::write(meta_path, serde_json::to_string_pretty(&metadata)?)?;
-                println!("   Saved {} items\n", items.len());
             }
 
-            let step = if data_dir.is_some() { "4" } else { "2" };
-            println!("{}. Generating STAC catalog to {:?}...", step, output);
-            let (num_collections, num_items, issues) = generate_catalog(&items, &output, &base_url)?;
+            // Generate STAC catalog
+            let gen_pb = multi_progress.add(ProgressBar::new_spinner());
+            gen_pb.set_style(spinner_style);
+            gen_pb.set_message("Generating STAC catalog...");
 
-            println!("\n=== Summary ===");
-            println!("Collections: {}", num_collections);
-            println!("Items: {}", num_items);
-            println!("Items with geometry: {}", items.iter().filter(|i| i.geometry.is_some()).count());
-            println!("Issues: {}", issues.len());
+            let (num_collections, num_items, num_assets, issues) = generate_catalog(&items, &output, &base_url, &s3_base_url, data.as_deref())?;
+            gen_pb.finish_with_message(format!(
+                "Generated {} collections, {} items, {} assets",
+                num_collections, num_items, num_assets
+            ));
 
-            if !issues.is_empty() {
-                println!("\nIssues:");
-                for issue in issues.iter().take(20) {
-                    println!("  [{}] {}: {}", issue.severity, issue.item_id, issue.message);
+            // Compute detailed quality metrics
+            let excel_codes: std::collections::HashSet<_> = items.iter().map(|i| &i.code).collect();
+
+            // 1. Excel items without matching data folders
+            let excel_without_folders: Vec<_> = items.iter()
+                .filter(|i| !scanned_folders_for_report.contains_key(&i.code))
+                .map(|i| i.code.clone())
+                .collect();
+
+            // 2. Data folders without matching Excel entries (orphan folders)
+            let orphan_folders: Vec<_> = scanned_folders_for_report.keys()
+                .filter(|code| !excel_codes.contains(code))
+                .cloned()
+                .collect();
+
+            // 3. Items with files but no geometry
+            let files_no_geometry: Vec<_> = items.iter()
+                .filter(|i| {
+                    i.geometry.is_none() && scanned_folders_for_report.get(&i.code).map(|f| !f.files.is_empty()).unwrap_or(false)
+                })
+                .map(|i| i.code.clone())
+                .collect();
+
+            // 4. Items with folders but no archive
+            let folders_no_archive: Vec<_> = items.iter()
+                .filter(|i| {
+                    scanned_folders_for_report.contains_key(&i.code) && i.archive_file.is_none()
+                })
+                .map(|i| i.code.clone())
+                .collect();
+
+            // 5. Items with geometry
+            let items_with_geometry: Vec<_> = items.iter()
+                .filter(|i| i.geometry.is_some())
+                .map(|i| i.code.clone())
+                .collect();
+
+            // 6. Items without geometry
+            let items_without_geometry: Vec<_> = items.iter()
+                .filter(|i| i.geometry.is_none())
+                .map(|i| i.code.clone())
+                .collect();
+
+            // Print comprehensive report (detailed issues first, summary at the end)
+            info!("");
+            info!("╔══════════════════════════════════════════════════════════════╗");
+            info!("║                    DATA QUALITY REPORT                       ║");
+            info!("╚══════════════════════════════════════════════════════════════╝");
+            info!("");
+
+            // 1. Excel items without folders
+            info!("=== Excel Items Without Data Folders ({}) ===", excel_without_folders.len());
+            if excel_without_folders.is_empty() {
+                info!("  (none - all Excel items have matching folders)");
+            } else {
+                for code in &excel_without_folders {
+                    warn!("  - {}", code);
                 }
-                if issues.len() > 20 {
-                    println!("  ... and {} more", issues.len() - 20);
+            }
+            info!("");
+
+            // 2. Orphan folders
+            info!("=== Orphan Folders (not in Excel) ({}) ===", orphan_folders.len());
+            if orphan_folders.is_empty() {
+                info!("  (none - all folders have matching Excel entries)");
+            } else {
+                for code in &orphan_folders {
+                    warn!("  - {}", code);
+                }
+            }
+            info!("");
+
+            // 3. Files but no geometry
+            info!("=== Items With Files But No Geometry ({}) ===", files_no_geometry.len());
+            if files_no_geometry.is_empty() {
+                info!("  (none - all items with files have geometry)");
+            } else {
+                for code in &files_no_geometry {
+                    warn!("  - {}", code);
+                }
+            }
+            info!("");
+
+            // 4. Folders but no archive
+            info!("=== Items With Folders But No Archive ({}) ===", folders_no_archive.len());
+            if folders_no_archive.is_empty() {
+                info!("  (none - all items with folders have archives)");
+            } else {
+                for code in &folders_no_archive {
+                    warn!("  - {}", code);
+                }
+            }
+            info!("");
+
+            // Items without geometry (for reference)
+            info!("=== Items Missing Geometry ({}) ===", items_without_geometry.len());
+            if items_without_geometry.is_empty() {
+                info!("  (none - all items have geometry)");
+            } else {
+                for code in &items_without_geometry {
+                    warn!("  - {}", code);
+                }
+            }
+            info!("");
+
+            info!("=== Validation Issues ({}) ===", issues.len());
+            if issues.is_empty() {
+                info!("  (no validation issues)");
+            } else {
+                for issue in &issues {
+                    match issue.severity.as_str() {
+                        "error" => error!("  [{}] {}", issue.item_id, issue.message),
+                        "warning" => warn!("  [{}] {}", issue.item_id, issue.message),
+                        _ => info!("  [{}] {}", issue.item_id, issue.message),
+                    }
+                }
+            }
+            info!("");
+
+            // Applied overrides section
+            info!("=== Applied Overrides ({}) ===", applied_overrides.len());
+            if applied_overrides.is_empty() {
+                info!("  (no overrides applied - all files had valid CRS metadata)");
+            } else {
+                for (code, source, reason) in &applied_overrides {
+                    info!("  [{}] {} - {}", code, source, reason);
+                }
+            }
+            info!("");
+
+            // S3 validation (optional)
+            if validate_s3 {
+                info!("S3 validation not yet implemented");
+                // TODO: Implement S3 HEAD requests to verify files exist
+                info!("");
+            }
+
+            // === SUMMARY (at the very end) ===
+            info!("╔══════════════════════════════════════════════════════════════╗");
+            info!("║                         SUMMARY                              ║");
+            info!("╚══════════════════════════════════════════════════════════════╝");
+            info!("");
+            info!("=== Overview ===");
+            info!("  Total Excel items:     {}", items.len());
+            info!("  Total data folders:    {}", scanned_folders_for_report.len());
+            info!("  Collections generated: {}", num_collections);
+            info!("  Items:                 {}", num_items);
+            info!("  Total assets:          {}", num_assets);
+            info!("");
+            info!("=== Geometry Coverage ===");
+            info!("  Items WITH geometry:    {} ({:.1}%)",
+                items_with_geometry.len(),
+                if items.is_empty() { 0.0 } else { items_with_geometry.len() as f64 / items.len() as f64 * 100.0 }
+            );
+            info!("  Items WITHOUT geometry: {} ({:.1}%)",
+                items_without_geometry.len(),
+                if items.is_empty() { 0.0 } else { items_without_geometry.len() as f64 / items.len() as f64 * 100.0 }
+            );
+            info!("");
+            info!("=== Issue Counts ===");
+            info!("  Excel items without folders: {}", excel_without_folders.len());
+            info!("  Orphan folders:              {}", orphan_folders.len());
+            info!("  Files but no geometry:       {}", files_no_geometry.len());
+            info!("  Folders but no archive:      {}", folders_no_archive.len());
+            info!("  Validation issues:           {}", issues.len());
+            info!("  Applied overrides:           {}", applied_overrides.len());
+
+            // Run validation after generation if requested
+            if validate {
+                info!("");
+                info!("=== Running Post-Generation Validation ===");
+                let validation_issues = validate_catalog(&output)?;
+
+                let has_errors = validation_issues.iter().any(|i| i.severity == "error");
+                info!("Validation issues: {}", validation_issues.len());
+
+                if !validation_issues.is_empty() {
+                    for issue in &validation_issues {
+                        match issue.severity.as_str() {
+                            "error" => error!("  [{}] {}", issue.item_id, issue.message),
+                            "warning" => warn!("  [{}] {}", issue.item_id, issue.message),
+                            _ => info!("  [{}] {}", issue.item_id, issue.message),
+                        }
+                    }
+                }
+
+                if has_errors {
+                    error!("Validation failed with errors");
+                    std::process::exit(1);
+                } else {
+                    info!("Validation passed");
                 }
             }
         }
 
         Commands::Validate { catalog_dir } => {
-            println!("=== STAC Validator (v{}) ===\n", STAC_VERSION);
-            println!("Validating {:?}...", catalog_dir);
+            info!("=== STAC Validator (v{}) ===", STAC_VERSION);
+            info!("Validating {:?}...", catalog_dir);
 
             let issues = validate_catalog(&catalog_dir)?;
 
-            println!("\n=== Validation Results ===");
-            println!("Issues found: {}", issues.len());
+            info!("");
+            info!("=== Validation Results ===");
+            info!("Issues found: {}", issues.len());
 
             if !issues.is_empty() {
-                for issue in issues.iter().take(30) {
-                    println!("  - [{}] {}: {}", issue.severity, issue.item_id, issue.message);
-                }
-                if issues.len() > 30 {
-                    println!("  ... and {} more", issues.len() - 30);
+                for issue in &issues {
+                    match issue.severity.as_str() {
+                        "error" => error!("  [{}] {}", issue.item_id, issue.message),
+                        "warning" => warn!("  [{}] {}", issue.item_id, issue.message),
+                        _ => info!("  [{}] {}", issue.item_id, issue.message),
+                    }
                 }
             }
 
@@ -1350,4 +2293,206 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+// =============================================================================
+// Folder Scanning
+// =============================================================================
+
+/// Scan FINAL_Data directory for provider folders and map to item codes
+fn scan_data_folders(
+    data: &Path,
+    dnage_mappings_path: Option<&Path>,
+) -> Result<HashMap<String, ScannedFolder>> {
+    let mut folders = HashMap::new();
+
+    // Load DNAGE mappings if provided
+    let dnage_mappings: HashMap<String, serde_json::Value> = if let Some(path) = dnage_mappings_path {
+        let content = fs::read_to_string(path)?;
+        let data: serde_json::Value = serde_json::from_str(&content)?;
+        data.get("mappings")
+            .and_then(|m| m.as_object())
+            .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+            .unwrap_or_default()
+    } else {
+        HashMap::new()
+    };
+
+    // Scan each provider directory
+    for provider in &["DNAGE", "Geopraevent", "Terradata"] {
+        let provider_path = data.join(provider);
+        if !provider_path.exists() {
+            continue;
+        }
+
+        for entry in WalkDir::new(&provider_path)
+            .min_depth(1)
+            .max_depth(1)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
+            if !entry.file_type().is_dir() {
+                continue;
+            }
+
+            let folder_name = entry.file_name().to_string_lossy().to_string();
+
+            // Extract code from folder name (e.g., "13Da01_Orthophoto_..." -> "13Da01")
+            let code = extract_code_from_folder(&folder_name, &dnage_mappings);
+
+            if let Some(code) = code {
+                // Collect files in this folder
+                let files: Vec<PathBuf> = WalkDir::new(entry.path())
+                    .into_iter()
+                    .filter_map(|e| e.ok())
+                    .filter(|e| e.file_type().is_file())
+                    .map(|e| e.path().to_path_buf())
+                    .collect();
+
+                folders.insert(code.clone(), ScannedFolder {
+                    code,
+                    path: entry.path().to_path_buf(),
+                    provider: provider.to_string(),
+                    files,
+                    archive_path: None,
+                    archive_size: None,
+                });
+            }
+        }
+    }
+
+    // Apply DNAGE mappings for shared folders
+    for (code, mapping) in &dnage_mappings {
+        if folders.contains_key(code) {
+            continue;
+        }
+
+        if let Some(folder_rel) = mapping.get("folder").and_then(|f| f.as_str()) {
+            let folder_path = data.join(folder_rel);
+            if folder_path.exists() {
+                let files: Vec<PathBuf> = WalkDir::new(&folder_path)
+                    .into_iter()
+                    .filter_map(|e| e.ok())
+                    .filter(|e| e.file_type().is_file())
+                    .map(|e| e.path().to_path_buf())
+                    .collect();
+
+                folders.insert(code.clone(), ScannedFolder {
+                    code: code.clone(),
+                    path: folder_path,
+                    provider: "DNAGE".to_string(),
+                    files,
+                    archive_path: None,
+                    archive_size: None,
+                });
+            }
+        }
+    }
+
+    Ok(folders)
+}
+
+/// Extract item code from folder name
+fn extract_code_from_folder(folder_name: &str, dnage_mappings: &HashMap<String, serde_json::Value>) -> Option<String> {
+    // Pattern: code at start followed by underscore (e.g., "13Da01_...")
+    let code_re = regex::Regex::new(r"^(\d{2}[A-Z][a-z]\d{2})").ok()?;
+
+    if let Some(caps) = code_re.captures(folder_name) {
+        return Some(caps.get(1)?.as_str().to_string());
+    }
+
+    // Check DNAGE mappings for non-standard folder names
+    for (code, mapping) in dnage_mappings {
+        if let Some(folder) = mapping.get("folder").and_then(|f| f.as_str()) {
+            if folder.contains(folder_name) || folder_name.contains(folder.split('/').last().unwrap_or("")) {
+                return Some(code.clone());
+            }
+        }
+    }
+
+    None
+}
+
+/// Extract geometry using new parallel-friendly interface
+fn extract_geometry_for_item_v2(
+    item: &ItemMetadata,
+    data: Option<&Path>,
+    sensors: &HashMap<String, SensorLocation>,
+    scanned_folders: &HashMap<String, ScannedFolder>,
+    tmpdir: &Path,
+) -> ExtractionResult {
+    let code = &item.code;
+    let data_format = item.format.as_deref().unwrap_or("").to_uppercase();
+
+    // Check if format has extractable geometry
+    let is_geospatial = matches!(data_format.as_str(), "TIF" | "TIFF" | "LAZ" | "LAS");
+
+    // Try to extract from scanned folder files first
+    if is_geospatial {
+        if let Some(folder) = scanned_folders.get(code) {
+            // Find a geospatial file
+            for file in &folder.files {
+                let ext = file.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+                if ext == "tif" || ext == "tiff" {
+                    let (geo_result, override_reason) = extract_geotiff_geometry(file);
+                    if let Some(geo) = geo_result {
+                        return ExtractionResult::Extracted {
+                            source: geo.source,
+                            bbox: geo.bbox,
+                            geometry: geo.geometry,
+                            override_reason,
+                        };
+                    }
+                } else if ext == "laz" || ext == "las" {
+                    if let Some(geo) = extract_las_geometry(file) {
+                        return ExtractionResult::Extracted {
+                            source: format!("LAZ/LAS: {}", file.file_name().unwrap_or_default().to_string_lossy()),
+                            bbox: geo.bbox,
+                            geometry: geo.geometry,
+                            override_reason: None,
+                        };
+                    }
+                }
+            }
+        }
+    }
+
+    // Try archive extraction if data provided
+    if let Some(data_path) = data {
+        if let Some(ref archive_name) = item.archive_file {
+            let archive_path = data_path.join(archive_name);
+            if archive_path.exists() && archive_path.extension().map(|e| e == "zip").unwrap_or(false) {
+                if let Some(geo) = extract_from_zip(&archive_path, tmpdir) {
+                    return ExtractionResult::Extracted {
+                        source: geo.source,
+                        bbox: geo.bbox,
+                        geometry: geo.geometry,
+                        override_reason: None, // TODO: could track overrides in zip extraction too
+                    };
+                }
+            }
+        }
+    }
+
+    // Fall back to manual coordinates (LV95 already converted to WGS84 during loading)
+    if let Some(sensor) = sensors.get(code) {
+        if let (Some(lon), Some(lat)) = (sensor.lon, sensor.lat) {
+            let (bbox, geometry) = point_to_geometry(lon, lat, sensor.elevation_m);
+            return ExtractionResult::Manual {
+                sensor_name: sensor.name.clone().unwrap_or_else(|| code.clone()),
+                lon,
+                lat,
+                bbox,
+                geometry,
+            };
+        }
+        // Sensor found but no valid coordinates (x/y might be null in JSON)
+        return ExtractionResult::NoGeometry {
+            reason: format!("Sensor '{}' found but coordinates are null", sensor.name.as_deref().unwrap_or(code)),
+        };
+    }
+
+    ExtractionResult::NoGeometry {
+        reason: "No extractable geometry or manual coordinates".to_string(),
+    }
 }

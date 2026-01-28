@@ -1,2 +1,8 @@
 target
 *.md
+
+# Generated files (created by stac-gen pipeline)
+metadata.json
+data/metadata.json
+data/metadata_with_*.json
+data/validation_report.json
