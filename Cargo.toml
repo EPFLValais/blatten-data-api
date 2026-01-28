@@ -13,6 +13,11 @@ path = "src/main.rs"
 [[bin]]
 name = "stac-gen"
 path = "src/bin/stac_gen.rs"
+required-features = ["generator"]
+
+[features]
+default = []
+generator = ["dep:calamine", "dep:gdal", "dep:las", "dep:zip", "dep:regex", "dep:rayon", "dep:indicatif", "dep:walkdir", "dep:reqwest"]
 
 [dependencies]
 # Web framework
@@ -34,15 +39,6 @@ serde_json = "1"
 # Date/time handling
 chrono = { version = "0.4", features = ["serde"] }
 
-# Excel parsing
-calamine = "0.26"
-
-# Geospatial
-gdal = { git = "https://github.com/georust/gdal", features = ["bindgen"] }
-las = { version = "0.9", features = ["laz"] }
-zip = "2"
-regex = "1"
-
 # CLI
 clap = { version = "4", features = ["derive"] }
 
@@ -56,6 +52,17 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Error handling
 anyhow = "1"
 thiserror = "2"
+
+# Generator-specific dependencies (optional)
+calamine = { version = "0.26", optional = true }
+gdal = { git = "https://github.com/georust/gdal", features = ["bindgen"], optional = true }
+las = { version = "0.9", features = ["laz"], optional = true }
+zip = { version = "2", optional = true }
+regex = { version = "1", optional = true }
+rayon = { version = "1.10", optional = true }
+indicatif = { version = "0.17", optional = true }
+walkdir = { version = "2.4", optional = true }
+reqwest = { version = "0.12", features = ["blocking"], optional = true }
 
 [profile.release]
 lto = true
