@@ -1,8 +1,73 @@
 {
   "type": "Catalog",
-  "stac_version": "1.0.0",
-  "id": "blatten-glacier-collapse",
+  "id": "birch-glacier-collapse",
+  "stac_version": "1.1.0",
   "title": "Birch Glacier Collapse Dataset",
-  "description": "Dataset collected during the 2025 Birch glacier collapse and landslide at Blatten, CH-VS",
-  "links": []
+  "description": "Multi-sensor monitoring data from the May 28, 2025 Birch glacier collapse at Blatten, Switzerland.",
+  "links": [
+    {
+      "rel": "child",
+      "href": "${STAC_BASE_URL}/stac/collections/3d-model"
+    },
+    {
+      "rel": "child",
+      "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+    },
+    {
+      "rel": "child",
+      "href": "${STAC_BASE_URL}/stac/collections/dem"
+    },
+    {
+      "rel": "child",
+      "href": "${STAC_BASE_URL}/stac/collections/dsm"
+    },
+    {
+      "rel": "child",
+      "href": "${STAC_BASE_URL}/stac/collections/gnss-data"
+    },
+    {
+      "rel": "child",
+      "href": "${STAC_BASE_URL}/stac/collections/hydrology"
+    },
+    {
+      "rel": "child",
+      "href": "${STAC_BASE_URL}/stac/collections/lake-level"
+    },
+    {
+      "rel": "child",
+      "href": "${STAC_BASE_URL}/stac/collections/orthophoto"
+    },
+    {
+      "rel": "child",
+      "href": "${STAC_BASE_URL}/stac/collections/point-cloud"
+    },
+    {
+      "rel": "child",
+      "href": "${STAC_BASE_URL}/stac/collections/radar-amplitude"
+    },
+    {
+      "rel": "child",
+      "href": "${STAC_BASE_URL}/stac/collections/radar-coherence"
+    },
+    {
+      "rel": "child",
+      "href": "${STAC_BASE_URL}/stac/collections/radar-displacement"
+    },
+    {
+      "rel": "child",
+      "href": "${STAC_BASE_URL}/stac/collections/radar-timeseries"
+    },
+    {
+      "rel": "child",
+      "href": "${STAC_BASE_URL}/stac/collections/radar-velocity"
+    },
+    {
+      "rel": "child",
+      "href": "${STAC_BASE_URL}/stac/collections/thermal-image"
+    },
+    {
+      "rel": "child",
+      "href": "${STAC_BASE_URL}/stac/collections/webcam-image"
+    }
+  ]
 }

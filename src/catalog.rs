@@ -41,7 +41,7 @@ pub struct StacCatalog {
 
 impl StacCatalog {
     /// Load a STAC catalog from a directory
-    pub fn load_from_dir(dir: &Path, base_url: &str) -> Result<Self> {
+    pub fn load_from_dir(dir: &Path, base_url: &str, s3_base_url: &str) -> Result<Self> {
         // Load root catalog
         let catalog_path = dir.join("catalog.json");
         info!("Loading catalog from {:?}", catalog_path);
@@ -49,8 +49,9 @@ impl StacCatalog {
         let catalog_json = fs::read_to_string(&catalog_path)
             .with_context(|| format!("Failed to read {:?}", catalog_path))?;
 
-        // Replace base URL placeholder
+        // Replace URL placeholders
         let catalog_json = catalog_json.replace("${STAC_BASE_URL}", base_url);
+        let catalog_json = catalog_json.replace("${S3_BASE_URL}", s3_base_url);
 
         let root: StacCatalogRoot = serde_json::from_str(&catalog_json)
             .with_context(|| "Failed to parse catalog.json")?;
@@ -82,6 +83,7 @@ impl StacCatalog {
 
                     let json = fs::read_to_string(&path)?;
                     let json = json.replace("${STAC_BASE_URL}", base_url);
+                    let json = json.replace("${S3_BASE_URL}", s3_base_url);
 
                     match serde_json::from_str::<StacCollection>(&json) {
                         Ok(collection) => {
@@ -103,6 +105,7 @@ impl StacCatalog {
 
             let json = fs::read_to_string(&all_items_path)?;
             let json = json.replace("${STAC_BASE_URL}", base_url);
+            let json = json.replace("${S3_BASE_URL}", s3_base_url);
 
             let feature_collection: Value = serde_json::from_str(&json)?;
 

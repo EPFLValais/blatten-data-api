@@ -1,29 +1,15 @@
 {
   "type": "Collection",
   "id": "3d-model",
-  "stac_version": "1.0.0",
-  "stac_extensions": [
-    "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
-    "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
-    "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
-  ],
-  "title": "3D Models",
-  "description": "3D visualization models for Sketchfab and similar platforms",
+  "stac_version": "1.1.0",
+  "title": "3D Model",
+  "description": "Sketchfab 3D visualization",
   "license": "CC-BY-NC-SA-4.0",
-  "keywords": [
-    "Birch Glacier",
-    "Blatten",
-    "Switzerland",
-    "glacier collapse",
-    "landslide",
-    "3d models"
-  ],
   "providers": [
     {
       "name": "Canton du Valais",
       "roles": [
-        "licensor",
-        "host"
+        "licensor"
       ],
       "url": "https://www.vs.ch/"
     },
@@ -40,60 +26,26 @@
     "spatial": {
       "bbox": [
         [
-          null,
-          null,
-          null,
-          null
+          7.75,
+          46.38,
+          7.9,
+          46.45
         ]
       ]
     },
     "temporal": {
       "interval": [
         [
-          "2025-05-29T00:00:00Z",
-          "2025-05-29T23:59:59Z"
+          "2025-05-23T00:00:00Z",
+          "2025-06-10T23:59:59Z"
         ]
       ]
     }
   },
-  "summaries": {
-    "processing_level": [
-      4
-    ],
-    "source": [
-      "Terradata"
-    ]
-  },
   "links": [
     {
       "rel": "self",
-      "href": "${STAC_BASE_URL}/stac/collections/3d-model",
-      "type": "application/json"
-    },
-    {
-      "rel": "root",
-      "href": "${STAC_BASE_URL}/stac/catalog.json",
-      "type": "application/json"
-    },
-    {
-      "rel": "parent",
-      "href": "${STAC_BASE_URL}/stac/catalog.json",
-      "type": "application/json"
-    },
-    {
-      "rel": "items",
-      "href": "${STAC_BASE_URL}/stac/collections/3d-model/items",
-      "type": "application/geo+json"
+      "href": "${STAC_BASE_URL}/stac/collections/3d-model"
     }
-  ],
-  "assets": {
-    "archive": {
-      "href": "${STAC_BASE_URL}/s3/data/14La02.zip",
-      "type": "application/zip",
-      "title": "Full 3D Models Archive",
-      "roles": [
-        "data"
-      ]
-    }
-  }
+  ]
 }

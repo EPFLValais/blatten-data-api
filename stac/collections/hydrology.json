@@ -1,29 +1,15 @@
 {
   "type": "Collection",
   "id": "hydrology",
-  "stac_version": "1.0.0",
-  "stac_extensions": [
-    "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
-    "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
-    "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
-  ],
-  "title": "Hydrology Data",
-  "description": "Lake level and volume measurements",
+  "stac_version": "1.1.0",
+  "title": "Hydrology",
+  "description": "All data for station 18 in same file",
   "license": "CC-BY-NC-SA-4.0",
-  "keywords": [
-    "Birch Glacier",
-    "Blatten",
-    "Switzerland",
-    "glacier collapse",
-    "landslide",
-    "hydrology data"
-  ],
   "providers": [
     {
       "name": "Canton du Valais",
       "roles": [
-        "licensor",
-        "host"
+        "licensor"
       ],
       "url": "https://www.vs.ch/"
     },
@@ -40,61 +26,26 @@
     "spatial": {
       "bbox": [
         [
-          null,
-          null,
-          null,
-          null
+          7.744080639135969,
+          46.30972217810538,
+          7.840145332585054,
+          46.42839170685856
         ]
       ]
     },
     "temporal": {
       "interval": [
         [
-          "2025-05-29T00:00:00Z",
-          "2025-09-24T23:59:59Z"
+          "2025-05-01T00:00:00Z",
+          "2025-06-30T23:59:59Z"
         ]
       ]
     }
   },
-  "summaries": {
-    "processing_level": [
-      2,
-      3
-    ],
-    "source": [
-      "Geoazimut"
-    ]
-  },
   "links": [
     {
       "rel": "self",
-      "href": "${STAC_BASE_URL}/stac/collections/hydrology",
-      "type": "application/json"
-    },
-    {
-      "rel": "root",
-      "href": "${STAC_BASE_URL}/stac/catalog.json",
-      "type": "application/json"
-    },
-    {
-      "rel": "parent",
-      "href": "${STAC_BASE_URL}/stac/catalog.json",
-      "type": "application/json"
-    },
-    {
-      "rel": "items",
-      "href": "${STAC_BASE_URL}/stac/collections/hydrology/items",
-      "type": "application/geo+json"
+      "href": "${STAC_BASE_URL}/stac/collections/hydrology"
     }
-  ],
-  "assets": {
-    "archive": {
-      "href": "${STAC_BASE_URL}/s3/data/17_LakeLevel_Geoazimut.zip",
-      "type": "application/zip",
-      "title": "Full Hydrology Data Archive",
-      "roles": [
-        "data"
-      ]
-    }
-  }
+  ]
 }

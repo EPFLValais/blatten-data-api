@@ -1,29 +1,15 @@
 {
   "type": "Collection",
   "id": "gnss-data",
-  "stac_version": "1.0.0",
-  "stac_extensions": [
-    "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
-    "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
-    "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
-  ],
-  "title": "GNSS Position Data",
-  "description": "High-precision GNSS/GPS position time series",
+  "stac_version": "1.1.0",
+  "title": "Gnss Data",
+  "description": "Position, distance from origin, raw velocity, last azimuth.",
   "license": "CC-BY-NC-SA-4.0",
-  "keywords": [
-    "Birch Glacier",
-    "Blatten",
-    "Switzerland",
-    "glacier collapse",
-    "landslide",
-    "gnss position data"
-  ],
   "providers": [
     {
       "name": "Canton du Valais",
       "roles": [
-        "licensor",
-        "host"
+        "licensor"
       ],
       "url": "https://www.vs.ch/"
     },
@@ -40,10 +26,10 @@
     "spatial": {
       "bbox": [
         [
-          null,
-          null,
-          null,
-          null
+          7.80480379672543,
+          46.39583767989785,
+          7.841415495592613,
+          46.4189868326746
         ]
       ]
     },
@@ -51,49 +37,15 @@
       "interval": [
         [
           "2025-05-16T00:00:00Z",
-          "2025-09-22T23:59:59Z"
+          "2025-06-30T23:59:59Z"
         ]
       ]
     }
   },
-  "summaries": {
-    "processing_level": [
-      1
-    ],
-    "source": [
-      "Glaciorisk"
-    ]
-  },
   "links": [
     {
       "rel": "self",
-      "href": "${STAC_BASE_URL}/stac/collections/gnss-data",
-      "type": "application/json"
-    },
-    {
-      "rel": "root",
-      "href": "${STAC_BASE_URL}/stac/catalog.json",
-      "type": "application/json"
-    },
-    {
-      "rel": "parent",
-      "href": "${STAC_BASE_URL}/stac/catalog.json",
-      "type": "application/json"
-    },
-    {
-      "rel": "items",
-      "href": "${STAC_BASE_URL}/stac/collections/gnss-data/items",
-      "type": "application/geo+json"
+      "href": "${STAC_BASE_URL}/stac/collections/gnss-data"
     }
-  ],
-  "assets": {
-    "archive": {
-      "href": "${STAC_BASE_URL}/s3/data/10M_11M_GNSS.zip",
-      "type": "application/zip",
-      "title": "Full GNSS Position Data Archive",
-      "roles": [
-        "data"
-      ]
-    }
-  }
+  ]
 }

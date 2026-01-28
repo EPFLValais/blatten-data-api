@@ -548,6 +548,7 @@ async fn main() -> Result<()> {
     dotenvy::dotenv().ok();
 
     let base_url = env::var("STAC_BASE_URL").unwrap_or_else(|_| "http://localhost:3000".into());
+    let s3_base_url = env::var("S3_BASE_URL").unwrap_or_else(|_| "/s3".into());
     let catalog_dir = env::var("STAC_CATALOG_DIR").unwrap_or_else(|_| "stac".into());
     let port: u16 = env::var("PORT")
         .ok()
@@ -555,9 +556,10 @@ async fn main() -> Result<()> {
         .unwrap_or(3000);
 
     info!("Loading STAC catalog from {}", catalog_dir);
+    info!("S3 base URL: {}", s3_base_url);
 
     // Load catalog
-    let catalog = StacCatalog::load_from_dir(&PathBuf::from(&catalog_dir), &base_url)
+    let catalog = StacCatalog::load_from_dir(&PathBuf::from(&catalog_dir), &base_url, &s3_base_url)
         .context("Failed to load STAC catalog")?;
 
     info!(
@@ -583,13 +585,13 @@ async fn main() -> Result<()> {
         .route("/stac/catalog.json", get(get_catalog))
         // Collections
         .route("/stac/collections", get(list_collections))
-        .route("/stac/collections/{collection_id}", get(get_collection))
+        .route("/stac/collections/:collection_id", get(get_collection))
         .route(
-            "/stac/collections/{collection_id}/items",
+            "/stac/collections/:collection_id/items",
             get(get_collection_items),
         )
         .route(
-            "/stac/collections/{collection_id}/items/{item_id}",
+            "/stac/collections/:collection_id/items/:item_id",
             get(get_item),
         )
         // Search
@@ -609,9 +611,38 @@ async fn main() -> Result<()> {
     info!("Base URL: {}", base_url);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
 
+    info!("Server shutdown complete");
     Ok(())
+}
+
+async fn shutdown_signal() {
+    use tokio::signal;
+
+    let ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("Failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("Failed to install SIGTERM handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => info!("Received Ctrl+C, shutting down..."),
+        _ = terminate => info!("Received SIGTERM, shutting down..."),
+    }
 }
 
 // ============================================================================

@@ -2,246 +2,742 @@
   "collections": [
     {
       "type": "Collection",
-      "stac_version": "1.0.0",
       "id": "3d-model",
-      "title": "3D Models",
-      "description": "3D visualization models for Sketchfab and similar platforms",
+      "stac_version": "1.1.0",
+      "title": "3D Model",
+      "description": "Sketchfab 3D visualization",
       "license": "CC-BY-NC-SA-4.0",
+      "providers": [
+        {
+          "name": "Canton du Valais",
+          "roles": [
+            "licensor"
+          ],
+          "url": "https://www.vs.ch/"
+        },
+        {
+          "name": "EPFL ALPOLE",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://www.epfl.ch/research/domains/alpole/"
+        }
+      ],
       "extent": {
         "spatial": {
           "bbox": [
-            []
+            [
+              7.75,
+              46.38,
+              7.9,
+              46.45
+            ]
           ]
         },
         "temporal": {
           "interval": [
             [
-              "2025-05-29",
-              null
+              "2025-05-23T00:00:00Z",
+              "2025-06-10T23:59:59Z"
             ]
           ]
         }
       },
-      "links": [],
-      "_items": [
-        "14La02"
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/3d-model"
+        }
       ]
     },
     {
       "type": "Collection",
-      "stac_version": "1.0.0",
       "id": "deformation-analysis",
+      "stac_version": "1.1.0",
       "title": "Deformation Analysis",
-      "description": "DEFOX deformation analysis imagery",
+      "description": "All Deformation analyses, varied frequency",
       "license": "CC-BY-NC-SA-4.0",
+      "providers": [
+        {
+          "name": "Canton du Valais",
+          "roles": [
+            "licensor"
+          ],
+          "url": "https://www.vs.ch/"
+        },
+        {
+          "name": "EPFL ALPOLE",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://www.epfl.ch/research/domains/alpole/"
+        }
+      ],
       "extent": {
         "spatial": {
           "bbox": [
-            []
+            [
+              7.838645748296098,
+              46.404401649518064,
+              7.840645748296098,
+              46.40640164951806
+            ]
           ]
         },
         "temporal": {
           "interval": [
             [
-              "2025-05-30",
-              "2025-06-30"
+              "2025-05-30T00:00:00Z",
+              "2025-06-30T23:59:59Z"
             ]
           ]
         }
       },
-      "links": [],
-      "_items": [
-        "04Ba00_DEFOX_all",
-        "04Ba01_DEFOX_2to3_per_d",
-        "04Ba02_DEFOX_1_per_d"
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        }
       ]
     },
     {
       "type": "Collection",
-      "stac_version": "1.0.0",
-      "id": "dsm",
-      "title": "Digital Surface Models",
-      "description": "Digital Surface Models (DSM) from drone and heliborne surveys",
+      "id": "dem",
+      "stac_version": "1.1.0",
+      "title": "Dem",
+      "description": "Heli-based LiDAR data of rockfall area",
       "license": "CC-BY-NC-SA-4.0",
+      "providers": [
+        {
+          "name": "Canton du Valais",
+          "roles": [
+            "licensor"
+          ],
+          "url": "https://www.vs.ch/"
+        },
+        {
+          "name": "EPFL ALPOLE",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://www.epfl.ch/research/domains/alpole/"
+        }
+      ],
+      "extent": {
+        "spatial": {
+          "bbox": [
+            [
+              7.7506145,
+              46.3836078,
+              7.8549479,
+              46.4289188
+            ]
+          ]
+        },
+        "temporal": {
+          "interval": [
+            [
+              "2025-05-23T00:00:00Z",
+              "2025-07-11T23:59:59Z"
+            ]
+          ]
+        }
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/dem"
+        }
+      ]
+    },
+    {
+      "type": "Collection",
+      "id": "dsm",
+      "stac_version": "1.1.0",
+      "title": "Dsm",
+      "description": "Drone-based DSM of depositional area",
+      "license": "CC-BY-NC-SA-4.0",
+      "providers": [
+        {
+          "name": "Canton du Valais",
+          "roles": [
+            "licensor"
+          ],
+          "url": "https://www.vs.ch/"
+        },
+        {
+          "name": "EPFL ALPOLE",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://www.epfl.ch/research/domains/alpole/"
+        }
+      ],
       "extent": {
         "spatial": {
           "bbox": [
             [
               7.7539667,
-              46.3799321,
-              7.8541524,
-              46.4259834
+              46.3799315,
+              7.8541585,
+              46.4260891
             ]
           ]
         },
         "temporal": {
           "interval": [
             [
-              "2025-07-11",
-              null
+              "2025-05-23T00:00:00Z",
+              "2025-09-03T23:59:59Z"
             ]
           ]
         }
       },
-      "links": [],
-      "_items": [
-        "13Ib06",
-        "14Ia04"
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/dsm"
+        }
       ]
     },
     {
       "type": "Collection",
-      "stac_version": "1.0.0",
       "id": "gnss-data",
-      "title": "GNSS Position Data",
-      "description": "High-precision GNSS/GPS position time series",
+      "stac_version": "1.1.0",
+      "title": "Gnss Data",
+      "description": "Position, distance from origin, raw velocity, last azimuth.",
       "license": "CC-BY-NC-SA-4.0",
+      "providers": [
+        {
+          "name": "Canton du Valais",
+          "roles": [
+            "licensor"
+          ],
+          "url": "https://www.vs.ch/"
+        },
+        {
+          "name": "EPFL ALPOLE",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://www.epfl.ch/research/domains/alpole/"
+        }
+      ],
       "extent": {
         "spatial": {
           "bbox": [
-            []
+            [
+              7.80480379672543,
+              46.39583767989785,
+              7.841415495592613,
+              46.4189868326746
+            ]
           ]
         },
         "temporal": {
           "interval": [
             [
-              null,
-              null
+              "2025-05-16T00:00:00Z",
+              "2025-06-30T23:59:59Z"
             ]
           ]
         }
       },
-      "links": [],
-      "_items": [
-        "10M_11M_GNSS"
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/gnss-data"
+        }
       ]
     },
     {
       "type": "Collection",
-      "stac_version": "1.0.0",
       "id": "hydrology",
-      "title": "Hydrology Data",
-      "description": "Lake level and volume measurements",
+      "stac_version": "1.1.0",
+      "title": "Hydrology",
+      "description": "All data for station 18 in same file",
       "license": "CC-BY-NC-SA-4.0",
+      "providers": [
+        {
+          "name": "Canton du Valais",
+          "roles": [
+            "licensor"
+          ],
+          "url": "https://www.vs.ch/"
+        },
+        {
+          "name": "EPFL ALPOLE",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://www.epfl.ch/research/domains/alpole/"
+        }
+      ],
       "extent": {
         "spatial": {
           "bbox": [
-            []
+            [
+              7.744080639135969,
+              46.30972217810538,
+              7.840145332585054,
+              46.42839170685856
+            ]
           ]
         },
         "temporal": {
           "interval": [
             [
-              null,
-              null
+              "2025-05-01T00:00:00Z",
+              "2025-06-30T23:59:59Z"
             ]
           ]
         }
       },
-      "links": [],
-      "_items": [
-        "17_LakeLevel_Geoazimut"
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/hydrology"
+        }
       ]
     },
     {
       "type": "Collection",
-      "stac_version": "1.0.0",
+      "id": "lake-level",
+      "stac_version": "1.1.0",
+      "title": "Lake Level",
+      "description": "All data for station 17 in same file",
+      "license": "CC-BY-NC-SA-4.0",
+      "providers": [
+        {
+          "name": "Canton du Valais",
+          "roles": [
+            "licensor"
+          ],
+          "url": "https://www.vs.ch/"
+        },
+        {
+          "name": "EPFL ALPOLE",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://www.epfl.ch/research/domains/alpole/"
+        }
+      ],
+      "extent": {
+        "spatial": {
+          "bbox": [
+            [
+              7.819993348413511,
+              46.42029214976914,
+              7.821993348413511,
+              46.422292149769135
+            ]
+          ]
+        },
+        "temporal": {
+          "interval": [
+            [
+              "2025-05-29T00:00:00Z",
+              "2025-06-30T23:59:59Z"
+            ]
+          ]
+        }
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/lake-level"
+        }
+      ]
+    },
+    {
+      "type": "Collection",
       "id": "orthophoto",
-      "title": "Orthophotos",
-      "description": "Orthorectified aerial and drone imagery",
+      "stac_version": "1.1.0",
+      "title": "Orthophoto",
+      "description": "Drone-based orthophoto of the depositional area",
       "license": "CC-BY-NC-SA-4.0",
+      "providers": [
+        {
+          "name": "Canton du Valais",
+          "roles": [
+            "licensor"
+          ],
+          "url": "https://www.vs.ch/"
+        },
+        {
+          "name": "EPFL ALPOLE",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://www.epfl.ch/research/domains/alpole/"
+        }
+      ],
       "extent": {
         "spatial": {
           "bbox": [
             [
-              7.7865584,
-              46.3949819,
-              7.8489044,
-              46.4241837
+              7.7539676,
+              46.3802343,
+              7.8540521,
+              46.4260241
             ]
           ]
         },
         "temporal": {
           "interval": [
             [
-              "2025-05-19",
-              null
+              "2025-05-23T00:00:00Z",
+              "2025-09-03T23:59:59Z"
             ]
           ]
         }
       },
-      "links": [],
-      "_items": [
-        "13Db06",
-        "15Da01"
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/orthophoto"
+        }
       ]
     },
     {
       "type": "Collection",
-      "stac_version": "1.0.0",
       "id": "point-cloud",
-      "title": "Point Clouds",
-      "description": "LiDAR and photogrammetric point cloud data",
+      "stac_version": "1.1.0",
+      "title": "Point Cloud",
+      "description": "Heli-based point cloud of rockfall area",
       "license": "CC-BY-NC-SA-4.0",
+      "providers": [
+        {
+          "name": "Canton du Valais",
+          "roles": [
+            "licensor"
+          ],
+          "url": "https://www.vs.ch/"
+        },
+        {
+          "name": "EPFL ALPOLE",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://www.epfl.ch/research/domains/alpole/"
+        }
+      ],
       "extent": {
         "spatial": {
           "bbox": [
             [
-              7.75165126981244,
-              46.3828327634403,
-              7.85477563722558,
-              46.4275654793065
+              7.751558544438514,
+              46.382798587995055,
+              7.854775637225576,
+              46.42867764854274
             ]
           ]
         },
         "temporal": {
           "interval": [
             [
-              "2025-07-11",
-              null
+              "2025-05-23T00:00:00Z",
+              "2025-08-11T23:59:59Z"
             ]
           ]
         }
       },
-      "links": [],
-      "_items": [
-        "14Ka04"
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/point-cloud"
+        }
       ]
     },
     {
       "type": "Collection",
-      "stac_version": "1.0.0",
+      "id": "radar-amplitude",
+      "stac_version": "1.1.0",
+      "title": "Radar Amplitude",
+      "description": "Standard GP AIM Processing",
+      "license": "CC-BY-NC-SA-4.0",
+      "providers": [
+        {
+          "name": "Canton du Valais",
+          "roles": [
+            "licensor"
+          ],
+          "url": "https://www.vs.ch/"
+        },
+        {
+          "name": "EPFL ALPOLE",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://www.epfl.ch/research/domains/alpole/"
+        }
+      ],
+      "extent": {
+        "spatial": {
+          "bbox": [
+            [
+              7.8111182598599855,
+              46.42187522434867,
+              7.813118259859986,
+              46.42387522434866
+            ]
+          ]
+        },
+        "temporal": {
+          "interval": [
+            [
+              "2025-05-19T00:00:00Z",
+              "2025-06-30T23:59:59Z"
+            ]
+          ]
+        }
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/radar-amplitude"
+        }
+      ]
+    },
+    {
+      "type": "Collection",
+      "id": "radar-coherence",
+      "stac_version": "1.1.0",
+      "title": "Radar Coherence",
+      "description": "Standard GP AIM Processing",
+      "license": "CC-BY-NC-SA-4.0",
+      "providers": [
+        {
+          "name": "Canton du Valais",
+          "roles": [
+            "licensor"
+          ],
+          "url": "https://www.vs.ch/"
+        },
+        {
+          "name": "EPFL ALPOLE",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://www.epfl.ch/research/domains/alpole/"
+        }
+      ],
+      "extent": {
+        "spatial": {
+          "bbox": [
+            [
+              7.8111182598599855,
+              46.42187522434867,
+              7.813118259859986,
+              46.42387522434866
+            ]
+          ]
+        },
+        "temporal": {
+          "interval": [
+            [
+              "2025-05-19T00:00:00Z",
+              "2025-06-30T23:59:59Z"
+            ]
+          ]
+        }
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/radar-coherence"
+        }
+      ]
+    },
+    {
+      "type": "Collection",
+      "id": "radar-displacement",
+      "stac_version": "1.1.0",
+      "title": "Radar Displacement",
+      "description": "Standard GP AIM Processing",
+      "license": "CC-BY-NC-SA-4.0",
+      "providers": [
+        {
+          "name": "Canton du Valais",
+          "roles": [
+            "licensor"
+          ],
+          "url": "https://www.vs.ch/"
+        },
+        {
+          "name": "EPFL ALPOLE",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://www.epfl.ch/research/domains/alpole/"
+        }
+      ],
+      "extent": {
+        "spatial": {
+          "bbox": [
+            [
+              7.8111182598599855,
+              46.42187522434867,
+              7.813118259859986,
+              46.42387522434866
+            ]
+          ]
+        },
+        "temporal": {
+          "interval": [
+            [
+              "2025-05-19T00:00:00Z",
+              "2025-06-30T23:59:59Z"
+            ]
+          ]
+        }
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/radar-displacement"
+        }
+      ]
+    },
+    {
+      "type": "Collection",
+      "id": "radar-timeseries",
+      "stac_version": "1.1.0",
+      "title": "Radar Timeseries",
+      "description": "running average of 100 Interferograms, Standard GP AIM processing",
+      "license": "CC-BY-NC-SA-4.0",
+      "providers": [
+        {
+          "name": "Canton du Valais",
+          "roles": [
+            "licensor"
+          ],
+          "url": "https://www.vs.ch/"
+        },
+        {
+          "name": "EPFL ALPOLE",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://www.epfl.ch/research/domains/alpole/"
+        }
+      ],
+      "extent": {
+        "spatial": {
+          "bbox": [
+            [
+              7.8111182598599855,
+              46.42187522434867,
+              7.813118259859986,
+              46.42387522434866
+            ]
+          ]
+        },
+        "temporal": {
+          "interval": [
+            [
+              "2025-05-19T00:00:00Z",
+              "2025-06-30T23:59:59Z"
+            ]
+          ]
+        }
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/radar-timeseries"
+        }
+      ]
+    },
+    {
+      "type": "Collection",
       "id": "radar-velocity",
-      "title": "Radar Velocity Data",
-      "description": "Interferometric radar velocity measurements per ROI",
+      "stac_version": "1.1.0",
+      "title": "Radar Velocity",
+      "description": "Median, max and inverse velocities per ROI, Standard GP AIM Processing, 24h average, 1-3h frequency",
       "license": "CC-BY-NC-SA-4.0",
+      "providers": [
+        {
+          "name": "Canton du Valais",
+          "roles": [
+            "licensor"
+          ],
+          "url": "https://www.vs.ch/"
+        },
+        {
+          "name": "EPFL ALPOLE",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://www.epfl.ch/research/domains/alpole/"
+        }
+      ],
       "extent": {
         "spatial": {
           "bbox": [
-            []
+            [
+              7.8111182598599855,
+              46.42187522434867,
+              7.813118259859986,
+              46.42387522434866
+            ]
           ]
         },
         "temporal": {
           "interval": [
             [
-              "2025-05-19",
-              "2025-06-30"
+              "2025-05-19T00:00:00Z",
+              "2025-06-30T23:59:59Z"
             ]
           ]
         }
       },
-      "links": [],
-      "_items": [
-        "06Ha00_Radar_Velocities_ROI"
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/radar-velocity"
+        }
       ]
     },
     {
       "type": "Collection",
-      "stac_version": "1.0.0",
       "id": "thermal-image",
-      "title": "Thermal Imagery",
-      "description": "Heliborne thermal infrared imagery",
+      "stac_version": "1.1.0",
+      "title": "Thermal Image",
+      "description": "Heli-based thermal data of depositional area",
       "license": "CC-BY-NC-SA-4.0",
+      "providers": [
+        {
+          "name": "Canton du Valais",
+          "roles": [
+            "licensor"
+          ],
+          "url": "https://www.vs.ch/"
+        },
+        {
+          "name": "EPFL ALPOLE",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://www.epfl.ch/research/domains/alpole/"
+        }
+      ],
       "extent": {
         "spatial": {
           "bbox": [
@@ -256,45 +752,68 @@
         "temporal": {
           "interval": [
             [
-              "2025-06-10",
-              null
+              "2025-06-10T00:00:00Z",
+              "2025-06-10T23:59:59Z"
             ]
           ]
         }
       },
-      "links": [],
-      "_items": [
-        "14Na01"
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/thermal-image"
+        }
       ]
     },
     {
       "type": "Collection",
-      "stac_version": "1.0.0",
       "id": "webcam-image",
-      "title": "Webcam Images",
-      "description": "Time-series webcam imagery from monitoring cameras",
+      "stac_version": "1.1.0",
+      "title": "Webcam Image",
+      "description": "All full frame images, varied imaging frequency",
       "license": "CC-BY-NC-SA-4.0",
+      "providers": [
+        {
+          "name": "Canton du Valais",
+          "roles": [
+            "licensor"
+          ],
+          "url": "https://www.vs.ch/"
+        },
+        {
+          "name": "EPFL ALPOLE",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://www.epfl.ch/research/domains/alpole/"
+        }
+      ],
       "extent": {
         "spatial": {
           "bbox": [
-            []
+            [
+              7.792003677760034,
+              46.40420090369961,
+              7.848483125190064,
+              46.42387522434866
+            ]
           ]
         },
         "temporal": {
           "interval": [
             [
-              "2025-05-27",
-              "2025-09-23"
+              "2020-02-05T00:00:00Z",
+              "2025-09-30T23:59:59Z"
             ]
           ]
         }
       },
-      "links": [],
-      "_items": [
-        "02Ah00_FlexCam_Birchgletscher_BirchbachChannel_SAMPLE",
-        "08Aa00_Webcam_Lonza_all",
-        "08Aa01_Webcam_Lonza_1h",
-        "08Aa02_Webcam_Lonza_30min"
+      "links": [
+        {
+          "rel": "self",
+          "href": "${STAC_BASE_URL}/stac/collections/webcam-image"
+        }
       ]
     }
   ]

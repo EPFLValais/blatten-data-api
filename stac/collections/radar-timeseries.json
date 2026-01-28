@@ -1,9 +1,9 @@
 {
   "type": "Collection",
-  "id": "orthophoto",
+  "id": "radar-timeseries",
   "stac_version": "1.1.0",
-  "title": "Orthophoto",
-  "description": "Drone-based orthophoto of the depositional area",
+  "title": "Radar Timeseries",
+  "description": "running average of 100 Interferograms, Standard GP AIM processing",
   "license": "CC-BY-NC-SA-4.0",
   "providers": [
     {
@@ -26,18 +26,18 @@
     "spatial": {
       "bbox": [
         [
-          7.7539676,
-          46.3802343,
-          7.8540521,
-          46.4260241
+          7.8111182598599855,
+          46.42187522434867,
+          7.813118259859986,
+          46.42387522434866
         ]
       ]
     },
     "temporal": {
       "interval": [
         [
-          "2025-05-23T00:00:00Z",
-          "2025-09-03T23:59:59Z"
+          "2025-05-19T00:00:00Z",
+          "2025-06-30T23:59:59Z"
         ]
       ]
     }
@@ -45,7 +45,7 @@
   "links": [
     {
       "rel": "self",
-      "href": "${STAC_BASE_URL}/stac/collections/orthophoto"
+      "href": "${STAC_BASE_URL}/stac/collections/radar-timeseries"
     }
   ]
 }

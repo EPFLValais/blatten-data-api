@@ -1,9 +1,9 @@
 {
   "type": "Collection",
-  "id": "orthophoto",
+  "id": "lake-level",
   "stac_version": "1.1.0",
-  "title": "Orthophoto",
-  "description": "Drone-based orthophoto of the depositional area",
+  "title": "Lake Level",
+  "description": "All data for station 17 in same file",
   "license": "CC-BY-NC-SA-4.0",
   "providers": [
     {
@@ -26,18 +26,18 @@
     "spatial": {
       "bbox": [
         [
-          7.7539676,
-          46.3802343,
-          7.8540521,
-          46.4260241
+          7.819993348413511,
+          46.42029214976914,
+          7.821993348413511,
+          46.422292149769135
         ]
       ]
     },
     "temporal": {
       "interval": [
         [
-          "2025-05-23T00:00:00Z",
-          "2025-09-03T23:59:59Z"
+          "2025-05-29T00:00:00Z",
+          "2025-06-30T23:59:59Z"
         ]
       ]
     }
@@ -45,7 +45,7 @@
   "links": [
     {
       "rel": "self",
-      "href": "${STAC_BASE_URL}/stac/collections/orthophoto"
+      "href": "${STAC_BASE_URL}/stac/collections/lake-level"
     }
   ]
 }

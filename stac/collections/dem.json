@@ -1,9 +1,9 @@
 {
   "type": "Collection",
-  "id": "orthophoto",
+  "id": "dem",
   "stac_version": "1.1.0",
-  "title": "Orthophoto",
-  "description": "Drone-based orthophoto of the depositional area",
+  "title": "Dem",
+  "description": "Heli-based LiDAR data of rockfall area",
   "license": "CC-BY-NC-SA-4.0",
   "providers": [
     {
@@ -26,10 +26,10 @@
     "spatial": {
       "bbox": [
         [
-          7.7539676,
-          46.3802343,
-          7.8540521,
-          46.4260241
+          7.7506145,
+          46.3836078,
+          7.8549479,
+          46.4289188
         ]
       ]
     },
@@ -37,7 +37,7 @@
       "interval": [
         [
           "2025-05-23T00:00:00Z",
-          "2025-09-03T23:59:59Z"
+          "2025-07-11T23:59:59Z"
         ]
       ]
     }
@@ -45,7 +45,7 @@
   "links": [
     {
       "rel": "self",
-      "href": "${STAC_BASE_URL}/stac/collections/orthophoto"
+      "href": "${STAC_BASE_URL}/stac/collections/dem"
     }
   ]
 }
