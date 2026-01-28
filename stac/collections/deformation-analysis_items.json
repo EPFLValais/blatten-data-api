@@ -3,221 +3,1844 @@
   "features": [
     {
       "type": "Feature",
-      "stac_version": "1.0.0",
-      "stac_extensions": [
-        "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
-        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
-        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
-      ],
+      "stac_version": "1.1.0",
       "id": "04Ba00",
-      "geometry": null,
-      "bbox": null,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          7.839645748296098,
+          46.40540164951806
+        ]
+      },
+      "bbox": [
+        7.838645748296098,
+        46.404401649518064,
+        7.840645748296098,
+        46.40640164951806
+      ],
       "properties": {
         "title": "04 - DEFOX Birchgletscher - a - Scale up to 8Px/d",
+        "datetime": null,
+        "blatten:code": "04Ba00",
+        "blatten:file_count": 0,
         "description": "All Deformation analyses, varied frequency",
         "start_datetime": "2025-05-30T00:00:00Z",
-        "end_datetime": "2025-06-30T23:59:59Z",
-        "blatten:code": "04Ba00",
-        "blatten:sensor": "04 - DEFOX Birchgletscher",
-        "blatten:product_type": "B - Deformation Analysis - Image",
-        "blatten:dataset": "a - Scale up to 8Px/d",
-        "blatten:bundle": "0 - All Frames",
-        "blatten:source": "Geoprevent",
-        "blatten:processing_level": 3,
-        "blatten:phase": "3-4",
-        "blatten:continued": true,
-        "blatten:format": "JPG",
-        "blatten:storage_mb": 168.2177734375,
-        "blatten:has_subsets": true
+        "end_datetime": "2025-06-30T23:59:59Z"
       },
       "links": [
         {
-          "rel": "self",
-          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba00",
-          "type": "application/geo+json"
-        },
-        {
-          "rel": "parent",
-          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis",
-          "type": "application/json"
-        },
-        {
           "rel": "collection",
-          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis",
-          "type": "application/json"
-        },
-        {
-          "rel": "root",
-          "href": "${STAC_BASE_URL}/stac/catalog.json",
-          "type": "application/json"
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
         }
       ],
       "assets": {
-        "data": {
-          "href": "${STAC_BASE_URL}/s3/data/04Ba00_DEFOX_all.zip",
+        "archive": {
+          "href": "${S3_BASE_URL}/archives/04Ba00.zip",
           "type": "application/zip",
-          "title": "04Ba00 Data Archive",
-          "roles": [
-            "data"
-          ],
-          "file:size": 176389120
+          "title": "04Ba00 complete archive"
         }
       },
       "collection": "deformation-analysis"
     },
     {
       "type": "Feature",
-      "stac_version": "1.0.0",
-      "stac_extensions": [
-        "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
-        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
-        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
-      ],
+      "stac_version": "1.1.0",
       "id": "04Ba01",
-      "geometry": null,
-      "bbox": null,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          7.839645748296098,
+          46.40540164951806
+        ]
+      },
+      "bbox": [
+        7.838645748296098,
+        46.404401649518064,
+        7.840645748296098,
+        46.40640164951806
+      ],
       "properties": {
         "title": "04 - DEFOX Birchgletscher - a - Scale up to 8Px/d",
-        "description": "Deformation analyses, processed 2-3 times per day",
-        "start_datetime": "2025-05-30T00:00:00Z",
-        "end_datetime": "2025-06-09T23:59:59Z",
+        "datetime": null,
         "blatten:code": "04Ba01",
-        "blatten:sensor": "04 - DEFOX Birchgletscher",
-        "blatten:product_type": "B - Deformation Analysis - Image",
-        "blatten:dataset": "a - Scale up to 8Px/d",
-        "blatten:bundle": "1 - Phase 3, 2-3x/d",
-        "blatten:source": "Geoprevent",
-        "blatten:processing_level": 3,
-        "blatten:phase": "3",
-        "blatten:frequency": "2-3x/d",
-        "blatten:continued": false,
-        "blatten:format": "JPG",
-        "blatten:storage_mb": 84.5
+        "blatten:file_count": 21,
+        "description": "Deformation analyses, processed 2 times per day",
+        "start_datetime": "2025-05-30T00:00:00Z",
+        "end_datetime": "2025-06-09T23:59:59Z"
       },
       "links": [
         {
-          "rel": "self",
-          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01",
-          "type": "application/geo+json"
-        },
-        {
-          "rel": "parent",
-          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis",
-          "type": "application/json"
-        },
-        {
           "rel": "collection",
-          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis",
-          "type": "application/json"
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
         },
         {
-          "rel": "root",
-          "href": "${STAC_BASE_URL}/stac/catalog.json",
-          "type": "application/json"
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01-0001"
         },
         {
-          "rel": "derived_from",
-          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba00",
-          "type": "application/geo+json",
-          "title": "Parent dataset 04Ba00"
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01-0002"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01-0003"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01-0004"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01-0005"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01-0006"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01-0007"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01-0008"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01-0009"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01-0010"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01-0011"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01-0012"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01-0013"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01-0014"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01-0015"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01-0016"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01-0017"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01-0018"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01-0019"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01-0020"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01-0021"
         }
       ],
       "assets": {
-        "data": {
-          "href": "${STAC_BASE_URL}/s3/data/04Ba01_DEFOX_2to3_per_d.zip",
+        "archive": {
+          "href": "${S3_BASE_URL}/archives/04Ba01.zip",
           "type": "application/zip",
-          "title": "04Ba01 Data Archive",
-          "roles": [
-            "data"
-          ],
-          "file:size": 88604672
+          "title": "04Ba01 complete archive"
         }
       },
       "collection": "deformation-analysis"
     },
     {
       "type": "Feature",
-      "stac_version": "1.0.0",
-      "stac_extensions": [
-        "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
-        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
-        "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
-      ],
+      "stac_version": "1.1.0",
       "id": "04Ba02",
-      "geometry": null,
-      "bbox": null,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          7.839645748296098,
+          46.40540164951806
+        ]
+      },
+      "bbox": [
+        7.838645748296098,
+        46.404401649518064,
+        7.840645748296098,
+        46.40640164951806
+      ],
       "properties": {
         "title": "04 - DEFOX Birchgletscher - a - Scale up to 8Px/d",
-        "description": "Deformation analyses, processed once per day",
-        "start_datetime": "2025-06-10T00:00:00Z",
-        "end_datetime": "2025-06-30T23:59:59Z",
+        "datetime": null,
         "blatten:code": "04Ba02",
-        "blatten:sensor": "04 - DEFOX Birchgletscher",
-        "blatten:product_type": "B - Deformation Analysis - Image",
-        "blatten:dataset": "a - Scale up to 8Px/d",
-        "blatten:bundle": "2 - Phase 3-4, 1d interval",
-        "blatten:source": "Geoprevent",
-        "blatten:processing_level": 3,
-        "blatten:phase": "3-4",
-        "blatten:frequency": "1d",
-        "blatten:continued": true,
-        "blatten:format": "JPG",
-        "blatten:storage_mb": 83.7197265625
+        "blatten:file_count": 22,
+        "description": "Deformation analyses, processed once per day",
+        "start_datetime": "2025-06-09T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z"
       },
       "links": [
         {
-          "rel": "self",
-          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02",
-          "type": "application/geo+json"
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02-0001"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02-0002"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02-0003"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02-0004"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02-0005"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02-0006"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02-0007"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02-0008"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02-0009"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02-0010"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02-0011"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02-0012"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02-0013"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02-0014"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02-0015"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02-0016"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02-0017"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02-0018"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02-0019"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02-0020"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02-0021"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02-0022"
+        }
+      ],
+      "assets": {
+        "archive": {
+          "href": "${S3_BASE_URL}/archives/04Ba02.zip",
+          "type": "application/zip",
+          "title": "04Ba02 complete archive"
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Bb00",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          7.839645748296098,
+          46.40540164951806
+        ]
+      },
+      "bbox": [
+        7.838645748296098,
+        46.404401649518064,
+        7.840645748296098,
+        46.40640164951806
+      ],
+      "properties": {
+        "title": "04 - DEFOX Birchgletscher - b - Scale up to 12Px/d",
+        "datetime": null,
+        "blatten:code": "04Bb00",
+        "blatten:file_count": 0,
+        "description": "Deformation analysis with wider scale",
+        "start_datetime": "2025-06-10T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        }
+      ],
+      "assets": {
+        "archive": {
+          "href": "${S3_BASE_URL}/archives/04Bb00.zip",
+          "type": "application/zip",
+          "title": "04Bb00 complete archive"
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba01-0001",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250530T190000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba01",
+        "blatten:archive": "04Ba01.zip",
+        "description": "Deformation analyses, processed 2 times per day",
+        "start_datetime": "2025-05-30T00:00:00Z",
+        "end_datetime": "2025-06-09T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
         },
         {
           "rel": "parent",
-          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis",
-          "type": "application/json"
-        },
-        {
-          "rel": "collection",
-          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis",
-          "type": "application/json"
-        },
-        {
-          "rel": "root",
-          "href": "${STAC_BASE_URL}/stac/catalog.json",
-          "type": "application/json"
-        },
-        {
-          "rel": "derived_from",
-          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba00",
-          "type": "application/geo+json",
-          "title": "Parent dataset 04Ba00"
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01"
         }
       ],
       "assets": {
         "data": {
-          "href": "${STAC_BASE_URL}/s3/data/04Ba02_DEFOX_1_per_d.zip",
-          "type": "application/zip",
-          "title": "04Ba02 Data Archive",
-          "roles": [
-            "data"
-          ],
-          "file:size": 87786496
+          "href": "${S3_BASE_URL}/20250530T190000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250530T190000Z.jpg",
+          "file:size": 3782679
         }
       },
       "collection": "deformation-analysis"
-    }
-  ],
-  "numberMatched": 3,
-  "numberReturned": 3,
-  "links": [
-    {
-      "rel": "self",
-      "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items",
-      "type": "application/geo+json"
     },
     {
-      "rel": "collection",
-      "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis",
-      "type": "application/json"
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba01-0002",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250531T120000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba01",
+        "blatten:archive": "04Ba01.zip",
+        "description": "Deformation analyses, processed 2 times per day",
+        "start_datetime": "2025-05-30T00:00:00Z",
+        "end_datetime": "2025-06-09T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250531T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250531T120000Z.jpg",
+          "file:size": 4109465
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba01-0003",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250531T200000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba01",
+        "blatten:archive": "04Ba01.zip",
+        "description": "Deformation analyses, processed 2 times per day",
+        "start_datetime": "2025-05-30T00:00:00Z",
+        "end_datetime": "2025-06-09T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250531T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250531T200000Z.jpg",
+          "file:size": 3696722
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba01-0004",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250601T120000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba01",
+        "blatten:archive": "04Ba01.zip",
+        "description": "Deformation analyses, processed 2 times per day",
+        "start_datetime": "2025-05-30T00:00:00Z",
+        "end_datetime": "2025-06-09T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250601T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250601T120000Z.jpg",
+          "file:size": 4105956
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba01-0005",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250601T200000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba01",
+        "blatten:archive": "04Ba01.zip",
+        "description": "Deformation analyses, processed 2 times per day",
+        "start_datetime": "2025-05-30T00:00:00Z",
+        "end_datetime": "2025-06-09T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250601T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250601T200000Z.jpg",
+          "file:size": 4020492
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba01-0006",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250602T120000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba01",
+        "blatten:archive": "04Ba01.zip",
+        "description": "Deformation analyses, processed 2 times per day",
+        "start_datetime": "2025-05-30T00:00:00Z",
+        "end_datetime": "2025-06-09T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250602T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250602T120000Z.jpg",
+          "file:size": 4068345
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba01-0007",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250602T200000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba01",
+        "blatten:archive": "04Ba01.zip",
+        "description": "Deformation analyses, processed 2 times per day",
+        "start_datetime": "2025-05-30T00:00:00Z",
+        "end_datetime": "2025-06-09T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250602T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250602T200000Z.jpg",
+          "file:size": 3863512
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba01-0008",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250603T120000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba01",
+        "blatten:archive": "04Ba01.zip",
+        "description": "Deformation analyses, processed 2 times per day",
+        "start_datetime": "2025-05-30T00:00:00Z",
+        "end_datetime": "2025-06-09T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250603T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250603T120000Z.jpg",
+          "file:size": 3982115
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba01-0009",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250603T200000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba01",
+        "blatten:archive": "04Ba01.zip",
+        "description": "Deformation analyses, processed 2 times per day",
+        "start_datetime": "2025-05-30T00:00:00Z",
+        "end_datetime": "2025-06-09T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250603T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250603T200000Z.jpg",
+          "file:size": 4011406
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba01-0010",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250604T120000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba01",
+        "blatten:archive": "04Ba01.zip",
+        "description": "Deformation analyses, processed 2 times per day",
+        "start_datetime": "2025-05-30T00:00:00Z",
+        "end_datetime": "2025-06-09T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250604T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250604T120000Z.jpg",
+          "file:size": 4206914
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba01-0011",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250604T200000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba01",
+        "blatten:archive": "04Ba01.zip",
+        "description": "Deformation analyses, processed 2 times per day",
+        "start_datetime": "2025-05-30T00:00:00Z",
+        "end_datetime": "2025-06-09T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250604T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250604T200000Z.jpg",
+          "file:size": 4166317
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba01-0012",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250605T120000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba01",
+        "blatten:archive": "04Ba01.zip",
+        "description": "Deformation analyses, processed 2 times per day",
+        "start_datetime": "2025-05-30T00:00:00Z",
+        "end_datetime": "2025-06-09T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250605T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250605T120000Z.jpg",
+          "file:size": 3895026
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba01-0013",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250605T200000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba01",
+        "blatten:archive": "04Ba01.zip",
+        "description": "Deformation analyses, processed 2 times per day",
+        "start_datetime": "2025-05-30T00:00:00Z",
+        "end_datetime": "2025-06-09T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250605T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250605T200000Z.jpg",
+          "file:size": 4045551
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba01-0014",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250606T120000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba01",
+        "blatten:archive": "04Ba01.zip",
+        "description": "Deformation analyses, processed 2 times per day",
+        "start_datetime": "2025-05-30T00:00:00Z",
+        "end_datetime": "2025-06-09T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250606T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250606T120000Z.jpg",
+          "file:size": 4054039
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba01-0015",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250606T200000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba01",
+        "blatten:archive": "04Ba01.zip",
+        "description": "Deformation analyses, processed 2 times per day",
+        "start_datetime": "2025-05-30T00:00:00Z",
+        "end_datetime": "2025-06-09T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250606T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250606T200000Z.jpg",
+          "file:size": 4057402
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba01-0016",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250607T120000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba01",
+        "blatten:archive": "04Ba01.zip",
+        "description": "Deformation analyses, processed 2 times per day",
+        "start_datetime": "2025-05-30T00:00:00Z",
+        "end_datetime": "2025-06-09T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250607T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250607T120000Z.jpg",
+          "file:size": 4118263
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba01-0017",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250607T200000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba01",
+        "blatten:archive": "04Ba01.zip",
+        "description": "Deformation analyses, processed 2 times per day",
+        "start_datetime": "2025-05-30T00:00:00Z",
+        "end_datetime": "2025-06-09T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250607T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250607T200000Z.jpg",
+          "file:size": 4099654
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba01-0018",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250608T120000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba01",
+        "blatten:archive": "04Ba01.zip",
+        "description": "Deformation analyses, processed 2 times per day",
+        "start_datetime": "2025-05-30T00:00:00Z",
+        "end_datetime": "2025-06-09T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250608T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250608T120000Z.jpg",
+          "file:size": 3909767
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba01-0019",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250608T200000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba01",
+        "blatten:archive": "04Ba01.zip",
+        "description": "Deformation analyses, processed 2 times per day",
+        "start_datetime": "2025-05-30T00:00:00Z",
+        "end_datetime": "2025-06-09T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250608T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250608T200000Z.jpg",
+          "file:size": 4193792
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba01-0020",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250609T120000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba01",
+        "blatten:archive": "04Ba01.zip",
+        "description": "Deformation analyses, processed 2 times per day",
+        "start_datetime": "2025-05-30T00:00:00Z",
+        "end_datetime": "2025-06-09T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250609T120000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250609T120000Z.jpg",
+          "file:size": 4184515
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba01-0021",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250609T200000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba01",
+        "blatten:archive": "04Ba01.zip",
+        "description": "Deformation analyses, processed 2 times per day",
+        "start_datetime": "2025-05-30T00:00:00Z",
+        "end_datetime": "2025-06-09T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba01"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250609T200000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250609T200000Z.jpg",
+          "file:size": 4331732
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba02-0001",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250609T110000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba02",
+        "blatten:archive": "04Ba02.zip",
+        "description": "Deformation analyses, processed once per day",
+        "start_datetime": "2025-06-09T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250609T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250609T110000Z.jpg",
+          "file:size": 4334671
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba02-0002",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250610T110000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba02",
+        "blatten:archive": "04Ba02.zip",
+        "description": "Deformation analyses, processed once per day",
+        "start_datetime": "2025-06-09T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250610T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250610T110000Z.jpg",
+          "file:size": 4352939
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba02-0003",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250611T110000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba02",
+        "blatten:archive": "04Ba02.zip",
+        "description": "Deformation analyses, processed once per day",
+        "start_datetime": "2025-06-09T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250611T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250611T110000Z.jpg",
+          "file:size": 4316744
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba02-0004",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250612T110000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba02",
+        "blatten:archive": "04Ba02.zip",
+        "description": "Deformation analyses, processed once per day",
+        "start_datetime": "2025-06-09T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250612T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250612T110000Z.jpg",
+          "file:size": 3842821
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba02-0005",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250613T110000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba02",
+        "blatten:archive": "04Ba02.zip",
+        "description": "Deformation analyses, processed once per day",
+        "start_datetime": "2025-06-09T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250613T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250613T110000Z.jpg",
+          "file:size": 3716994
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba02-0006",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250614T110000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba02",
+        "blatten:archive": "04Ba02.zip",
+        "description": "Deformation analyses, processed once per day",
+        "start_datetime": "2025-06-09T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250614T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250614T110000Z.jpg",
+          "file:size": 3697930
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba02-0007",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250615T110000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba02",
+        "blatten:archive": "04Ba02.zip",
+        "description": "Deformation analyses, processed once per day",
+        "start_datetime": "2025-06-09T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250615T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250615T110000Z.jpg",
+          "file:size": 4236883
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba02-0008",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250616T110000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba02",
+        "blatten:archive": "04Ba02.zip",
+        "description": "Deformation analyses, processed once per day",
+        "start_datetime": "2025-06-09T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250616T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250616T110000Z.jpg",
+          "file:size": 4128467
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba02-0009",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250617T110000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba02",
+        "blatten:archive": "04Ba02.zip",
+        "description": "Deformation analyses, processed once per day",
+        "start_datetime": "2025-06-09T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250617T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250617T110000Z.jpg",
+          "file:size": 4307644
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba02-0010",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250618T110000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba02",
+        "blatten:archive": "04Ba02.zip",
+        "description": "Deformation analyses, processed once per day",
+        "start_datetime": "2025-06-09T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250618T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250618T110000Z.jpg",
+          "file:size": 4304037
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba02-0011",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250619T110000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba02",
+        "blatten:archive": "04Ba02.zip",
+        "description": "Deformation analyses, processed once per day",
+        "start_datetime": "2025-06-09T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250619T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250619T110000Z.jpg",
+          "file:size": 4274257
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba02-0012",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250620T110000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba02",
+        "blatten:archive": "04Ba02.zip",
+        "description": "Deformation analyses, processed once per day",
+        "start_datetime": "2025-06-09T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250620T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250620T110000Z.jpg",
+          "file:size": 4374642
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba02-0013",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250621T110000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba02",
+        "blatten:archive": "04Ba02.zip",
+        "description": "Deformation analyses, processed once per day",
+        "start_datetime": "2025-06-09T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250621T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250621T110000Z.jpg",
+          "file:size": 3926602
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba02-0014",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250622T110000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba02",
+        "blatten:archive": "04Ba02.zip",
+        "description": "Deformation analyses, processed once per day",
+        "start_datetime": "2025-06-09T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250622T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250622T110000Z.jpg",
+          "file:size": 4238934
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba02-0015",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250623T110000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba02",
+        "blatten:archive": "04Ba02.zip",
+        "description": "Deformation analyses, processed once per day",
+        "start_datetime": "2025-06-09T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250623T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250623T110000Z.jpg",
+          "file:size": 4399329
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba02-0016",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250624T110000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba02",
+        "blatten:archive": "04Ba02.zip",
+        "description": "Deformation analyses, processed once per day",
+        "start_datetime": "2025-06-09T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250624T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250624T110000Z.jpg",
+          "file:size": 4404420
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba02-0017",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250625T110000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba02",
+        "blatten:archive": "04Ba02.zip",
+        "description": "Deformation analyses, processed once per day",
+        "start_datetime": "2025-06-09T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250625T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250625T110000Z.jpg",
+          "file:size": 4401374
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba02-0018",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250626T110000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba02",
+        "blatten:archive": "04Ba02.zip",
+        "description": "Deformation analyses, processed once per day",
+        "start_datetime": "2025-06-09T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250626T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250626T110000Z.jpg",
+          "file:size": 4021355
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba02-0019",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250627T110000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba02",
+        "blatten:archive": "04Ba02.zip",
+        "description": "Deformation analyses, processed once per day",
+        "start_datetime": "2025-06-09T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250627T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250627T110000Z.jpg",
+          "file:size": 4177312
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba02-0020",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250628T110000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba02",
+        "blatten:archive": "04Ba02.zip",
+        "description": "Deformation analyses, processed once per day",
+        "start_datetime": "2025-06-09T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250628T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250628T110000Z.jpg",
+          "file:size": 4524491
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba02-0021",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250629T110000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba02",
+        "blatten:archive": "04Ba02.zip",
+        "description": "Deformation analyses, processed once per day",
+        "start_datetime": "2025-06-09T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250629T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250629T110000Z.jpg",
+          "file:size": 4536126
+        }
+      },
+      "collection": "deformation-analysis"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "04Ba02-0022",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "20250630T110000Z.jpg",
+        "datetime": null,
+        "blatten:dataset": "04Ba02",
+        "blatten:archive": "04Ba02.zip",
+        "description": "Deformation analyses, processed once per day",
+        "start_datetime": "2025-06-09T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items/04Ba02"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/20250630T110000Z.jpg",
+          "type": "image/jpeg",
+          "title": "20250630T110000Z.jpg",
+          "file:size": 4255802
+        }
+      },
+      "collection": "deformation-analysis"
     }
   ]
 }

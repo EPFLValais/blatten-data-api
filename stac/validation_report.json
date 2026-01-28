@@ -1,50 +1,111 @@
 {
-  "generated_at": "2025-12-09T10:12:04.505034+00:00",
+  "generated_at": "2026-01-27T12:23:12.490362+00:00",
+  "stac_version": "1.1.0",
   "total_collections": 10,
   "total_items": 26,
   "items_with_geometry": 6,
   "items_missing_geometry": 20,
-  "validation_issues": [
-    "02Ah00: Missing geometry (null) - needs manual coordinates",
-    "02Ah00: Missing bbox - needs manual coordinates",
-    "08Aa00: Missing geometry (null) - needs manual coordinates",
-    "08Aa00: Missing bbox - needs manual coordinates",
-    "08Aa01: Missing geometry (null) - needs manual coordinates",
-    "08Aa01: Missing bbox - needs manual coordinates",
-    "08Aa02: Missing geometry (null) - needs manual coordinates",
-    "08Aa02: Missing bbox - needs manual coordinates",
-    "04Ba00: Missing geometry (null) - needs manual coordinates",
-    "04Ba00: Missing bbox - needs manual coordinates",
-    "04Ba01: Missing geometry (null) - needs manual coordinates",
-    "04Ba01: Missing bbox - needs manual coordinates",
-    "04Ba02: Missing geometry (null) - needs manual coordinates",
-    "04Ba02: Missing bbox - needs manual coordinates",
-    "06Ha00: Missing geometry (null) - needs manual coordinates",
-    "06Ha00: Missing bbox - needs manual coordinates",
-    "14La02: Missing geometry (null) - needs manual coordinates",
-    "14La02: Missing bbox - needs manual coordinates",
-    "10Ma00: Missing geometry (null) - needs manual coordinates",
-    "10Ma00: Missing bbox - needs manual coordinates",
-    "11Ma00: Missing geometry (null) - needs manual coordinates",
-    "11Ma00: Missing bbox - needs manual coordinates",
-    "11Mb00: Missing geometry (null) - needs manual coordinates",
-    "11Mb00: Missing bbox - needs manual coordinates",
-    "11Mc00: Missing geometry (null) - needs manual coordinates",
-    "11Mc00: Missing bbox - needs manual coordinates",
-    "11Md00: Missing geometry (null) - needs manual coordinates",
-    "11Md00: Missing bbox - needs manual coordinates",
-    "11Me00: Missing geometry (null) - needs manual coordinates",
-    "11Me00: Missing bbox - needs manual coordinates",
-    "11Mf00: Missing geometry (null) - needs manual coordinates",
-    "11Mf00: Missing bbox - needs manual coordinates",
-    "11Mg00: Missing geometry (null) - needs manual coordinates",
-    "11Mg00: Missing bbox - needs manual coordinates",
-    "11Mh00: Missing geometry (null) - needs manual coordinates",
-    "11Mh00: Missing bbox - needs manual coordinates",
-    "17Pa00: Missing geometry (null) - needs manual coordinates",
-    "17Pa00: Missing bbox - needs manual coordinates",
-    "17Pb00: Missing geometry (null) - needs manual coordinates",
-    "17Pb00: Missing bbox - needs manual coordinates"
+  "issues": [
+    {
+      "item": "02Ah00",
+      "severity": "warning",
+      "message": "Missing geometry"
+    },
+    {
+      "item": "08Aa00",
+      "severity": "warning",
+      "message": "Missing geometry"
+    },
+    {
+      "item": "08Aa01",
+      "severity": "warning",
+      "message": "Missing geometry"
+    },
+    {
+      "item": "08Aa02",
+      "severity": "warning",
+      "message": "Missing geometry"
+    },
+    {
+      "item": "04Ba00",
+      "severity": "warning",
+      "message": "Missing geometry"
+    },
+    {
+      "item": "04Ba01",
+      "severity": "warning",
+      "message": "Missing geometry"
+    },
+    {
+      "item": "04Ba02",
+      "severity": "warning",
+      "message": "Missing geometry"
+    },
+    {
+      "item": "06Ha00",
+      "severity": "warning",
+      "message": "Missing geometry"
+    },
+    {
+      "item": "14La02",
+      "severity": "warning",
+      "message": "Missing geometry"
+    },
+    {
+      "item": "10Ma00",
+      "severity": "warning",
+      "message": "Missing geometry"
+    },
+    {
+      "item": "11Ma00",
+      "severity": "warning",
+      "message": "Missing geometry"
+    },
+    {
+      "item": "11Mb00",
+      "severity": "warning",
+      "message": "Missing geometry"
+    },
+    {
+      "item": "11Mc00",
+      "severity": "warning",
+      "message": "Missing geometry"
+    },
+    {
+      "item": "11Md00",
+      "severity": "warning",
+      "message": "Missing geometry"
+    },
+    {
+      "item": "11Me00",
+      "severity": "warning",
+      "message": "Missing geometry"
+    },
+    {
+      "item": "11Mf00",
+      "severity": "warning",
+      "message": "Missing geometry"
+    },
+    {
+      "item": "11Mg00",
+      "severity": "warning",
+      "message": "Missing geometry"
+    },
+    {
+      "item": "11Mh00",
+      "severity": "warning",
+      "message": "Missing geometry"
+    },
+    {
+      "item": "17Pa00",
+      "severity": "warning",
+      "message": "Missing geometry"
+    },
+    {
+      "item": "17Pb00",
+      "severity": "warning",
+      "message": "Missing geometry"
+    }
   ],
-  "validation_passed": false
+  "validation_passed": true
 }

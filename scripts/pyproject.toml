@@ -1,0 +1,10 @@
+[project]
+name = "blatten-scripts"
+version = "0.1.0"
+description = "STAC catalog generation scripts for Blatten Data"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "openpyxl>=3.1",
+    "pyproj>=3.6",
+]

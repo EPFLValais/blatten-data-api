@@ -1,0 +1,113 @@
+{
+  "_comment": "Manual metadata for hydrology monitoring stations. Coordinates in WGS84 (EPSG:4326).",
+  "_description": "These stations measure lake levels and river discharge in the Lonza valley downstream of the Birch glacier collapse.",
+
+  "stations": {
+    "17-lake-level-geoazimut": {
+      "name": "Lake Level Monitoring Station - Geoazimut",
+      "description": "Water surface level and volume measurements for the temporary lake formed after the glacier collapse",
+      "location": "Birchmatta (deposition area)",
+      "lon": null,
+      "lat": null,
+      "elevation_m": 1540,
+      "measurement_type": ["water_level", "lake_volume"],
+      "units": {
+        "water_level": "m AMSL",
+        "volume": "m^3"
+      },
+      "source": "Geoazimut",
+      "items": ["17Pa00", "17Pb00"],
+      "_todo": "NEEDS COORDINATES - Contact Geoazimut for station position"
+    },
+
+    "18-lonza-discharge-upstream": {
+      "name": "Lonza River Discharge - Upstream",
+      "description": "River discharge measurements upstream of Blatten village",
+      "location": "Lonza river, upstream of Blatten",
+      "lon": null,
+      "lat": null,
+      "elevation_m": null,
+      "measurement_type": ["discharge"],
+      "units": {
+        "discharge": "m^3/s"
+      },
+      "source": "Geoazimut",
+      "items": ["18Oa01", "18Oa02"],
+      "_todo": "NEEDS COORDINATES - Contact Geoazimut for station position"
+    },
+
+    "19-lonza-discharge-blatten": {
+      "name": "Lonza River Discharge - Blatten",
+      "description": "River discharge measurements at Blatten village",
+      "location": "Lonza river at Blatten",
+      "lon": 7.8200,
+      "lat": 46.4200,
+      "elevation_m": 1520,
+      "measurement_type": ["discharge"],
+      "units": {
+        "discharge": "m^3/s"
+      },
+      "source": "Geoazimut",
+      "items": ["19Oa00"],
+      "_approximate_location": true
+    },
+
+    "20-lonza-discharge-kippel": {
+      "name": "Lonza River Discharge - Kippel",
+      "description": "River discharge measurements at Kippel village",
+      "location": "Lonza river at Kippel",
+      "lon": 7.7700,
+      "lat": 46.4000,
+      "elevation_m": 1376,
+      "measurement_type": ["discharge"],
+      "units": {
+        "discharge": "m^3/s"
+      },
+      "source": "Geoazimut",
+      "items": ["20Oa00"],
+      "_approximate_location": true
+    },
+
+    "21-lonza-discharge-gampel": {
+      "name": "Lonza River Discharge - Gampel",
+      "description": "River discharge measurements at Gampel (Rhone confluence)",
+      "location": "Lonza river at Gampel",
+      "lon": 7.7400,
+      "lat": 46.3150,
+      "elevation_m": 636,
+      "measurement_type": ["discharge"],
+      "units": {
+        "discharge": "m^3/s"
+      },
+      "source": "Geoazimut",
+      "items": ["21Oa00"],
+      "_approximate_location": true
+    }
+  },
+
+  "study_area": {
+    "description": "Lonza valley from Birch glacier to Rhone confluence at Gampel",
+    "river": "Lonza",
+    "canton": "Valais",
+    "country": "Switzerland",
+    "bbox_wgs84": {
+      "west": 7.74,
+      "south": 46.31,
+      "east": 7.90,
+      "north": 46.45
+    }
+  },
+
+  "product_type_mapping": {
+    "P": {
+      "id": "hydrology",
+      "title": "Hydrology Data",
+      "description": "Lake level, volume, and river discharge measurements"
+    },
+    "O": {
+      "id": "hydrology",
+      "title": "Hydrology Data",
+      "description": "River discharge measurements (O = Outflow/discharge)"
+    }
+  }
+}

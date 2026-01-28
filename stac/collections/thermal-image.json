@@ -1,29 +1,15 @@
 {
   "type": "Collection",
   "id": "thermal-image",
-  "stac_version": "1.0.0",
-  "stac_extensions": [
-    "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
-    "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
-    "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
-  ],
-  "title": "Thermal Imagery",
-  "description": "Heliborne thermal infrared imagery",
+  "stac_version": "1.1.0",
+  "title": "Thermal Image",
+  "description": "Heli-based thermal data of depositional area",
   "license": "CC-BY-NC-SA-4.0",
-  "keywords": [
-    "Birch Glacier",
-    "Blatten",
-    "Switzerland",
-    "glacier collapse",
-    "landslide",
-    "thermal imagery"
-  ],
   "providers": [
     {
       "name": "Canton du Valais",
       "roles": [
-        "licensor",
-        "host"
+        "licensor"
       ],
       "url": "https://www.vs.ch/"
     },
@@ -56,44 +42,10 @@
       ]
     }
   },
-  "summaries": {
-    "processing_level": [
-      2
-    ],
-    "source": [
-      "Terradata"
-    ]
-  },
   "links": [
     {
       "rel": "self",
-      "href": "${STAC_BASE_URL}/stac/collections/thermal-image",
-      "type": "application/json"
-    },
-    {
-      "rel": "root",
-      "href": "${STAC_BASE_URL}/stac/catalog.json",
-      "type": "application/json"
-    },
-    {
-      "rel": "parent",
-      "href": "${STAC_BASE_URL}/stac/catalog.json",
-      "type": "application/json"
-    },
-    {
-      "rel": "items",
-      "href": "${STAC_BASE_URL}/stac/collections/thermal-image/items",
-      "type": "application/geo+json"
+      "href": "${STAC_BASE_URL}/stac/collections/thermal-image"
     }
-  ],
-  "assets": {
-    "archive": {
-      "href": "${STAC_BASE_URL}/s3/data/14Na01.zip",
-      "type": "application/zip",
-      "title": "Full Thermal Imagery Archive",
-      "roles": [
-        "data"
-      ]
-    }
-  }
+  ]
 }

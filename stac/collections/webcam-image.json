@@ -1,29 +1,15 @@
 {
   "type": "Collection",
   "id": "webcam-image",
-  "stac_version": "1.0.0",
-  "stac_extensions": [
-    "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
-    "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json",
-    "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
-  ],
-  "title": "Webcam Images",
-  "description": "Time-series webcam imagery from monitoring cameras",
+  "stac_version": "1.1.0",
+  "title": "Webcam Image",
+  "description": "All full frame images, varied imaging frequency",
   "license": "CC-BY-NC-SA-4.0",
-  "keywords": [
-    "Birch Glacier",
-    "Blatten",
-    "Switzerland",
-    "glacier collapse",
-    "landslide",
-    "webcam images"
-  ],
   "providers": [
     {
       "name": "Canton du Valais",
       "roles": [
-        "licensor",
-        "host"
+        "licensor"
       ],
       "url": "https://www.vs.ch/"
     },
@@ -40,52 +26,26 @@
     "spatial": {
       "bbox": [
         [
-          null,
-          null,
-          null,
-          null
+          7.792003677760034,
+          46.40420090369961,
+          7.848483125190064,
+          46.42387522434866
         ]
       ]
     },
     "temporal": {
       "interval": [
         [
-          "2025-05-27T00:00:00Z",
-          "2025-09-23T23:59:59Z"
+          "2020-02-05T00:00:00Z",
+          "2025-09-30T23:59:59Z"
         ]
       ]
     }
   },
-  "summaries": {
-    "processing_level": [
-      2
-    ],
-    "source": [
-      "Geoprevent",
-      "Guardaval"
-    ]
-  },
   "links": [
     {
       "rel": "self",
-      "href": "${STAC_BASE_URL}/stac/collections/webcam-image",
-      "type": "application/json"
-    },
-    {
-      "rel": "root",
-      "href": "${STAC_BASE_URL}/stac/catalog.json",
-      "type": "application/json"
-    },
-    {
-      "rel": "parent",
-      "href": "${STAC_BASE_URL}/stac/catalog.json",
-      "type": "application/json"
-    },
-    {
-      "rel": "items",
-      "href": "${STAC_BASE_URL}/stac/collections/webcam-image/items",
-      "type": "application/geo+json"
+      "href": "${STAC_BASE_URL}/stac/collections/webcam-image"
     }
-  ],
-  "assets": {}
+  ]
 }

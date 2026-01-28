@@ -1,0 +1,165 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "17Pa00",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          7.820993348413511,
+          46.42129214976914
+        ]
+      },
+      "bbox": [
+        7.819993348413511,
+        46.42029214976914,
+        7.821993348413511,
+        46.422292149769135
+      ],
+      "properties": {
+        "title": "17 - Lake level - Geoazimut - a - Water surface level",
+        "datetime": null,
+        "blatten:code": "17Pa00",
+        "blatten:file_count": 1,
+        "description": "All data for station 17 in same file",
+        "start_datetime": "2025-05-29T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/lake-level"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/lake-level/items/17Pa00-0001"
+        }
+      ],
+      "assets": {
+        "archive": {
+          "href": "${S3_BASE_URL}/archives/17Pa00.zip",
+          "type": "application/zip",
+          "title": "17Pa00 complete archive"
+        }
+      },
+      "collection": "lake-level"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "17Pb00",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          7.820993348413511,
+          46.42129214976914
+        ]
+      },
+      "bbox": [
+        7.819993348413511,
+        46.42029214976914,
+        7.821993348413511,
+        46.422292149769135
+      ],
+      "properties": {
+        "title": "17 - Lake level - Geoazimut - b - Lake volume",
+        "datetime": null,
+        "blatten:code": "17Pb00",
+        "blatten:file_count": 1,
+        "description": "All data for station 17 in same file",
+        "start_datetime": "2025-05-29T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/lake-level"
+        },
+        {
+          "rel": "item",
+          "href": "${STAC_BASE_URL}/stac/collections/lake-level/items/17Pb00-0001"
+        }
+      ],
+      "assets": {
+        "archive": {
+          "href": "${S3_BASE_URL}/archives/17Pb00.zip",
+          "type": "application/zip",
+          "title": "17Pb00 complete archive"
+        }
+      },
+      "collection": "lake-level"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "17Pa00-0001",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "17_LakeLevel_Geoazimut.csv",
+        "datetime": null,
+        "blatten:dataset": "17Pa00",
+        "blatten:archive": "17Pa00.zip",
+        "description": "All data for station 17 in same file",
+        "start_datetime": "2025-05-29T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/lake-level"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/lake-level/items/17Pa00"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/17_LakeLevel_Geoazimut.csv",
+          "type": "text/csv",
+          "title": "17_LakeLevel_Geoazimut.csv",
+          "file:size": 2699024
+        }
+      },
+      "collection": "lake-level"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "id": "17Pb00-0001",
+      "geometry": null,
+      "bbox": null,
+      "properties": {
+        "title": "17_LakeLevel_Geoazimut.csv",
+        "datetime": null,
+        "blatten:dataset": "17Pb00",
+        "blatten:archive": "17Pb00.zip",
+        "description": "All data for station 17 in same file",
+        "start_datetime": "2025-05-29T00:00:00Z",
+        "end_datetime": "2025-06-30T23:59:59Z"
+      },
+      "links": [
+        {
+          "rel": "collection",
+          "href": "${STAC_BASE_URL}/stac/collections/lake-level"
+        },
+        {
+          "rel": "parent",
+          "href": "${STAC_BASE_URL}/stac/collections/lake-level/items/17Pb00"
+        }
+      ],
+      "assets": {
+        "data": {
+          "href": "${S3_BASE_URL}/17_LakeLevel_Geoazimut.csv",
+          "type": "text/csv",
+          "title": "17_LakeLevel_Geoazimut.csv",
+          "file:size": 2699024
+        }
+      },
+      "collection": "lake-level"
+    }
+  ]
+}

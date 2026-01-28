@@ -1,0 +1,104 @@
+{
+  "extracted": "2026-01-21T18:13:34.520809",
+  "stations": {
+    "10Ma00 - GNSS Weissenried": {
+      "name": "GNSS Weissenried",
+      "lon": 7.8058,
+      "lat": 46.418,
+      "elevation_m": 1707.5,
+      "lv95": {
+        "easting": 2628227.643,
+        "northing": 1140802.882
+      },
+      "source": "10Ma00 - GNSS Weissenried.csv"
+    },
+    "11Ma00 - GNSS Blatten - Kleines Nesthorn": {
+      "name": "Kleines Nesthorn",
+      "lon": 7.8404,
+      "lat": 46.3968,
+      "elevation_m": 3321.9,
+      "lv95": {
+        "easting": 2630901.165,
+        "northing": 1138465.138
+      },
+      "source": "11Ma00 - GNSS Blatten - Kleines Nesthorn.csv"
+    },
+    "11Mb00 - GNSS Blatten - Blatten 1": {
+      "name": "Blatten 1",
+      "lon": 7.8329,
+      "lat": 46.4006,
+      "elevation_m": 2740.4,
+      "lv95": {
+        "easting": 2630323.064,
+        "northing": 1138875.107
+      },
+      "source": "11Mb00 - GNSS Blatten - Blatten 1.csv"
+    },
+    "11Mc00 - GNSS Blatten - Blatten 2": {
+      "name": "Blatten 2",
+      "lon": 7.8343,
+      "lat": 46.3996,
+      "elevation_m": 2855.1,
+      "lv95": {
+        "easting": 2630429.889,
+        "northing": 1138770.065
+      },
+      "source": "11Mc00 - GNSS Blatten - Blatten 2.csv"
+    },
+    "11Md00 - GNSS Blatten - Blatten 3": {
+      "name": "Blatten 3",
+      "lon": 7.8357,
+      "lat": 46.3956,
+      "elevation_m": 3043.6,
+      "lv95": {
+        "easting": 2630541.93,
+        "northing": 1138326.335
+      },
+      "source": "11Md00 - GNSS Blatten - Blatten 3.csv"
+    },
+    "11Me00 - GNSS Blatten - Blatten 4": {
+      "name": "Blatten 4",
+      "lon": 7.8375,
+      "lat": 46.3981,
+      "elevation_m": 3083.5,
+      "lv95": {
+        "easting": 2630673.515,
+        "northing": 1138602.128
+      },
+      "source": "11Me00 - GNSS Blatten - Blatten 4.csv"
+    },
+    "11Mf00 - GNSS Blatten - Blatten 5": {
+      "name": "Blatten 5",
+      "lon": 7.8379,
+      "lat": 46.3969,
+      "elevation_m": 3173.6,
+      "lv95": {
+        "easting": 2630710.961,
+        "northing": 1138473.049
+      },
+      "source": "11Mf00 - GNSS Blatten - Blatten 5.csv"
+    },
+    "11Mg00 - GNSS Blatten - Blatten 6": {
+      "name": "Blatten 6",
+      "lon": 7.8387,
+      "lat": 46.3965,
+      "elevation_m": 3225.7,
+      "lv95": {
+        "easting": 2630771.086,
+        "northing": 1138431.768
+      },
+      "source": "11Mg00 - GNSS Blatten - Blatten 6.csv"
+    },
+    "11Mh00 - GNSS Blatten - Blatten 7": {
+      "name": "Blatten 7",
+      "lon": 7.8411,
+      "lat": 46.3965,
+      "elevation_m": 3298.9,
+      "lv95": {
+        "easting": 2630957.371,
+        "northing": 1138433.061
+      },
+      "source": "11Mh00 - GNSS Blatten - Blatten 7.csv"
+    }
+  }
+}
