@@ -149,6 +149,52 @@ enum Commands {
         #[arg(short, long, default_value = "stac")]
         catalog_dir: PathBuf,
     },
+
+    /// Extract provider archives to code-named folders in FINAL_Data structure
+    Extract {
+        /// Input directory containing provider .zip/.7z archives
+        #[arg(short, long)]
+        input: PathBuf,
+
+        /// Output directory (FINAL_Data structure: output/<provider>/<code>/)
+        #[arg(short, long)]
+        output: PathBuf,
+
+        /// Provider name (Terradata, Geopraevent, DNAGE)
+        #[arg(short, long)]
+        provider: String,
+
+        /// Overwrite existing folders
+        #[arg(long)]
+        overwrite: bool,
+
+        /// Dry run - show what would be extracted without extracting
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// Package FINAL_Data folders into clean archives for S3 upload
+    Package {
+        /// FINAL_Data directory containing provider folders
+        #[arg(short, long)]
+        data: PathBuf,
+
+        /// Output directory for archives
+        #[arg(short, long)]
+        output: PathBuf,
+
+        /// Input XLSX file for validation (only package folders with Excel match)
+        #[arg(short, long)]
+        xlsx: Option<PathBuf>,
+
+        /// Overwrite existing archives
+        #[arg(long)]
+        overwrite: bool,
+
+        /// Dry run - show what would be packaged without creating archives
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 // =============================================================================
@@ -1114,6 +1160,97 @@ fn sanitize_asset_key(filename: &str) -> String {
     key.trim_matches('-').to_string()
 }
 
+/// Extract datetime from filename based on provider-specific patterns
+/// Returns ISO 8601 datetime string (UTC) if found
+///
+/// Patterns supported:
+/// - Geopraevent ISO 8601: `YYYYMMDDTHHMMSSZ` (e.g., `20250628T154202Z.jpg`)
+/// - Terradata full: `YYYYMMDD-HHMMSS` (e.g., `orthophoto_20250530-190300_...`)
+/// - Geopraevent/Terradata: `YYYYMMDD-HHMM` (e.g., `GP-AIM-24_20250529-0500_...`)
+/// - DNAGE webcam: `YYYY-MM-DD HHMM` (e.g., `2025-05-31 1320.jpg`)
+/// - Terradata short: `_YYMMDD_` (e.g., `DTM_250711_GRID_...`)
+fn extract_datetime_from_filename(filename: &str) -> Option<String> {
+    // Pattern 1: Geopraevent ISO 8601 with T and Z (most specific, check first)
+    // e.g., 20250628T154202Z.jpg
+    let iso_z_re = regex::Regex::new(r"(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z").ok()?;
+    if let Some(caps) = iso_z_re.captures(filename) {
+        let year = caps.get(1)?.as_str();
+        let month = caps.get(2)?.as_str();
+        let day = caps.get(3)?.as_str();
+        let hour = caps.get(4)?.as_str();
+        let min = caps.get(5)?.as_str();
+        let sec = caps.get(6)?.as_str();
+        return Some(format!("{}-{}-{}T{}:{}:{}Z", year, month, day, hour, min, sec));
+    }
+
+    // Pattern 2: YYYYMMDD-HHMMSS (Terradata style with seconds)
+    // e.g., orthophoto_20250530-190300_100mmPP-0-0.tif
+    let full_datetime_re = regex::Regex::new(r"(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})").ok()?;
+    if let Some(caps) = full_datetime_re.captures(filename) {
+        let year = caps.get(1)?.as_str();
+        let month = caps.get(2)?.as_str();
+        let day = caps.get(3)?.as_str();
+        let hour = caps.get(4)?.as_str();
+        let min = caps.get(5)?.as_str();
+        let sec = caps.get(6)?.as_str();
+        return Some(format!("{}-{}-{}T{}:{}:{}Z", year, month, day, hour, min, sec));
+    }
+
+    // Pattern 3: YYYYMMDD-HHMM (Geopraevent/Terradata without seconds)
+    // e.g., GP-AIM-24_20250529-0500_..., Coherence_20250603-0800.jpg
+    // Note: Pattern 2 (with seconds) is checked first, so this only matches 4-digit time
+    // Uses [^\d] instead of lookahead since Rust regex doesn't support lookaheads
+    let datetime_no_sec_re = regex::Regex::new(r"(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})[^\d]").ok()?;
+    if let Some(caps) = datetime_no_sec_re.captures(filename) {
+        let year = caps.get(1)?.as_str();
+        let month = caps.get(2)?.as_str();
+        let day = caps.get(3)?.as_str();
+        let hour = caps.get(4)?.as_str();
+        let min = caps.get(5)?.as_str();
+        return Some(format!("{}-{}-{}T{}:{}:00Z", year, month, day, hour, min));
+    }
+    // Also try pattern at end of string (no char after HHMM)
+    let datetime_no_sec_end_re = regex::Regex::new(r"(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})$").ok()?;
+    if let Some(caps) = datetime_no_sec_end_re.captures(filename) {
+        let year = caps.get(1)?.as_str();
+        let month = caps.get(2)?.as_str();
+        let day = caps.get(3)?.as_str();
+        let hour = caps.get(4)?.as_str();
+        let min = caps.get(5)?.as_str();
+        return Some(format!("{}-{}-{}T{}:{}:00Z", year, month, day, hour, min));
+    }
+
+    // Pattern 4: YYYY-MM-DD HHMM (DNAGE webcam style with space)
+    // e.g., 2025-05-31 1320.jpg
+    let dnage_re = regex::Regex::new(r"(\d{4})-(\d{2})-(\d{2})\s+(\d{2})(\d{2})").ok()?;
+    if let Some(caps) = dnage_re.captures(filename) {
+        let year = caps.get(1)?.as_str();
+        let month = caps.get(2)?.as_str();
+        let day = caps.get(3)?.as_str();
+        let hour = caps.get(4)?.as_str();
+        let min = caps.get(5)?.as_str();
+        return Some(format!("{}-{}-{}T{}:{}:00Z", year, month, day, hour, min));
+    }
+
+    // Pattern 5: _YYMMDD_ (Terradata short date, 2-digit year)
+    // e.g., DTM_250711_GRID_20cm..., LIDAR_250523_LV95...
+    // Must be surrounded by underscores to avoid false matches
+    let short_date_re = regex::Regex::new(r"_(\d{2})(\d{2})(\d{2})_").ok()?;
+    if let Some(caps) = short_date_re.captures(filename) {
+        let yy = caps.get(1)?.as_str();
+        let month = caps.get(2)?.as_str();
+        let day = caps.get(3)?.as_str();
+        // Validate month/day ranges to avoid false positives
+        let month_num: u32 = month.parse().unwrap_or(0);
+        let day_num: u32 = day.parse().unwrap_or(0);
+        if month_num >= 1 && month_num <= 12 && day_num >= 1 && day_num <= 31 {
+            return Some(format!("20{}-{}-{}T00:00:00Z", yy, month, day));
+        }
+    }
+
+    None
+}
+
 /// Create a STAC Item from metadata with all files as assets
 /// This creates STAC 1.1.0 compliant items with:
 /// - Item-level geometry in WGS84 (combined extent of all files)
@@ -1267,6 +1404,11 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str) -> s
         // Add file size
         if file_info.size > 0 {
             asset["file:size"] = serde_json::json!(file_info.size);
+        }
+
+        // Extract and add datetime from filename
+        if let Some(datetime) = extract_datetime_from_filename(&filename) {
+            asset["datetime"] = serde_json::json!(datetime);
         }
 
         // Add Projection Extension fields if LV95 coordinates available
@@ -1470,6 +1612,7 @@ fn generate_catalog(
     base_url: &str,
     s3_base_url: &str,
     _data_path: Option<&Path>,
+    multi_progress: &MultiProgress,
 ) -> Result<(usize, usize, usize, Vec<ValidationIssue>)> {
     fs::create_dir_all(output_dir)?;
     fs::create_dir_all(output_dir.join("collections"))?;
@@ -1488,71 +1631,117 @@ fn generate_catalog(
         }
     }
 
-    // Generate STAC items and collections
-    // Note: Files are now stored as assets within each item (STAC compliant)
-    // No separate file items are created
-    let mut all_items = Vec::new();
-    let mut total_assets: usize = 0;
-    let mut stac_collections = Vec::new();
+    // Progress bar style
+    let bar_style = ProgressStyle::default_bar()
+        .template("{spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} {msg}")
+        .expect("Invalid bar template")
+        .progress_chars("#>-");
 
-    for (coll_id, coll_items) in &items_by_collection {
-        // Find collection definition
-        let def = collections_defs
-            .values()
-            .find(|d| d.id == coll_id)
-            .expect("Unknown collection");
+    // Phase 1: Create STAC items in parallel
+    let item_pb = multi_progress.add(ProgressBar::new(items.len() as u64));
+    item_pb.set_style(bar_style.clone());
+    item_pb.set_message("Creating STAC items...");
 
-        // Create STAC items (one per dataset, with files as assets)
-        let mut coll_stac_items = Vec::new();
-
-        for item in coll_items {
-            // Create STAC item with all files as assets
+    // Pre-create all STAC items in parallel (needed for both per-collection and all_items files)
+    let results: Vec<_> = items
+        .par_iter()
+        .map(|item| {
             let stac_item = create_stac_item(item, base_url, s3_base_url);
 
             // Count assets for stats
-            if let Some(assets) = stac_item.get("assets").and_then(|a| a.as_object()) {
-                total_assets += assets.len();
-            }
+            let asset_count = stac_item
+                .get("assets")
+                .and_then(|a| a.as_object())
+                .map(|a| a.len())
+                .unwrap_or(0);
 
-            coll_stac_items.push(stac_item);
-
-            // Validate
+            // Collect validation issues
+            let mut item_issues = Vec::new();
             if item.geometry.is_none() {
-                issues.push(ValidationIssue {
+                item_issues.push(ValidationIssue {
                     item_id: item.code.clone(),
                     severity: "warning".to_string(),
                     message: "Missing geometry".to_string(),
                 });
             }
             if item.archive_file.is_none() && item.files.is_empty() {
-                issues.push(ValidationIssue {
+                item_issues.push(ValidationIssue {
                     item_id: item.code.clone(),
                     severity: "warning".to_string(),
                     message: "No archive file mapped and no files found".to_string(),
                 });
             }
-        }
 
-        all_items.extend(coll_stac_items.clone());
+            item_pb.inc(1);
+            (item, stac_item, asset_count, item_issues)
+        })
+        .collect();
 
-        // Create collection
-        let collection = create_stac_collection(def, coll_items, base_url);
-        stac_collections.push(collection.clone());
-
-        // Write collection file
-        let coll_path = output_dir.join("collections").join(format!("{}.json", coll_id));
-        fs::write(&coll_path, serde_json::to_string_pretty(&collection)?)?;
-
-        // Write collection items
-        let items_path = output_dir.join("collections").join(format!("{}_items.json", coll_id));
-        let items_fc = serde_json::json!({
-            "type": "FeatureCollection",
-            "features": coll_stac_items,
-            "numberMatched": coll_stac_items.len(),
-            "numberReturned": coll_stac_items.len()
-        });
-        fs::write(&items_path, serde_json::to_string_pretty(&items_fc)?)?;
+    // Aggregate results
+    let mut items_with_stac: Vec<(&ItemMetadata, serde_json::Value)> = Vec::with_capacity(results.len());
+    let mut total_assets: usize = 0;
+    for (item, stac_item, asset_count, item_issues) in results {
+        items_with_stac.push((item, stac_item));
+        total_assets += asset_count;
+        issues.extend(item_issues);
     }
+
+    item_pb.finish_with_message(format!("Created {} STAC items ({} assets)", items_with_stac.len(), total_assets));
+
+    // Phase 2: Build all collection data in memory, then write in parallel
+    let coll_pb = multi_progress.add(ProgressBar::new(items_by_collection.len() as u64));
+    coll_pb.set_style(bar_style.clone());
+    coll_pb.set_message("Building collection files...");
+
+    // Build all collection data in parallel
+    let collection_data: Vec<_> = items_by_collection
+        .par_iter()
+        .map(|(coll_id, coll_items)| {
+            // Find collection definition
+            let def = collections_defs
+                .values()
+                .find(|d| d.id == coll_id)
+                .expect("Unknown collection");
+
+            // Get STAC items for this collection
+            let coll_stac_items: Vec<&serde_json::Value> = items_with_stac
+                .iter()
+                .filter(|(meta, _)| meta.collection_id.as_deref() == Some(coll_id.as_str()))
+                .map(|(_, stac)| stac)
+                .collect();
+
+            // Create collection JSON
+            let collection = create_stac_collection(def, coll_items, base_url);
+            let collection_json = serde_json::to_string_pretty(&collection).unwrap();
+
+            // Build NDJSON content in memory
+            let items_ndjson: String = coll_stac_items
+                .iter()
+                .map(|item| serde_json::to_string(item).unwrap())
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            coll_pb.inc(1);
+            (coll_id.clone(), collection, collection_json, items_ndjson)
+        })
+        .collect();
+
+    // Extract collections for later use
+    let stac_collections: Vec<_> = collection_data.iter().map(|(_, c, _, _)| c.clone()).collect();
+
+    // Write all collection files (fast, already serialized)
+    for (coll_id, _, collection_json, items_ndjson) in &collection_data {
+        let coll_path = output_dir.join("collections").join(format!("{}.json", coll_id));
+        fs::write(&coll_path, collection_json)?;
+
+        let items_path = output_dir.join("collections").join(format!("{}_items.ndjson", coll_id));
+        fs::write(&items_path, items_ndjson)?;
+    }
+
+    coll_pb.finish_with_message(format!("Wrote {} collection files", stac_collections.len()));
+
+    // Collect all STAC items for the all_items file
+    let all_items: Vec<serde_json::Value> = items_with_stac.into_iter().map(|(_, stac)| stac).collect();
 
     // Build links for root catalog
     let mut catalog_links: Vec<serde_json::Value> = vec![
@@ -1597,17 +1786,29 @@ fn generate_catalog(
         serde_json::to_string_pretty(&catalog)?,
     )?;
 
-    // Write all items
-    let all_items_fc = serde_json::json!({
-        "type": "FeatureCollection",
-        "features": all_items,
-        "numberMatched": all_items.len(),
-        "numberReturned": all_items.len()
-    });
-    fs::write(
-        output_dir.join("all_items.json"),
-        serde_json::to_string_pretty(&all_items_fc)?,
-    )?;
+    // Write all items as NDJSON (one item per line, no wrapper)
+    let all_items_path = output_dir.join("items.ndjson");
+    let all_items_count = all_items.len();
+
+    // Build NDJSON in parallel in memory, then write once
+    let write_pb = multi_progress.add(ProgressBar::new_spinner());
+    write_pb.set_style(
+        ProgressStyle::default_spinner()
+            .template("{spinner:.green} {msg}")
+            .expect("Invalid spinner template"),
+    );
+    write_pb.set_message("Building items.ndjson in memory...");
+
+    // Parallel JSON serialization
+    let ndjson_lines: Vec<String> = all_items
+        .par_iter()
+        .map(|item| serde_json::to_string(item).unwrap())
+        .collect();
+
+    write_pb.set_message("Writing items.ndjson...");
+    fs::write(&all_items_path, ndjson_lines.join("\n"))?;
+
+    write_pb.finish_with_message(format!("Wrote {} items to items.ndjson", all_items_count));
 
     // Write collections list
     let collections_list = serde_json::json!({
@@ -1730,41 +1931,60 @@ fn validate_catalog(catalog_dir: &PathBuf) -> Result<Vec<ValidationIssue>> {
         });
     }
 
-    // Check all_items.json
-    let all_items_path = catalog_dir.join("all_items.json");
+    // Check items.ndjson
+    let all_items_path = catalog_dir.join("items.ndjson");
     if all_items_path.exists() {
-        let data: serde_json::Value = serde_json::from_str(&fs::read_to_string(&all_items_path)?)?;
-        if let Some(features) = data.get("features").and_then(|f| f.as_array()) {
-            println!("Found {} items", features.len());
+        use std::io::BufRead;
+        let file = File::open(&all_items_path)?;
+        let reader = BufReader::new(file);
+        let mut item_count = 0;
 
-            for item in features {
-                let item_id = item.get("id").and_then(|i| i.as_str()).unwrap_or("unknown");
+        for (line_num, line) in reader.lines().enumerate() {
+            let line = line?;
+            if line.trim().is_empty() {
+                continue;
+            }
 
-                if item.get("geometry").map(|g| g.is_null()).unwrap_or(true) {
-                    issues.push(ValidationIssue {
-                        item_id: item_id.to_string(),
-                        severity: "warning".to_string(),
-                        message: "Missing geometry".to_string(),
-                    });
+            match serde_json::from_str::<serde_json::Value>(&line) {
+                Ok(item) => {
+                    item_count += 1;
+                    let item_id = item.get("id").and_then(|i| i.as_str()).unwrap_or("unknown");
+
+                    if item.get("geometry").map(|g| g.is_null()).unwrap_or(true) {
+                        issues.push(ValidationIssue {
+                            item_id: item_id.to_string(),
+                            severity: "warning".to_string(),
+                            message: "Missing geometry".to_string(),
+                        });
+                    }
+
+                    if item.get("assets").and_then(|a| a.as_object()).map(|a| a.is_empty()).unwrap_or(true) {
+                        issues.push(ValidationIssue {
+                            item_id: item_id.to_string(),
+                            severity: "warning".to_string(),
+                            message: "No assets".to_string(),
+                        });
+                    }
+
+                    if item.get("stac_version").and_then(|v| v.as_str()) != Some(STAC_VERSION) {
+                        issues.push(ValidationIssue {
+                            item_id: item_id.to_string(),
+                            severity: "warning".to_string(),
+                            message: format!("STAC version is not {}", STAC_VERSION),
+                        });
+                    }
                 }
-
-                if item.get("assets").and_then(|a| a.as_object()).map(|a| a.is_empty()).unwrap_or(true) {
+                Err(e) => {
                     issues.push(ValidationIssue {
-                        item_id: item_id.to_string(),
-                        severity: "warning".to_string(),
-                        message: "No assets".to_string(),
-                    });
-                }
-
-                if item.get("stac_version").and_then(|v| v.as_str()) != Some(STAC_VERSION) {
-                    issues.push(ValidationIssue {
-                        item_id: item_id.to_string(),
-                        severity: "warning".to_string(),
-                        message: format!("STAC version is not {}", STAC_VERSION),
+                        item_id: format!("line_{}", line_num + 1),
+                        severity: "error".to_string(),
+                        message: format!("Failed to parse NDJSON line: {}", e),
                     });
                 }
             }
         }
+
+        println!("Found {} items", item_count);
     }
 
     Ok(issues)
@@ -1872,13 +2092,20 @@ fn main() -> Result<()> {
                 let tmpdir = std::env::temp_dir().join("stac-gen-extract");
                 fs::create_dir_all(&tmpdir)?;
 
-                // Extract geometry in parallel
+                // Extract geometry in parallel - only for items WITHOUT scanned folders
+                // (items with folders will get geometry from file-level extraction later)
                 let extract_pb = Arc::new(Mutex::new(extract_pb));
                 let sensors = Arc::new(sensors);
                 let scanned_folders = Arc::new(scanned_folders);
                 let tmpdir = Arc::new(tmpdir);
 
-                let results: Vec<(String, ExtractionResult)> = items
+                // Filter to items that need item-level extraction (no scanned folder)
+                let items_needing_extraction: Vec<_> = items
+                    .iter()
+                    .filter(|item| !scanned_folders.contains_key(&item.code))
+                    .collect();
+
+                let results: Vec<(String, ExtractionResult)> = items_needing_extraction
                     .par_iter()
                     .map(|item| {
                         let result = extract_geometry_for_item_v2(
@@ -1953,7 +2180,18 @@ fn main() -> Result<()> {
             }
 
             // Populate file info from scanned folders and compute combined bbox
-            let file_pb = multi_progress.add(ProgressBar::new(items.len() as u64));
+            // Collect all files to process in parallel
+            let all_files: Vec<(String, PathBuf)> = items
+                .iter()
+                .filter_map(|item| {
+                    scanned_folders_for_report.get(&item.code).map(|folder| {
+                        folder.files.iter().map(|f| (item.code.clone(), f.clone())).collect::<Vec<_>>()
+                    })
+                })
+                .flatten()
+                .collect();
+
+            let file_pb = multi_progress.add(ProgressBar::new(all_files.len() as u64));
             file_pb.set_style(
                 ProgressStyle::default_bar()
                     .template("{spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} {msg}")
@@ -1962,62 +2200,80 @@ fn main() -> Result<()> {
             );
             file_pb.set_message("Extracting file geometry...");
 
+            // Extract geometry for all files in parallel
+            let processed_count = std::sync::atomic::AtomicU64::new(0);
+            let file_results: Vec<(String, FileInfo)> = all_files
+                .par_iter()
+                .map(|(code, file_path)| {
+                    let size = file_path.metadata().map(|m| m.len()).unwrap_or(0);
+                    let ext = file_path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+
+                    // Extract geometry for geospatial files (both WGS84 and LV95)
+                    let (bbox, geometry, bbox_lv95, geometry_lv95) = if ext == "tif" || ext == "tiff" {
+                        let (geo, _override_reason) = extract_geotiff_geometry(file_path);
+                        geo.map(|g| (Some(g.bbox), Some(g.geometry), g.bbox_lv95, g.geometry_lv95))
+                            .unwrap_or((None, None, None, None))
+                    } else if ext == "laz" || ext == "las" {
+                        extract_las_geometry(file_path)
+                            .map(|g| (Some(g.bbox), Some(g.geometry), g.bbox_lv95, g.geometry_lv95))
+                            .unwrap_or((None, None, None, None))
+                    } else {
+                        (None, None, None, None)
+                    };
+
+                    // Update progress every 100 files to reduce contention
+                    let count = processed_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    if count % 100 == 0 {
+                        file_pb.set_position(count);
+                    }
+
+                    (code.clone(), FileInfo {
+                        path: file_path.clone(),
+                        size,
+                        bbox,
+                        geometry,
+                        bbox_lv95,
+                        geometry_lv95,
+                    })
+                })
+                .collect();
+
+            file_pb.set_position(file_results.len() as u64);
+            file_pb.finish_with_message(format!("Extracted geometry from {} files", file_results.len()));
+
+            // Group results by item code and apply
+            let mut files_by_code: HashMap<String, Vec<FileInfo>> = HashMap::new();
+            for (code, file_info) in file_results {
+                files_by_code.entry(code).or_default().push(file_info);
+            }
+
             for item in &mut items {
                 if let Some(folder) = scanned_folders_for_report.get(&item.code) {
                     item.file_count = folder.files.len();
-                    let mut file_bboxes: Vec<Vec<f64>> = Vec::new();
+                }
 
-                    // Build FileInfo list with geometry for each file
-                    for file_path in &folder.files {
-                        let size = file_path.metadata().map(|m| m.len()).unwrap_or(0);
-                        let ext = file_path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
-
-                        // Extract geometry for geospatial files (both WGS84 and LV95)
-                        let (bbox, geometry, bbox_lv95, geometry_lv95) = if ext == "tif" || ext == "tiff" {
-                            let (geo, _override_reason) = extract_geotiff_geometry(file_path);
-                            // Note: override tracking for file-level extraction is not shown in summary
-                            // to avoid duplication (dataset-level overrides are tracked)
-                            geo.map(|g| (Some(g.bbox), Some(g.geometry), g.bbox_lv95, g.geometry_lv95))
-                                .unwrap_or((None, None, None, None))
-                        } else if ext == "laz" || ext == "las" {
-                            extract_las_geometry(file_path)
-                                .map(|g| (Some(g.bbox), Some(g.geometry), g.bbox_lv95, g.geometry_lv95))
-                                .unwrap_or((None, None, None, None))
-                        } else {
-                            (None, None, None, None)
-                        };
-
-                        // Collect bbox for combined dataset bbox
-                        if let Some(ref b) = bbox {
-                            file_bboxes.push(b.clone());
-                        }
-
-                        item.files.push(FileInfo {
-                            path: file_path.clone(),
-                            size,
-                            bbox,
-                            geometry,
-                            bbox_lv95,
-                            geometry_lv95,
-                        });
-                    }
+                if let Some(file_infos) = files_by_code.remove(&item.code) {
+                    // Collect bboxes for combined dataset bbox
+                    let file_bboxes: Vec<&Vec<f64>> = file_infos
+                        .iter()
+                        .filter_map(|f| f.bbox.as_ref())
+                        .collect();
 
                     // Compute combined dataset bbox from all file bboxes
-                    // This overwrites any single-file bbox set earlier
                     if !file_bboxes.is_empty() {
                         let combined_bbox = vec![
-                            file_bboxes.iter().map(|b| b[0]).fold(f64::INFINITY, f64::min),  // min_lon
-                            file_bboxes.iter().map(|b| b[1]).fold(f64::INFINITY, f64::min),  // min_lat
-                            file_bboxes.iter().map(|b| b[2]).fold(f64::NEG_INFINITY, f64::max), // max_lon
-                            file_bboxes.iter().map(|b| b[3]).fold(f64::NEG_INFINITY, f64::max), // max_lat
+                            file_bboxes.iter().map(|b| b[0]).fold(f64::INFINITY, f64::min),
+                            file_bboxes.iter().map(|b| b[1]).fold(f64::INFINITY, f64::min),
+                            file_bboxes.iter().map(|b| b[2]).fold(f64::NEG_INFINITY, f64::max),
+                            file_bboxes.iter().map(|b| b[3]).fold(f64::NEG_INFINITY, f64::max),
                         ];
                         item.geometry = Some(bbox_to_polygon(&combined_bbox));
                         item.bbox = Some(combined_bbox);
                     }
+
+                    item.files = file_infos;
                 }
-                file_pb.inc(1);
             }
-            file_pb.finish_with_message("File geometry extraction complete");
 
             // Step 4: Check archive files
             if let Some(ref arch_dir) = archives_dir {
@@ -2067,7 +2323,7 @@ fn main() -> Result<()> {
             gen_pb.set_style(spinner_style);
             gen_pb.set_message("Generating STAC catalog...");
 
-            let (num_collections, num_items, num_assets, issues) = generate_catalog(&items, &output, &base_url, &s3_base_url, data.as_deref())?;
+            let (num_collections, num_items, num_assets, issues) = generate_catalog(&items, &output, &base_url, &s3_base_url, data.as_deref(), &multi_progress)?;
             gen_pb.finish_with_message(format!(
                 "Generated {} collections, {} items, {} assets",
                 num_collections, num_items, num_assets
@@ -2290,9 +2546,297 @@ fn main() -> Result<()> {
 
             std::process::exit(if issues.iter().any(|i| i.severity == "error") { 1 } else { 0 });
         }
+
+        Commands::Extract { input, output, provider, overwrite, dry_run } => {
+            info!("=== Archive Extractor ===");
+            info!("Input:    {:?}", input);
+            info!("Output:   {:?}", output);
+            info!("Provider: {}", provider);
+            if dry_run {
+                info!("Mode:     DRY RUN");
+            }
+
+            // Validate provider name
+            let valid_providers = ["Terradata", "Geopraevent", "DNAGE"];
+            if !valid_providers.contains(&provider.as_str()) {
+                error!("Invalid provider '{}'. Must be one of: {:?}", provider, valid_providers);
+                std::process::exit(1);
+            }
+
+            // Create output directory structure
+            let provider_output = output.join(&provider);
+            if !dry_run {
+                fs::create_dir_all(&provider_output)?;
+            }
+
+            // Find all archive files
+            let archives: Vec<_> = WalkDir::new(&input)
+                .min_depth(1)
+                .max_depth(1)
+                .into_iter()
+                .filter_map(|e| e.ok())
+                .filter(|e| {
+                    let ext = e.path().extension().and_then(|s| s.to_str()).unwrap_or("");
+                    ext == "zip" || ext == "7z"
+                })
+                .collect();
+
+            info!("Found {} archives", archives.len());
+
+            let mut extracted = 0;
+            let mut skipped = 0;
+            let mut failed = 0;
+
+            for entry in archives {
+                let archive_path = entry.path();
+                let filename = archive_path.file_stem().unwrap_or_default().to_string_lossy();
+
+                // Extract code from filename (e.g., "06Ha00_Radar..." -> "06Ha00")
+                let code = extract_code_from_folder(&filename, &HashMap::new());
+
+                if let Some(code) = code {
+                    let target_dir = provider_output.join(&code);
+
+                    if target_dir.exists() && !overwrite {
+                        info!("  SKIP: {} -> {} (already exists)", filename, code);
+                        skipped += 1;
+                        continue;
+                    }
+
+                    if dry_run {
+                        info!("  WOULD EXTRACT: {} -> {}", filename, code);
+                        extracted += 1;
+                    } else {
+                        info!("  Extracting: {} -> {}", filename, code);
+                        match extract_archive(archive_path, &target_dir) {
+                            Ok(_) => {
+                                extracted += 1;
+                            }
+                            Err(e) => {
+                                error!("  FAILED: {} - {}", filename, e);
+                                failed += 1;
+                            }
+                        }
+                    }
+                } else {
+                    warn!("  SKIP: {} (could not extract code from filename)", filename);
+                    skipped += 1;
+                }
+            }
+
+            info!("");
+            info!("=== Summary ===");
+            info!("  Extracted: {}", extracted);
+            info!("  Skipped:   {}", skipped);
+            info!("  Failed:    {}", failed);
+        }
+
+        Commands::Package { data, output, xlsx, overwrite, dry_run } => {
+            info!("=== Archive Packager ===");
+            info!("Data:   {:?}", data);
+            info!("Output: {:?}", output);
+            if let Some(ref x) = xlsx {
+                info!("XLSX:   {:?}", x);
+            }
+            if dry_run {
+                info!("Mode:   DRY RUN");
+            }
+
+            // Load Excel codes if provided (for validation)
+            let valid_codes: Option<std::collections::HashSet<String>> = if let Some(ref xlsx_path) = xlsx {
+                let items = parse_xlsx(xlsx_path)?;
+                Some(items.iter().map(|i| i.code.clone()).collect())
+            } else {
+                None
+            };
+
+            // Create output directory
+            if !dry_run {
+                fs::create_dir_all(&output)?;
+            }
+
+            // Scan all provider folders
+            let mut packaged = 0;
+            let mut skipped = 0;
+            let mut failed = 0;
+
+            for provider in &["Terradata", "Geopraevent", "DNAGE"] {
+                let provider_path = data.join(provider);
+                if !provider_path.exists() {
+                    continue;
+                }
+
+                for entry in WalkDir::new(&provider_path)
+                    .min_depth(1)
+                    .max_depth(1)
+                    .into_iter()
+                    .filter_map(|e| e.ok())
+                    .filter(|e| e.file_type().is_dir())
+                {
+                    let folder_name = entry.file_name().to_string_lossy().to_string();
+                    let code = extract_code_from_folder(&folder_name, &HashMap::new());
+
+                    if let Some(code) = code {
+                        // Check against Excel codes if provided
+                        if let Some(ref codes) = valid_codes {
+                            if !codes.contains(&code) {
+                                warn!("  SKIP: {} (not in Excel metadata)", code);
+                                skipped += 1;
+                                continue;
+                            }
+                        }
+
+                        let archive_path = output.join(format!("{}.zip", code));
+
+                        if archive_path.exists() && !overwrite {
+                            info!("  SKIP: {} (archive already exists)", code);
+                            skipped += 1;
+                            continue;
+                        }
+
+                        if dry_run {
+                            // Count files and size
+                            let (file_count, total_size) = count_folder_contents(entry.path());
+                            info!("  WOULD PACKAGE: {} ({} files, {})", code, file_count, format_size(total_size));
+                            packaged += 1;
+                        } else {
+                            info!("  Packaging: {} ...", code);
+                            match create_archive(entry.path(), &archive_path) {
+                                Ok(size) => {
+                                    info!("    Created: {} ({})", archive_path.display(), format_size(size));
+                                    packaged += 1;
+                                }
+                                Err(e) => {
+                                    error!("  FAILED: {} - {}", code, e);
+                                    failed += 1;
+                                }
+                            }
+                        }
+                    } else {
+                        warn!("  SKIP: {} (could not extract code)", folder_name);
+                        skipped += 1;
+                    }
+                }
+            }
+
+            info!("");
+            info!("=== Summary ===");
+            info!("  Packaged: {}", packaged);
+            info!("  Skipped:  {}", skipped);
+            info!("  Failed:   {}", failed);
+        }
     }
 
     Ok(())
+}
+
+// =============================================================================
+// Archive Operations
+// =============================================================================
+
+/// Extract a zip archive to a target directory
+fn extract_archive(archive_path: &Path, target_dir: &Path) -> Result<()> {
+    let file = File::open(archive_path)?;
+    let mut archive = zip::ZipArchive::new(file)?;
+
+    // Create target directory
+    fs::create_dir_all(target_dir)?;
+
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i)?;
+        let outpath = match file.enclosed_name() {
+            Some(path) => target_dir.join(path),
+            None => continue,
+        };
+
+        if file.name().ends_with('/') {
+            fs::create_dir_all(&outpath)?;
+        } else {
+            if let Some(p) = outpath.parent() {
+                if !p.exists() {
+                    fs::create_dir_all(p)?;
+                }
+            }
+            let mut outfile = File::create(&outpath)?;
+            std::io::copy(&mut file, &mut outfile)?;
+        }
+
+        // Set permissions on Unix
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Some(mode) = file.unix_mode() {
+                fs::set_permissions(&outpath, fs::Permissions::from_mode(mode))?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Create a zip archive from a directory
+fn create_archive(source_dir: &Path, archive_path: &Path) -> Result<u64> {
+    use zip::write::SimpleFileOptions;
+
+    let file = File::create(archive_path)?;
+    let mut zip = zip::ZipWriter::new(file);
+    let options = SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated)
+        .compression_level(Some(6));
+
+    // Walk the directory and add all files
+    for entry in WalkDir::new(source_dir).into_iter().filter_map(|e| e.ok()) {
+        let path = entry.path();
+        let name = path.strip_prefix(source_dir)
+            .map_err(|e| anyhow::anyhow!("Failed to strip prefix: {}", e))?;
+
+        if path.is_file() {
+            zip.start_file(name.to_string_lossy(), options)?;
+            let mut f = File::open(path)?;
+            std::io::copy(&mut f, &mut zip)?;
+        } else if !name.as_os_str().is_empty() {
+            // Directory entry (not the root)
+            zip.add_directory(name.to_string_lossy(), options)?;
+        }
+    }
+
+    zip.finish()?;
+
+    // Return the size of the created archive
+    let metadata = fs::metadata(archive_path)?;
+    Ok(metadata.len())
+}
+
+/// Count files and total size in a directory
+fn count_folder_contents(dir: &Path) -> (usize, u64) {
+    let mut count = 0;
+    let mut size = 0u64;
+
+    for entry in WalkDir::new(dir).into_iter().filter_map(|e| e.ok()) {
+        if entry.file_type().is_file() {
+            count += 1;
+            size += entry.metadata().map(|m| m.len()).unwrap_or(0);
+        }
+    }
+
+    (count, size)
+}
+
+/// Format bytes as human-readable size
+fn format_size(bytes: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = KB * 1024;
+    const GB: u64 = MB * 1024;
+
+    if bytes >= GB {
+        format!("{:.1} GB", bytes as f64 / GB as f64)
+    } else if bytes >= MB {
+        format!("{:.1} MB", bytes as f64 / MB as f64)
+    } else if bytes >= KB {
+        format!("{:.1} KB", bytes as f64 / KB as f64)
+    } else {
+        format!("{} B", bytes)
+    }
 }
 
 // =============================================================================
