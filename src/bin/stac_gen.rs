@@ -127,6 +127,12 @@ enum Commands {
         #[arg(long)]
         dnage_mappings: Option<PathBuf>,
 
+        /// Station locations CSV file (LV95 coordinates).
+        /// Alternative to sensor_locations.json - reads directly from the authoritative CSV.
+        /// Format: ID,Name,x,y (header row, LV95 coordinates)
+        #[arg(long)]
+        station_locations: Option<PathBuf>,
+
         /// Validate that files exist on S3 (requires S3 access)
         #[arg(long)]
         validate_s3: bool,
@@ -483,6 +489,63 @@ fn load_sensor_locations(path: &Path) -> Result<HashMap<String, SensorLocation>>
     }
 
     Ok(lookup)
+}
+
+/// Load station locations from CSV file (LV95 coordinates)
+/// CSV format: ID,Name,x,y (with header row)
+/// Returns HashMap<sensor_id, (lon_wgs84, lat_wgs84, name)>
+fn load_station_locations_csv(path: &Path) -> Result<HashMap<String, (f64, f64, String)>> {
+    use std::io::BufRead;
+
+    let mut stations = HashMap::new();
+
+    if !path.exists() {
+        warn!("Station locations CSV not found: {:?}", path);
+        return Ok(stations);
+    }
+
+    let file = File::open(path)?;
+    let reader = std::io::BufReader::new(file);
+
+    for (line_num, line) in reader.lines().enumerate() {
+        let line = line?;
+        let line = line.trim();
+
+        // Skip empty lines and header rows
+        if line.is_empty() || line_num < 2 {
+            continue;
+        }
+
+        // Parse CSV: ID,Name,x,y
+        let parts: Vec<&str> = line.split(',').collect();
+        if parts.len() < 4 {
+            continue;
+        }
+
+        let sensor_id = parts[0].trim();
+        let name = parts[1].trim();
+        let x: f64 = match parts[2].trim().parse() {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let y: f64 = match parts[3].trim().parse() {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+
+        // Convert LV95 to WGS84
+        if let Some((lon, lat)) = lv95_to_wgs84(x, y) {
+            // Pad sensor ID with leading zero if needed (e.g., "1" -> "01")
+            let padded_id = if sensor_id.len() == 1 {
+                format!("0{}", sensor_id)
+            } else {
+                sensor_id.to_string()
+            };
+            stations.insert(padded_id, (lon, lat, name.to_string()));
+        }
+    }
+
+    Ok(stations)
 }
 
 // =============================================================================
@@ -1062,16 +1125,15 @@ fn parse_xlsx(path: &PathBuf) -> Result<Vec<ItemMetadata>> {
     let code_to_file = get_code_to_file();
     let mut items = Vec::new();
 
-    // Data starts at row 4 (0-indexed)
-    // Column layout (0-indexed):
+    // Data starts at row 2 (1-indexed Excel), which is row 1 (0-indexed)
+    // Column layout (0-indexed) based on actual Excel structure:
     // 0: Code, 1: ProductID, 2: SensorID, 3: DatasetID, 4: BundleID, 5: Sensor,
     // 6: ProductType, 7: Dataset, 8: Bundle, 9: Description, 10: Format,
-    // 11: TechnicalInfo, 12: ProcessingLevel, 13: Phase, 14: DateFirst, 15: DateLast,
-    // 16: Continued, 17: Frequency, 18: Location, 19: Source, 20: AdditionalRemarks,
-    // 21: StorageMB, 22: InternalCommentary
+    // 11: AdditionalInfo, 12: ProcessingLevel, 13: Phase, 14: DateFirst, 15: DateLast,
+    // 16: Frequency, 17: Source, 18: OnSharePoint, 19: InternalCommentary
     for (row_idx, row) in range.rows().enumerate() {
-        if row_idx < 4 {
-            continue; // Skip header rows
+        if row_idx < 1 {
+            continue; // Skip header row
         }
 
         // Column 0 is the code
@@ -1099,13 +1161,13 @@ fn parse_xlsx(path: &PathBuf) -> Result<Vec<ItemMetadata>> {
             phase: row.get(13).and_then(cell_string),
             date_first: row.get(14).and_then(cell_string),
             date_last: row.get(15).and_then(cell_string),
-            continued: row.get(16).map(cell_bool).unwrap_or(false),
-            frequency: row.get(17).and_then(cell_string),
-            location: row.get(18).and_then(cell_string),
-            source: row.get(19).and_then(cell_string),
-            additional_remarks: row.get(20).and_then(cell_string),
-            storage_mb: row.get(21).and_then(cell_float),
-            internal_commentary: row.get(22).and_then(cell_string),
+            continued: row.get(18).map(cell_bool).unwrap_or(false),  // OnSharePoint column
+            frequency: row.get(16).and_then(cell_string),
+            location: None,  // Not in current Excel layout
+            source: row.get(17).and_then(cell_string),
+            additional_remarks: None,  // Not in current Excel layout
+            storage_mb: None,  // Not in current Excel layout
+            internal_commentary: row.get(19).and_then(cell_string),
             collection_id: None,
             geometry: None,
             bbox: None,
@@ -1496,6 +1558,9 @@ fn create_stac_collection(
     base_url: &str,
 ) -> serde_json::Value {
     // Compute spatial extent
+    // Default bbox covers the Blatten/Birch Glacier area (WGS84)
+    const DEFAULT_BBOX: [f64; 4] = [7.78, 46.38, 7.88, 46.44];
+
     let bboxes: Vec<&Vec<f64>> = items.iter().filter_map(|i| i.bbox.as_ref()).collect();
     let spatial_bbox: serde_json::Value = if !bboxes.is_empty() {
         serde_json::json!([[
@@ -1505,7 +1570,8 @@ fn create_stac_collection(
             bboxes.iter().map(|b| b[3]).fold(f64::NEG_INFINITY, f64::max),
         ]])
     } else {
-        serde_json::json!([[null, null, null, null]])
+        // Use default Blatten area bbox when no geometry available
+        serde_json::json!([[DEFAULT_BBOX[0], DEFAULT_BBOX[1], DEFAULT_BBOX[2], DEFAULT_BBOX[3]]])
     };
 
     // Compute temporal extent
@@ -1664,11 +1730,18 @@ fn generate_catalog(
                     message: "Missing geometry".to_string(),
                 });
             }
-            if item.archive_file.is_none() && item.files.is_empty() {
+            if item.archive_file.is_none() {
                 item_issues.push(ValidationIssue {
                     item_id: item.code.clone(),
                     severity: "warning".to_string(),
-                    message: "No archive file mapped and no files found".to_string(),
+                    message: "No archive file mapped".to_string(),
+                });
+            }
+            if item.files.is_empty() {
+                item_issues.push(ValidationIssue {
+                    item_id: item.code.clone(),
+                    severity: "warning".to_string(),
+                    message: "No files found".to_string(),
                 });
             }
 
@@ -2016,6 +2089,7 @@ fn main() -> Result<()> {
             archives_dir,
             sensors_file,
             dnage_mappings,
+            station_locations,
             validate_s3,
             threads,
             verbose,
@@ -2031,26 +2105,15 @@ fn main() -> Result<()> {
 
             // Set up progress bars
             let multi_progress = MultiProgress::new();
-            let spinner_style = ProgressStyle::default_spinner()
-                .template("{spinner:.green} {msg}")
-                .expect("Invalid spinner template");
 
-            // Step 1: Parse XLSX
-            let parse_pb = multi_progress.add(ProgressBar::new_spinner());
-            parse_pb.set_style(spinner_style.clone());
-            parse_pb.set_message("Parsing XLSX metadata...");
-
+            // Step 1: Parse XLSX (quick operation, use simple info log instead of spinner)
             let mut items = parse_xlsx(&xlsx)?;
-            parse_pb.finish_with_message(format!("Parsed {} items from XLSX", items.len()));
+            info!("  Parsed {} items from XLSX", items.len());
 
-            // Step 2: Scan folders if data provided
+            // Step 2: Scan folders if data provided (quick operation, use simple info log)
             let scanned_folders: HashMap<String, ScannedFolder> = if let Some(ref data_path) = data {
-                let scan_pb = multi_progress.add(ProgressBar::new_spinner());
-                scan_pb.set_style(spinner_style.clone());
-                scan_pb.set_message("Scanning data folders...");
-
                 let folders = scan_data_folders(data_path, dnage_mappings.as_deref())?;
-                scan_pb.finish_with_message(format!("Found {} data folders", folders.len()));
+                info!("  Found {} data folders", folders.len());
                 folders
             } else {
                 HashMap::new()
@@ -2275,33 +2338,103 @@ fn main() -> Result<()> {
                 }
             }
 
-            // Step 4: Check archive files
+            // Step 3b: Apply station coordinates from CSV to items still missing geometry
+            // This catches items with scanned folders but non-geospatial files (webcams, hydro, GNSS)
+            if let Some(ref csv_path) = station_locations {
+                let stations = load_station_locations_csv(csv_path)?;
+                if !stations.is_empty() {
+                    info!("  Loaded {} station locations from CSV", stations.len());
+
+                    let mut station_applied = 0;
+                    for item in &mut items {
+                        if item.geometry.is_none() {
+                            // Extract sensor ID from item code (first 2 digits)
+                            let sensor_id = &item.code[..2.min(item.code.len())];
+                            if let Some((lon, lat, name)) = stations.get(sensor_id) {
+                                let (bbox, geometry) = point_to_geometry(*lon, *lat, None);
+                                item.bbox = Some(bbox);
+                                item.geometry = Some(geometry);
+                                station_applied += 1;
+                                if verbose {
+                                    debug!("[{}] Station coords from CSV: {} at [{:.4}, {:.4}]", item.code, name, lon, lat);
+                                }
+                            }
+                        }
+                    }
+
+                    if station_applied > 0 {
+                        info!("  Applied {} station locations from CSV", station_applied);
+                    }
+                }
+            }
+
+            // Step 4: Scan and map archive/data files from archives directory
             if let Some(ref arch_dir) = archives_dir {
-                let arch_pb = multi_progress.add(ProgressBar::new_spinner());
-                arch_pb.set_style(spinner_style.clone());
-                arch_pb.set_message("Checking archive files...");
+                // Build a map of code -> file path by scanning the directory
+                // Supports: archives (.zip, .7z) and standalone geospatial files (.tif, .tiff, .laz, .las)
+                let mut archive_map: HashMap<String, (PathBuf, u64)> = HashMap::new();
 
+                // Supported file extensions for archives/data files
+                let supported_exts = ["zip", "7z", "tif", "tiff", "laz", "las"];
+
+                for entry in WalkDir::new(arch_dir)
+                    .min_depth(1)
+                    .max_depth(1)
+                    .into_iter()
+                    .filter_map(|e| e.ok())
+                {
+                    if !entry.file_type().is_file() {
+                        continue;
+                    }
+                    let ext = entry.path().extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+                    if !supported_exts.contains(&ext.as_str()) {
+                        continue;
+                    }
+
+                    let filename = entry.file_name().to_string_lossy().to_string();
+                    // Extract code from filename (e.g., "14Ka03.zip" -> "14Ka03", "14Ka03.tif" -> "14Ka03")
+                    if let Some(code) = extract_code_from_folder(&filename, &HashMap::new()) {
+                        if let Ok(metadata) = entry.metadata() {
+                            // Prefer archives over raw files if both exist
+                            let dominated_by_archive = archive_map.get(&code)
+                                .map(|(p, _)| {
+                                    let existing_ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
+                                    existing_ext == "zip" || existing_ext == "7z"
+                                })
+                                .unwrap_or(false);
+
+                            if !dominated_by_archive {
+                                archive_map.insert(code, (entry.path().to_path_buf(), metadata.len()));
+                            }
+                        }
+                    }
+                }
+
+                // Map archives to items
                 let mut found = 0;
-                let mut missing = 0;
-
                 for item in &mut items {
-                    if let Some(ref archive_name) = item.archive_file {
+                    // First check hardcoded mapping, then auto-discovered
+                    if item.archive_file.is_none() {
+                        if let Some((path, size)) = archive_map.get(&item.code) {
+                            item.archive_file = Some(path.file_name().unwrap_or_default().to_string_lossy().to_string());
+                            item.archive_size = Some(*size);
+                            found += 1;
+                        }
+                    } else if let Some(ref archive_name) = item.archive_file {
+                        // Check if hardcoded archive exists
                         let archive_path = arch_dir.join(archive_name);
                         if archive_path.exists() {
                             if let Ok(metadata) = fs::metadata(&archive_path) {
                                 item.archive_size = Some(metadata.len());
                                 found += 1;
                             }
-                        } else {
-                            missing += 1;
-                            if verbose {
-                                warn!("[{}] Archive not found: {}", item.code, archive_name);
-                            }
+                        } else if verbose {
+                            warn!("[{}] Archive not found: {}", item.code, archive_name);
                         }
                     }
                 }
 
-                arch_pb.finish_with_message(format!("Archives: {} found, {} missing", found, missing));
+                info!("  Archives/files: {} mapped from directory", found);
             }
 
             // Save intermediate metadata if requested
@@ -2319,207 +2452,150 @@ fn main() -> Result<()> {
             }
 
             // Generate STAC catalog
-            let gen_pb = multi_progress.add(ProgressBar::new_spinner());
-            gen_pb.set_style(spinner_style);
-            gen_pb.set_message("Generating STAC catalog...");
-
             let (num_collections, num_items, num_assets, issues) = generate_catalog(&items, &output, &base_url, &s3_base_url, data.as_deref(), &multi_progress)?;
-            gen_pb.finish_with_message(format!(
-                "Generated {} collections, {} items, {} assets",
+            info!(
+                "  Generated {} collections, {} items, {} assets",
                 num_collections, num_items, num_assets
-            ));
+            );
 
-            // Compute detailed quality metrics
+            // Compute detailed quality metrics - build per-item issue map
             let excel_codes: std::collections::HashSet<_> = items.iter().map(|i| &i.code).collect();
 
-            // 1. Excel items without matching data folders
-            let excel_without_folders: Vec<_> = items.iter()
-                .filter(|i| !scanned_folders_for_report.contains_key(&i.code))
-                .map(|i| i.code.clone())
-                .collect();
+            // Build a per-item issue map: HashMap<item_code, Vec<issue_description>>
+            let mut item_issues: HashMap<String, Vec<String>> = HashMap::new();
 
-            // 2. Data folders without matching Excel entries (orphan folders)
-            let orphan_folders: Vec<_> = scanned_folders_for_report.keys()
+            // Track counts for summary
+            let mut count_no_data_folder = 0;
+            let mut count_missing_geometry = 0;
+            let mut count_no_archive = 0;
+
+            for item in &items {
+                let has_folder = scanned_folders_for_report.contains_key(&item.code);
+                let has_files = scanned_folders_for_report.get(&item.code).map(|f| !f.files.is_empty()).unwrap_or(false);
+
+                // Check: Excel item without data folder
+                if !has_folder {
+                    item_issues.entry(item.code.clone()).or_default().push("No data folder found (Excel entry only)".to_string());
+                    count_no_data_folder += 1;
+                }
+
+                // Check: Missing geometry
+                if item.geometry.is_none() {
+                    let reason = if has_files {
+                        "Missing geometry (files have no extractable CRS)"
+                    } else {
+                        "Missing geometry"
+                    };
+                    item_issues.entry(item.code.clone()).or_default().push(reason.to_string());
+                    count_missing_geometry += 1;
+                }
+
+                // Check: Has folder but no archive mapped
+                if has_folder && item.archive_file.is_none() {
+                    item_issues.entry(item.code.clone()).or_default().push("No archive mapped".to_string());
+                    count_no_archive += 1;
+                }
+            }
+
+            // Add validation issues from generate_catalog (skip ones we already track)
+            for issue in &issues {
+                // Skip issues we already track in the quality report above
+                if issue.message == "Missing geometry"
+                    || issue.message == "No archive file mapped"
+                    || issue.message == "No files found"
+                {
+                    continue;
+                }
+                item_issues.entry(issue.item_id.clone()).or_default().push(issue.message.clone());
+            }
+
+            // Orphan folders (not items, kept separate)
+            let mut orphan_folders: Vec<_> = scanned_folders_for_report.keys()
                 .filter(|code| !excel_codes.contains(code))
                 .cloned()
                 .collect();
+            orphan_folders.sort();
 
-            // 3. Items with files but no geometry
-            let files_no_geometry: Vec<_> = items.iter()
-                .filter(|i| {
-                    i.geometry.is_none() && scanned_folders_for_report.get(&i.code).map(|f| !f.files.is_empty()).unwrap_or(false)
-                })
-                .map(|i| i.code.clone())
-                .collect();
+            // Items with geometry (for stats)
+            let items_with_geometry_count = items.iter().filter(|i| i.geometry.is_some()).count();
 
-            // 4. Items with folders but no archive
-            let folders_no_archive: Vec<_> = items.iter()
-                .filter(|i| {
-                    scanned_folders_for_report.contains_key(&i.code) && i.archive_file.is_none()
-                })
-                .map(|i| i.code.clone())
-                .collect();
-
-            // 5. Items with geometry
-            let items_with_geometry: Vec<_> = items.iter()
-                .filter(|i| i.geometry.is_some())
-                .map(|i| i.code.clone())
-                .collect();
-
-            // 6. Items without geometry
-            let items_without_geometry: Vec<_> = items.iter()
-                .filter(|i| i.geometry.is_none())
-                .map(|i| i.code.clone())
-                .collect();
-
-            // Print comprehensive report (detailed issues first, summary at the end)
+            // Print comprehensive report - grouped by item
             info!("");
             info!("╔══════════════════════════════════════════════════════════════╗");
             info!("║                    DATA QUALITY REPORT                       ║");
             info!("╚══════════════════════════════════════════════════════════════╝");
-            info!("");
 
-            // 1. Excel items without folders
-            info!("=== Excel Items Without Data Folders ({}) ===", excel_without_folders.len());
-            if excel_without_folders.is_empty() {
-                info!("  (none - all Excel items have matching folders)");
-            } else {
-                for code in &excel_without_folders {
-                    warn!("  - {}", code);
+            // Items with issues (grouped by item ID)
+            let items_with_issues_count = item_issues.len();
+            if !item_issues.is_empty() {
+                info!("");
+                info!("=== Items With Issues ({}) ===", items_with_issues_count);
+                let mut sorted_codes: Vec<_> = item_issues.keys().cloned().collect();
+                sorted_codes.sort();
+                for code in sorted_codes {
+                    if let Some(issues_list) = item_issues.get(&code) {
+                        warn!("  {}:", code);
+                        for issue_msg in issues_list {
+                            warn!("    - {}", issue_msg);
+                        }
+                    }
                 }
             }
-            info!("");
 
-            // 2. Orphan folders
-            info!("=== Orphan Folders (not in Excel) ({}) ===", orphan_folders.len());
-            if orphan_folders.is_empty() {
-                info!("  (none - all folders have matching Excel entries)");
-            } else {
+            // Orphan folders (not items, kept separate)
+            if !orphan_folders.is_empty() {
+                info!("");
+                info!("=== Orphan Folders (not in Excel) ({}) ===", orphan_folders.len());
                 for code in &orphan_folders {
                     warn!("  - {}", code);
                 }
             }
-            info!("");
-
-            // 3. Files but no geometry
-            info!("=== Items With Files But No Geometry ({}) ===", files_no_geometry.len());
-            if files_no_geometry.is_empty() {
-                info!("  (none - all items with files have geometry)");
-            } else {
-                for code in &files_no_geometry {
-                    warn!("  - {}", code);
-                }
-            }
-            info!("");
-
-            // 4. Folders but no archive
-            info!("=== Items With Folders But No Archive ({}) ===", folders_no_archive.len());
-            if folders_no_archive.is_empty() {
-                info!("  (none - all items with folders have archives)");
-            } else {
-                for code in &folders_no_archive {
-                    warn!("  - {}", code);
-                }
-            }
-            info!("");
-
-            // Items without geometry (for reference)
-            info!("=== Items Missing Geometry ({}) ===", items_without_geometry.len());
-            if items_without_geometry.is_empty() {
-                info!("  (none - all items have geometry)");
-            } else {
-                for code in &items_without_geometry {
-                    warn!("  - {}", code);
-                }
-            }
-            info!("");
-
-            info!("=== Validation Issues ({}) ===", issues.len());
-            if issues.is_empty() {
-                info!("  (no validation issues)");
-            } else {
-                for issue in &issues {
-                    match issue.severity.as_str() {
-                        "error" => error!("  [{}] {}", issue.item_id, issue.message),
-                        "warning" => warn!("  [{}] {}", issue.item_id, issue.message),
-                        _ => info!("  [{}] {}", issue.item_id, issue.message),
-                    }
-                }
-            }
-            info!("");
 
             // Applied overrides section
-            info!("=== Applied Overrides ({}) ===", applied_overrides.len());
-            if applied_overrides.is_empty() {
-                info!("  (no overrides applied - all files had valid CRS metadata)");
-            } else {
+            if !applied_overrides.is_empty() {
+                info!("");
+                info!("=== Applied Overrides ({}) ===", applied_overrides.len());
                 for (code, source, reason) in &applied_overrides {
                     info!("  [{}] {} - {}", code, source, reason);
                 }
             }
-            info!("");
 
             // S3 validation (optional)
             if validate_s3 {
+                info!("");
                 info!("S3 validation not yet implemented");
                 // TODO: Implement S3 HEAD requests to verify files exist
-                info!("");
             }
 
-            // === SUMMARY (at the very end) ===
-            info!("╔══════════════════════════════════════════════════════════════╗");
-            info!("║                         SUMMARY                              ║");
-            info!("╚══════════════════════════════════════════════════════════════╝");
+            // === SUMMARY ===
             info!("");
-            info!("=== Overview ===");
-            info!("  Total Excel items:     {}", items.len());
-            info!("  Total data folders:    {}", scanned_folders_for_report.len());
-            info!("  Collections generated: {}", num_collections);
-            info!("  Items:                 {}", num_items);
-            info!("  Total assets:          {}", num_assets);
-            info!("");
-            info!("=== Geometry Coverage ===");
-            info!("  Items WITH geometry:    {} ({:.1}%)",
-                items_with_geometry.len(),
-                if items.is_empty() { 0.0 } else { items_with_geometry.len() as f64 / items.len() as f64 * 100.0 }
+            info!("=== Summary ===");
+            info!("  Total items:              {}", items.len());
+            info!("  Items with issues:        {} ({:.1}%)",
+                items_with_issues_count,
+                if items.is_empty() { 0.0 } else { items_with_issues_count as f64 / items.len() as f64 * 100.0 }
             );
-            info!("  Items WITHOUT geometry: {} ({:.1}%)",
-                items_without_geometry.len(),
-                if items.is_empty() { 0.0 } else { items_without_geometry.len() as f64 / items.len() as f64 * 100.0 }
+            info!("  Items with geometry:      {} ({:.1}%)",
+                items_with_geometry_count,
+                if items.is_empty() { 0.0 } else { items_with_geometry_count as f64 / items.len() as f64 * 100.0 }
             );
-            info!("");
-            info!("=== Issue Counts ===");
-            info!("  Excel items without folders: {}", excel_without_folders.len());
-            info!("  Orphan folders:              {}", orphan_folders.len());
-            info!("  Files but no geometry:       {}", files_no_geometry.len());
-            info!("  Folders but no archive:      {}", folders_no_archive.len());
-            info!("  Validation issues:           {}", issues.len());
-            info!("  Applied overrides:           {}", applied_overrides.len());
+            info!("  Items without geometry:   {}", count_missing_geometry);
+            info!("  Items without data:       {}", count_no_data_folder);
+            info!("  Items without archives:   {}", count_no_archive);
+            info!("  Orphan folders:           {}", orphan_folders.len());
 
             // Run validation after generation if requested
             if validate {
-                info!("");
-                info!("=== Running Post-Generation Validation ===");
                 let validation_issues = validate_catalog(&output)?;
+                let warning_count = validation_issues.iter().filter(|i| i.severity == "warning").count();
+                let error_count = validation_issues.iter().filter(|i| i.severity == "error").count();
 
-                let has_errors = validation_issues.iter().any(|i| i.severity == "error");
-                info!("Validation issues: {}", validation_issues.len());
-
-                if !validation_issues.is_empty() {
-                    for issue in &validation_issues {
-                        match issue.severity.as_str() {
-                            "error" => error!("  [{}] {}", issue.item_id, issue.message),
-                            "warning" => warn!("  [{}] {}", issue.item_id, issue.message),
-                            _ => info!("  [{}] {}", issue.item_id, issue.message),
-                        }
-                    }
-                }
-
-                if has_errors {
-                    error!("Validation failed with errors");
+                info!("");
+                if error_count > 0 {
+                    error!("Validation FAILED ({} warnings, {} errors)", warning_count, error_count);
                     std::process::exit(1);
                 } else {
-                    info!("Validation passed");
+                    info!("Validation passed ({} warnings, {} errors)", warning_count, error_count);
                 }
             }
         }

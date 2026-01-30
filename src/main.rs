@@ -596,6 +596,8 @@ async fn main() -> Result<()> {
         )
         // Search
         .route("/stac/search", get(search_items_get).post(search_items_post))
+        // KML generation (for SwissTopo integration)
+        .route("/stac/kml", get(generate_kml))
         // Health check
         .route("/health", get(health_check))
         .with_state(state)
@@ -1038,4 +1040,207 @@ async fn health_check(State(state): State<AppState>) -> impl IntoResponse {
         "collections": state.catalog.collections.len(),
         "items": state.catalog.items.len()
     }))
+}
+
+// ============================================================================
+// KML Generation Endpoint
+// ============================================================================
+
+/// Query parameters for KML generation
+#[derive(Debug, Deserialize)]
+struct KmlParams {
+    /// Collection ID (required)
+    collection_id: String,
+    /// Item ID (required)
+    item_id: String,
+    /// Name/label for the placemark (optional, defaults to item title or ID)
+    name: Option<String>,
+}
+
+/// Generate KML for a STAC item's geometry
+/// Only serves KML for existing catalog items (no arbitrary coordinates)
+async fn generate_kml(
+    State(state): State<AppState>,
+    Query(params): Query<KmlParams>,
+) -> impl IntoResponse {
+    // Look up item and get its geometry
+    match state.catalog.get_item(&params.collection_id, &params.item_id) {
+        Some(item) => {
+            // Use provided name, or fall back to item title/id
+            let name = params.name.unwrap_or_else(|| {
+                item.properties
+                    .additional_fields
+                    .get("title")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| item.id.clone())
+            });
+
+            // Try geometry first, then fall back to bbox
+            let kml_content = if let Some(ref geom) = item.geometry {
+                geojson_geometry_to_kml(&name, geom)
+            } else if let Some(bbox) = item.bbox_array() {
+                let (min_lon, min_lat, max_lon, max_lat) = (bbox[0], bbox[1], bbox[2], bbox[3]);
+                generate_kml_polygon(&name, &[
+                    (min_lon, min_lat),
+                    (max_lon, min_lat),
+                    (max_lon, max_lat),
+                    (min_lon, max_lat),
+                    (min_lon, min_lat),
+                ])
+            } else {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    [(header::CONTENT_TYPE, "text/plain")],
+                    "Item has no geometry or bbox".to_string(),
+                );
+            };
+
+            (
+                StatusCode::OK,
+                [(header::CONTENT_TYPE, "application/vnd.google-earth.kml+xml")],
+                kml_content,
+            )
+        }
+        None => (
+            StatusCode::NOT_FOUND,
+            [(header::CONTENT_TYPE, "text/plain")],
+            format!("Item not found: {}/{}", params.collection_id, params.item_id),
+        ),
+    }
+}
+
+/// Convert geojson::Geometry to KML
+fn geojson_geometry_to_kml(name: &str, geom: &geojson::Geometry) -> String {
+    use geojson::Value;
+
+    match &geom.value {
+        Value::Point(coords) => {
+            if coords.len() >= 2 {
+                generate_kml_point(name, coords[0], coords[1])
+            } else {
+                generate_kml_error("Invalid Point coordinates")
+            }
+        }
+        Value::Polygon(rings) => {
+            if let Some(outer_ring) = rings.first() {
+                let coords: Vec<(f64, f64)> = outer_ring
+                    .iter()
+                    .filter_map(|c| {
+                        if c.len() >= 2 {
+                            Some((c[0], c[1]))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                generate_kml_polygon(name, &coords)
+            } else {
+                generate_kml_error("Invalid Polygon coordinates")
+            }
+        }
+        Value::MultiPolygon(polygons) => {
+            // For MultiPolygon, just use the first polygon
+            if let Some(rings) = polygons.first() {
+                if let Some(outer_ring) = rings.first() {
+                    let coords: Vec<(f64, f64)> = outer_ring
+                        .iter()
+                        .filter_map(|c| {
+                            if c.len() >= 2 {
+                                Some((c[0], c[1]))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+                    generate_kml_polygon(name, &coords)
+                } else {
+                    generate_kml_error("Invalid MultiPolygon coordinates")
+                }
+            } else {
+                generate_kml_error("Empty MultiPolygon")
+            }
+        }
+        _ => generate_kml_error(&format!("Unsupported geometry type")),
+    }
+}
+
+/// Generate KML for a point
+fn generate_kml_point(name: &str, lon: f64, lat: f64) -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>{}</name>
+    <Style id="marker">
+      <IconStyle>
+        <color>ff0000ff</color>
+        <scale>1.2</scale>
+        <Icon><href>http://maps.google.com/mapfiles/kml/pushpin/red-pushpin.png</href></Icon>
+      </IconStyle>
+    </Style>
+    <Placemark>
+      <name>{}</name>
+      <styleUrl>#marker</styleUrl>
+      <Point>
+        <coordinates>{},{},0</coordinates>
+      </Point>
+    </Placemark>
+  </Document>
+</kml>"#,
+        name, name, lon, lat
+    )
+}
+
+/// Generate KML for a polygon
+fn generate_kml_polygon(name: &str, coords: &[(f64, f64)]) -> String {
+    let coord_str: String = coords
+        .iter()
+        .map(|(lon, lat)| format!("{},{},0", lon, lat))
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>{}</name>
+    <Style id="polygon">
+      <LineStyle>
+        <color>ff0000ff</color>
+        <width>2</width>
+      </LineStyle>
+      <PolyStyle>
+        <color>4d0000ff</color>
+      </PolyStyle>
+    </Style>
+    <Placemark>
+      <name>{}</name>
+      <styleUrl>#polygon</styleUrl>
+      <Polygon>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>{}</coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+      </Polygon>
+    </Placemark>
+  </Document>
+</kml>"#,
+        name, name, coord_str
+    )
+}
+
+/// Generate KML with an error message
+fn generate_kml_error(message: &str) -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>Error</name>
+    <description>{}</description>
+  </Document>
+</kml>"#,
+        message
+    )
 }
