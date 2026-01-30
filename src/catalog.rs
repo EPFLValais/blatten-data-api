@@ -5,7 +5,7 @@
 
 use anyhow::{Context, Result};
 use serde_json::Value;
-use std::{collections::HashMap, fs, path::Path};
+use std::{collections::HashMap, fs, io::BufRead, path::Path};
 use tracing::{debug, info, warn};
 
 // Re-export stac types we use
@@ -98,33 +98,37 @@ impl StacCatalog {
             }
         }
 
-        // Load all items
-        let all_items_path = dir.join("all_items.json");
-        let items = if all_items_path.exists() {
-            info!("Loading items from {:?}", all_items_path);
+        // Load all items from NDJSON (one item per line)
+        let items_path = dir.join("items.ndjson");
+        let items = if items_path.exists() {
+            info!("Loading items from {:?}", items_path);
 
-            let json = fs::read_to_string(&all_items_path)?;
-            let json = json.replace("${STAC_BASE_URL}", base_url);
-            let json = json.replace("${S3_BASE_URL}", s3_base_url);
+            let file = fs::File::open(&items_path)
+                .with_context(|| format!("Failed to open {:?}", items_path))?;
+            let reader = std::io::BufReader::new(file);
 
-            let feature_collection: Value = serde_json::from_str(&json)?;
+            let mut items = Vec::new();
+            for (line_num, line) in reader.lines().enumerate() {
+                let line = line?;
+                if line.trim().is_empty() {
+                    continue;
+                }
 
-            if let Some(features) = feature_collection.get("features").and_then(|f| f.as_array()) {
-                features
-                    .iter()
-                    .filter_map(|f| match serde_json::from_value::<StacItem>(f.clone()) {
-                        Ok(item) => Some(item),
-                        Err(e) => {
-                            warn!("Failed to parse item: {}", e);
-                            None
-                        }
-                    })
-                    .collect()
-            } else {
-                Vec::new()
+                // Replace URL placeholders
+                let line = line
+                    .replace("${STAC_BASE_URL}", base_url)
+                    .replace("${S3_BASE_URL}", s3_base_url);
+
+                match serde_json::from_str::<StacItem>(&line) {
+                    Ok(item) => items.push(item),
+                    Err(e) => {
+                        warn!("Failed to parse item at line {}: {}", line_num + 1, e);
+                    }
+                }
             }
+            items
         } else {
-            warn!("No all_items.json found");
+            warn!("No items.ndjson found");
             Vec::new()
         };
 
