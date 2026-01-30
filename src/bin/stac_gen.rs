@@ -1015,6 +1015,9 @@ struct ItemMetadata {
     files: Vec<FileInfo>,
     #[serde(default)]
     file_count: usize,
+    /// Base folder path for computing relative file paths
+    #[serde(skip)]
+    folder_path: Option<PathBuf>,
 }
 
 /// Validation issue
@@ -1175,6 +1178,7 @@ fn parse_xlsx(path: &PathBuf) -> Result<Vec<ItemMetadata>> {
             archive_size: None,
             files: Vec::new(),
             file_count: 0,
+            folder_path: None,
         };
 
         // Map product_id to collection
@@ -1337,13 +1341,22 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str) -> s
         (serde_json::Value::Null, None, None)
     };
 
-    // Build title (matching Python: "{sensor_id} - {sensor} - {dataset_id} - {location}")
+    // Build title: "{sensor_id} - {sensor} - {dataset} ({bundle})"
+    // Falls back to dataset_id if dataset is empty
+    let dataset_str = item.dataset.as_deref()
+        .filter(|s| !s.is_empty())
+        .or(item.dataset_id.as_deref())
+        .unwrap_or("");
+    let bundle_suffix = item.bundle.as_ref()
+        .filter(|b| !b.is_empty())
+        .map(|b| format!(" ({})", b))
+        .unwrap_or_default();
     let title = format!(
-        "{} - {} - {} - {}",
+        "{} - {} - {}{}",
         item.sensor_id.as_deref().unwrap_or(""),
         item.sensor.as_deref().unwrap_or(""),
-        item.dataset_id.as_deref().unwrap_or(""),
-        item.location.as_deref().unwrap_or("")
+        dataset_str,
+        bundle_suffix
     )
     .trim_matches(|c| c == ' ' || c == '-')
     .replace(" -  - ", " - ")
@@ -1399,6 +1412,13 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str) -> s
     }
     // File count from folder scanning
     properties["blatten:file_count"] = serde_json::json!(item.file_count);
+    // Dataset and bundle metadata
+    if let Some(ref ds) = item.dataset {
+        properties["blatten:dataset"] = serde_json::json!(ds);
+    }
+    if let Some(ref b) = item.bundle {
+        properties["blatten:bundle"] = serde_json::json!(b);
+    }
 
     // Build assets - now includes all individual files
     let mut assets = serde_json::Map::new();
@@ -1452,12 +1472,20 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str) -> s
             key
         };
 
-        // Build S3 path as {dataset_code}/{filename}
-        let rel_path = format!("{}/{}", item.code, filename);
+        // Build S3 path as assets/{code}/{relative_path_from_folder}
+        // This preserves subdirectory structure within the item folder
+        let rel_path_from_folder = if let Some(ref folder_path) = item.folder_path {
+            file_info.path.strip_prefix(folder_path)
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|_| filename.clone())
+        } else {
+            filename.clone()
+        };
+        let href = format!("{}/assets/{}/{}", s3_base_url, item.code, rel_path_from_folder);
         let mime_type = get_mime_type(&file_info.path);
 
         let mut asset = serde_json::json!({
-            "href": format!("{}/{}", s3_base_url, rel_path),
+            "href": href,
             "type": mime_type,
             "title": filename,
             "roles": ["data"]
@@ -2313,6 +2341,8 @@ fn main() -> Result<()> {
             for item in &mut items {
                 if let Some(folder) = scanned_folders_for_report.get(&item.code) {
                     item.file_count = folder.files.len();
+                    // Store folder path for computing relative file paths in URLs
+                    item.folder_path = Some(folder.path.clone());
                 }
 
                 if let Some(file_infos) = files_by_code.remove(&item.code) {

@@ -56,12 +56,12 @@
   },
   "summaries": {
     "processing_level": [
-      3,
-      2
+      2,
+      3
     ],
     "source": [
-      "DNAGE (HYDRO-VS)",
-      "DNAGE (HYDRO OFEV)"
+      "DNAGE (HYDRO OFEV)",
+      "DNAGE (HYDRO-VS)"
     ]
   },
   "links": [
