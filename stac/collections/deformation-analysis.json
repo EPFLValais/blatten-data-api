@@ -1,0 +1,88 @@
+{
+  "type": "Collection",
+  "id": "deformation-analysis",
+  "stac_version": "1.1.0",
+  "stac_extensions": [
+    "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json"
+  ],
+  "title": "Deformation Analysis",
+  "description": "DEFOX deformation analysis imagery",
+  "license": "CC-BY-NC-SA-4.0",
+  "keywords": [
+    "Birch Glacier",
+    "Blatten",
+    "Switzerland",
+    "glacier collapse",
+    "landslide",
+    "deformation analysis"
+  ],
+  "providers": [
+    {
+      "name": "Canton du Valais",
+      "roles": [
+        "licensor",
+        "host"
+      ],
+      "url": "https://www.vs.ch/"
+    },
+    {
+      "name": "EPFL ALPOLE",
+      "roles": [
+        "processor",
+        "host"
+      ],
+      "url": "https://www.epfl.ch/research/domains/alpole/"
+    }
+  ],
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [
+          7.838645748295971,
+          46.40440164951802,
+          7.840645748295971,
+          46.40640164951802
+        ]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          "2025-05-30T00:00:00Z",
+          "2025-06-30T23:59:59Z"
+        ]
+      ]
+    }
+  },
+  "summaries": {
+    "processing_level": [
+      3
+    ],
+    "source": [
+      "Geoprevent"
+    ]
+  },
+  "links": [
+    {
+      "rel": "self",
+      "href": "https://blatten-data.epfl.ch/stac/collections/deformation-analysis",
+      "type": "application/json"
+    },
+    {
+      "rel": "root",
+      "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "items",
+      "href": "https://blatten-data.epfl.ch/stac/collections/deformation-analysis/items",
+      "type": "application/geo+json"
+    }
+  ],
+  "assets": {}
+}

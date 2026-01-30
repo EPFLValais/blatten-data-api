@@ -1,0 +1,91 @@
+{
+  "type": "Collection",
+  "id": "webcam-image",
+  "stac_version": "1.1.0",
+  "stac_extensions": [
+    "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json"
+  ],
+  "title": "Webcam Images",
+  "description": "Time-series webcam imagery from monitoring cameras",
+  "license": "CC-BY-NC-SA-4.0",
+  "keywords": [
+    "Birch Glacier",
+    "Blatten",
+    "Switzerland",
+    "glacier collapse",
+    "landslide",
+    "webcam images"
+  ],
+  "providers": [
+    {
+      "name": "Canton du Valais",
+      "roles": [
+        "licensor",
+        "host"
+      ],
+      "url": "https://www.vs.ch/"
+    },
+    {
+      "name": "EPFL ALPOLE",
+      "roles": [
+        "processor",
+        "host"
+      ],
+      "url": "https://www.epfl.ch/research/domains/alpole/"
+    }
+  ],
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [
+          7.792003677760034,
+          46.404200903699554,
+          7.848483125190064,
+          46.423875224348556
+        ]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          "2020-02-05T00:00:00Z",
+          "2025-09-30T23:59:59Z"
+        ]
+      ]
+    }
+  },
+  "summaries": {
+    "processing_level": [
+      2,
+      4
+    ],
+    "source": [
+      "DNAGE (Guardaval)",
+      "Geoprevent",
+      "DNAGE (Geoazimut)"
+    ]
+  },
+  "links": [
+    {
+      "rel": "self",
+      "href": "https://blatten-data.epfl.ch/stac/collections/webcam-image",
+      "type": "application/json"
+    },
+    {
+      "rel": "root",
+      "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "items",
+      "href": "https://blatten-data.epfl.ch/stac/collections/webcam-image/items",
+      "type": "application/geo+json"
+    }
+  ],
+  "assets": {}
+}

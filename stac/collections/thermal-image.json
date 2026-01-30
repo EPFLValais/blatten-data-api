@@ -1,0 +1,88 @@
+{
+  "type": "Collection",
+  "id": "thermal-image",
+  "stac_version": "1.1.0",
+  "stac_extensions": [
+    "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json"
+  ],
+  "title": "Thermal Imagery",
+  "description": "Heliborne thermal infrared imagery",
+  "license": "CC-BY-NC-SA-4.0",
+  "keywords": [
+    "Birch Glacier",
+    "Blatten",
+    "Switzerland",
+    "glacier collapse",
+    "landslide",
+    "thermal imagery"
+  ],
+  "providers": [
+    {
+      "name": "Canton du Valais",
+      "roles": [
+        "licensor",
+        "host"
+      ],
+      "url": "https://www.vs.ch/"
+    },
+    {
+      "name": "EPFL ALPOLE",
+      "roles": [
+        "processor",
+        "host"
+      ],
+      "url": "https://www.epfl.ch/research/domains/alpole/"
+    }
+  ],
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [
+          7.7816962223644115,
+          46.400220630464425,
+          7.8259634511787315,
+          46.424079084704466
+        ]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          "2025-06-10T00:00:00Z",
+          "2025-06-10T23:59:59Z"
+        ]
+      ]
+    }
+  },
+  "summaries": {
+    "processing_level": [
+      2
+    ],
+    "source": [
+      "Terradata"
+    ]
+  },
+  "links": [
+    {
+      "rel": "self",
+      "href": "https://blatten-data.epfl.ch/stac/collections/thermal-image",
+      "type": "application/json"
+    },
+    {
+      "rel": "root",
+      "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "items",
+      "href": "https://blatten-data.epfl.ch/stac/collections/thermal-image/items",
+      "type": "application/geo+json"
+    }
+  ],
+  "assets": {}
+}

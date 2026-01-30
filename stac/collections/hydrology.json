@@ -1,0 +1,90 @@
+{
+  "type": "Collection",
+  "id": "hydrology",
+  "stac_version": "1.1.0",
+  "stac_extensions": [
+    "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json"
+  ],
+  "title": "Hydrology Data",
+  "description": "River discharge and water flow measurements",
+  "license": "CC-BY-NC-SA-4.0",
+  "keywords": [
+    "Birch Glacier",
+    "Blatten",
+    "Switzerland",
+    "glacier collapse",
+    "landslide",
+    "hydrology data"
+  ],
+  "providers": [
+    {
+      "name": "Canton du Valais",
+      "roles": [
+        "licensor",
+        "host"
+      ],
+      "url": "https://www.vs.ch/"
+    },
+    {
+      "name": "EPFL ALPOLE",
+      "roles": [
+        "processor",
+        "host"
+      ],
+      "url": "https://www.epfl.ch/research/domains/alpole/"
+    }
+  ],
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [
+          7.744080639135969,
+          46.30972217810538,
+          7.840145332585054,
+          46.42839170685856
+        ]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          "2025-05-01T00:00:00Z",
+          "2025-06-30T23:59:59Z"
+        ]
+      ]
+    }
+  },
+  "summaries": {
+    "processing_level": [
+      3,
+      2
+    ],
+    "source": [
+      "DNAGE (HYDRO-VS)",
+      "DNAGE (HYDRO OFEV)"
+    ]
+  },
+  "links": [
+    {
+      "rel": "self",
+      "href": "https://blatten-data.epfl.ch/stac/collections/hydrology",
+      "type": "application/json"
+    },
+    {
+      "rel": "root",
+      "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "items",
+      "href": "https://blatten-data.epfl.ch/stac/collections/hydrology/items",
+      "type": "application/geo+json"
+    }
+  ],
+  "assets": {}
+}
