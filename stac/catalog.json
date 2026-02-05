@@ -17,39 +17,15 @@
     },
     {
       "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/orthophoto",
+      "href": "https://blatten-data.epfl.ch/stac/collections/point-cloud",
       "type": "application/json",
-      "title": "Orthophotos"
-    },
-    {
-      "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/hydrology",
-      "type": "application/json",
-      "title": "Hydrology Data"
+      "title": "Point Clouds"
     },
     {
       "rel": "child",
       "href": "https://blatten-data.epfl.ch/stac/collections/radar-amplitude",
       "type": "application/json",
       "title": "Radar Amplitude"
-    },
-    {
-      "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/radar-displacement",
-      "type": "application/json",
-      "title": "Radar Displacement"
-    },
-    {
-      "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/lake-level",
-      "type": "application/json",
-      "title": "Lake Level"
-    },
-    {
-      "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/radar-velocity",
-      "type": "application/json",
-      "title": "Radar Velocity Data"
     },
     {
       "rel": "child",
@@ -65,15 +41,15 @@
     },
     {
       "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/thermal-image",
+      "href": "https://blatten-data.epfl.ch/stac/collections/gnss-data",
       "type": "application/json",
-      "title": "Thermal Imagery"
+      "title": "GNSS Position Data"
     },
     {
       "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/point-cloud",
+      "href": "https://blatten-data.epfl.ch/stac/collections/lake-level",
       "type": "application/json",
-      "title": "Point Clouds"
+      "title": "Lake Level"
     },
     {
       "rel": "child",
@@ -83,21 +59,9 @@
     },
     {
       "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/gnss-data",
+      "href": "https://blatten-data.epfl.ch/stac/collections/radar-velocity",
       "type": "application/json",
-      "title": "GNSS Position Data"
-    },
-    {
-      "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/radar-coherence",
-      "type": "application/json",
-      "title": "Radar Coherence"
-    },
-    {
-      "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/3d-model",
-      "type": "application/json",
-      "title": "3D Models"
+      "title": "Radar Velocity Data"
     },
     {
       "rel": "child",
@@ -107,9 +71,45 @@
     },
     {
       "rel": "child",
+      "href": "https://blatten-data.epfl.ch/stac/collections/orthophoto",
+      "type": "application/json",
+      "title": "Orthophotos"
+    },
+    {
+      "rel": "child",
       "href": "https://blatten-data.epfl.ch/stac/collections/dem",
       "type": "application/json",
       "title": "Digital Elevation Models"
+    },
+    {
+      "rel": "child",
+      "href": "https://blatten-data.epfl.ch/stac/collections/radar-displacement",
+      "type": "application/json",
+      "title": "Radar Displacement"
+    },
+    {
+      "rel": "child",
+      "href": "https://blatten-data.epfl.ch/stac/collections/3d-model",
+      "type": "application/json",
+      "title": "3D Models"
+    },
+    {
+      "rel": "child",
+      "href": "https://blatten-data.epfl.ch/stac/collections/thermal-image",
+      "type": "application/json",
+      "title": "Thermal Imagery"
+    },
+    {
+      "rel": "child",
+      "href": "https://blatten-data.epfl.ch/stac/collections/radar-coherence",
+      "type": "application/json",
+      "title": "Radar Coherence"
+    },
+    {
+      "rel": "child",
+      "href": "https://blatten-data.epfl.ch/stac/collections/hydrology",
+      "type": "application/json",
+      "title": "Hydrology Data"
     }
   ],
   "conformsTo": [
