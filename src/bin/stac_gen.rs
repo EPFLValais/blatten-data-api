@@ -148,6 +148,37 @@ enum Commands {
         /// Run validation after generation (exits with code 1 if errors found)
         #[arg(long)]
         validate: bool,
+
+        /// Output directory for organized data. Creates assets/ and archives/ subdirectories.
+        /// Shorthand for --assets-dir <dir>/assets --archives-dir <dir>/archives.
+        /// Individual --assets-dir and --archives-dir flags take precedence if also specified.
+        #[arg(long)]
+        organised_dir: Option<PathBuf>,
+
+        /// Output directory for organized assets (copies files from FINAL_Data here).
+        /// Files are copied to assets/<code>/ structure ready for S3 upload.
+        #[arg(long)]
+        assets_dir: Option<PathBuf>,
+
+        /// Force full rebuild (ignore existing manifest, recopy and rearchive everything)
+        #[arg(long)]
+        full_rebuild: bool,
+
+        /// Hash algorithm for file verification: sha256 (default) or xxhash
+        #[arg(long, default_value = "sha256")]
+        hash_algorithm: String,
+
+        /// Skip file operations (metadata only, no copy or archive creation)
+        #[arg(long)]
+        skip_copy: bool,
+
+        /// Dry run - show what would be done without making changes
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Skip confirmation prompt (for automated/CI use)
+        #[arg(short = 'y', long)]
+        yes: bool,
     },
     /// Validate an existing STAC catalog (for CI/CD pipelines)
     Validate {
@@ -267,6 +298,9 @@ struct FileInfo {
     /// LV95 geometry as GeoJSON for Projection Extension
     #[serde(default)]
     geometry_lv95: Option<serde_json::Value>,
+    /// SHA-256 hash (hex, no multihash prefix) — populated from manifest
+    #[serde(default)]
+    hash: Option<String>,
 }
 
 /// Scanned folder information
@@ -279,6 +313,212 @@ struct ScannedFolder {
     files: Vec<PathBuf>,
     archive_path: Option<PathBuf>,
     archive_size: Option<u64>,
+    /// Nested child codes found within this folder (e.g., 01Aa01 inside 01Aa00)
+    #[allow(dead_code)]
+    nested_codes: Vec<String>,
+}
+
+// =============================================================================
+// Data Manifest Structures (for integrated pipeline)
+// =============================================================================
+
+/// Hash algorithm for file verification
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum HashAlgorithm {
+    Sha256,
+    Xxhash,
+}
+
+impl std::str::FromStr for HashAlgorithm {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "sha256" => Ok(HashAlgorithm::Sha256),
+            "xxhash" | "xxh64" => Ok(HashAlgorithm::Xxhash),
+            _ => Err(format!("Unknown hash algorithm: {}", s)),
+        }
+    }
+}
+
+impl std::fmt::Display for HashAlgorithm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HashAlgorithm::Sha256 => write!(f, "sha256"),
+            HashAlgorithm::Xxhash => write!(f, "xxhash"),
+        }
+    }
+}
+
+/// File manifest entry with hash for verification
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct FileManifestEntry {
+    /// Path in assets dir: "assets/13Da01/orthophoto.tif"
+    asset_path: String,
+    /// Path in archive: "13Da01/orthophoto.tif"
+    archive_path: String,
+    /// Source path: "Terradata/13Da01/orthophoto.tif"
+    source_path: String,
+    /// File size in bytes
+    size: u64,
+    /// SHA-256 or xxHash checksum
+    hash: String,
+    /// Item code
+    code: String,
+    /// Provider
+    provider: String,
+    /// Last modified (Unix timestamp)
+    mtime: i64,
+}
+
+/// Archive manifest entry with content fingerprint for incremental builds
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ArchiveManifestEntry {
+    path: String,
+    size: u64,
+    /// SHA-256 hash of the archive file itself
+    hash: String,
+    /// Hash of sorted (filename, size, file_hash) — changes if any file changes
+    content_fingerprint: String,
+    file_count: usize,
+}
+
+/// Complete data manifest with all file hashes
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct DataManifest {
+    /// Manifest format version
+    version: u32,
+    /// ISO 8601 timestamp when generated
+    generated_at: String,
+    /// Hash algorithm used
+    hash_algorithm: HashAlgorithm,
+    /// Total number of files
+    total_files: usize,
+    /// Total size in bytes
+    total_size: u64,
+    /// Files keyed by asset_path
+    files: HashMap<String, FileManifestEntry>,
+    /// Archives created (code -> archive manifest entry)
+    archives: HashMap<String, ArchiveManifestEntry>,
+}
+
+impl DataManifest {
+    fn new(algorithm: HashAlgorithm) -> Self {
+        Self {
+            version: 1,
+            generated_at: Utc::now().to_rfc3339(),
+            hash_algorithm: algorithm,
+            total_files: 0,
+            total_size: 0,
+            files: HashMap::new(),
+            archives: HashMap::new(),
+        }
+    }
+
+    fn load(path: &Path) -> Result<Self> {
+        let content = fs::read_to_string(path)?;
+        serde_json::from_str(&content).context("Failed to parse manifest.json")
+    }
+
+    /// Save manifest to file
+    fn save(&self, path: &Path) -> Result<()> {
+        let content = serde_json::to_string_pretty(self)?;
+        fs::write(path, content)?;
+        Ok(())
+    }
+
+    /// Update totals from files map
+    fn update_totals(&mut self) {
+        self.total_files = self.files.len();
+        self.total_size = self.files.values().map(|f| f.size).sum();
+    }
+}
+
+// =============================================================================
+// Incremental Pipeline Helpers
+// =============================================================================
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FileAction {
+    New,       // Not in manifest
+    Changed,   // In manifest but target missing or size mismatch
+    Unchanged, // Target exists with matching size
+}
+
+fn classify_file_action(
+    asset_path: &str,
+    target: &Path,
+    existing_manifest: Option<&DataManifest>,
+) -> FileAction {
+    let Some(manifest) = existing_manifest else { return FileAction::New };
+    let Some(entry) = manifest.files.get(asset_path) else { return FileAction::New };
+    match fs::metadata(target) {
+        Ok(meta) if meta.len() == entry.size => FileAction::Unchanged,
+        _ => FileAction::Changed,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ArchiveAction {
+    Create,    // No archive on disk
+    Adopt,     // Archive exists, no manifest fingerprint
+    Rebuild,   // Archive exists, fingerprint changed
+    Unchanged, // Archive exists, fingerprint matches
+}
+
+fn classify_archive_action(
+    code: &str,
+    archive_path: &Path,
+    current_fingerprint: &str,
+    existing_manifest: Option<&DataManifest>,
+) -> ArchiveAction {
+    if !archive_path.exists() { return ArchiveAction::Create }
+    let Some(manifest) = existing_manifest else { return ArchiveAction::Adopt };
+    match manifest.archives.get(code) {
+        None => ArchiveAction::Adopt,
+        Some(entry) if entry.content_fingerprint == current_fingerprint => ArchiveAction::Unchanged,
+        Some(_) => ArchiveAction::Rebuild,
+    }
+}
+
+fn record_archive_entry(
+    manifest: &mut DataManifest,
+    code: &str,
+    archive_path: &Path,
+    archive_hash: &str,
+    size: u64,
+    content_fingerprint: String,
+    file_count: usize,
+    archives_dir: &Path,
+    write_sidecar: bool,
+) {
+    if write_sidecar {
+        let sidecar_path = archives_dir.join(format!("{}.zip.sha256", code));
+        if let Err(e) = fs::write(&sidecar_path, format!("{}  {}.zip\n", archive_hash, code)) {
+            warn!("Failed to write sidecar for {}: {}", code, e);
+        }
+    }
+    manifest.archives.insert(code.to_string(), ArchiveManifestEntry {
+        path: archive_path.to_string_lossy().to_string(),
+        size,
+        hash: archive_hash.to_string(),
+        content_fingerprint,
+        file_count,
+    });
+}
+
+struct CopyStats {
+    total: usize,
+    copied: usize,
+    skipped: usize,
+    bytes_copied: u64,
+}
+
+struct ArchiveStats {
+    created: usize,
+    adopted: usize,
+    rebuilt: usize,
+    unchanged: usize,
 }
 
 /// Collection definition
@@ -1018,6 +1258,9 @@ struct ItemMetadata {
     /// Base folder path for computing relative file paths
     #[serde(skip)]
     folder_path: Option<PathBuf>,
+    /// SHA-256 hash of the archive file (populated from manifest)
+    #[serde(default)]
+    archive_hash: Option<String>,
 }
 
 /// Validation issue
@@ -1179,6 +1422,7 @@ fn parse_xlsx(path: &PathBuf) -> Result<Vec<ItemMetadata>> {
             files: Vec::new(),
             file_count: 0,
             folder_path: None,
+            archive_hash: None,
         };
 
         // Map product_id to collection
@@ -1448,6 +1692,11 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str) -> s
             asset["file:size"] = serde_json::json!((mb * 1024.0 * 1024.0) as i64);
         }
 
+        // Add file checksum (multihash format: 1220 prefix for SHA-256)
+        if let Some(ref hash) = item.archive_hash {
+            asset["file:checksum"] = serde_json::json!(format!("1220{}", hash));
+        }
+
         assets.insert("archive".to_string(), asset);
     }
 
@@ -1494,6 +1743,11 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str) -> s
         // Add file size
         if file_info.size > 0 {
             asset["file:size"] = serde_json::json!(file_info.size);
+        }
+
+        // Add file checksum (multihash format: 1220 prefix for SHA-256)
+        if let Some(ref hash) = file_info.hash {
+            asset["file:checksum"] = serde_json::json!(format!("1220{}", hash));
         }
 
         // Extract and add datetime from filename
@@ -1868,13 +2122,38 @@ fn generate_catalog(
         }));
     }
 
+    // Add describedby, license, and about links
+    catalog_links.push(serde_json::json!({
+        "rel": "describedby",
+        "href": format!("{}/docs/dataset_overview.csv", s3_base_url),
+        "type": "text/csv",
+        "title": "Dataset Overview"
+    }));
+    catalog_links.push(serde_json::json!({
+        "rel": "describedby",
+        "href": format!("{}/docs/detailed_report.pdf", s3_base_url),
+        "type": "application/pdf",
+        "title": "Detailed Report"
+    }));
+    catalog_links.push(serde_json::json!({
+        "rel": "license",
+        "href": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+        "title": "Attribution-NonCommercial-ShareAlike 4.0 International"
+    }));
+    catalog_links.push(serde_json::json!({
+        "rel": "about",
+        "href": "https://blatten-data.epfl.ch/",
+        "type": "text/html",
+        "title": "Blatten Data website"
+    }));
+
     // Write root catalog
     let catalog = serde_json::json!({
         "type": "Catalog",
         "id": "birch-glacier-collapse",
         "stac_version": STAC_VERSION,
         "title": "Birch Glacier Collapse and Landslide Dataset",
-        "description": "Dataset collected during the 2025 Birch glacier collapse and landslide at Blatten, CH-VS",
+        "description": "Dataset collected during the 2025 Birch glacier collapse and landslide at Blatten, CH-VS. Licensed under Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0). By using this API you confirm that you have read the Dataset Overview and Detailed Report. This data is provided \"as is\" without warranty of any kind, express or implied.",
         "links": catalog_links,
         "conformsTo": [
             "https://api.stacspec.org/v1.0.0/core",
@@ -2122,7 +2401,17 @@ fn main() -> Result<()> {
             threads,
             verbose,
             validate,
+            organised_dir,
+            assets_dir,
+            full_rebuild,
+            hash_algorithm,
+            skip_copy,
+            dry_run,
+            yes,
         } => {
+            // Resolve assets_dir and archives_dir from organised_dir if not explicitly set
+            let assets_dir = assets_dir.or_else(|| organised_dir.as_ref().map(|d| d.join("assets")));
+            let archives_dir = archives_dir.or_else(|| organised_dir.as_ref().map(|d| d.join("archives")));
             info!("=== STAC Generator (v{}) ===", STAC_VERSION);
 
             // Configure rayon thread pool
@@ -2325,6 +2614,7 @@ fn main() -> Result<()> {
                         geometry,
                         bbox_lv95,
                         geometry_lv95,
+                        hash: None,
                     })
                 })
                 .collect();
@@ -2479,6 +2769,257 @@ fn main() -> Result<()> {
                     "items": items
                 });
                 fs::write(meta_path, serde_json::to_string_pretty(&metadata)?)?;
+            }
+
+            // =================================================================
+            // Integrated Pipeline: Copy files, create archives, generate manifest
+            // =================================================================
+            #[allow(unused_assignments)]
+            let mut data_manifest: Option<DataManifest> = None;
+
+            // Parse hash algorithm
+            let algorithm: HashAlgorithm = hash_algorithm.parse().unwrap_or(HashAlgorithm::Sha256);
+
+            if let Some(ref assets_path) = assets_dir {
+                if !skip_copy {
+                    info!("");
+                    info!("=== Integrated Data Pipeline ===");
+                    if dry_run {
+                        info!("  Mode: DRY RUN (no files will be modified)");
+                    }
+                    info!("  Hash algorithm: {}", algorithm);
+
+                    // Load existing manifest (incremental is the default)
+                    let existing_manifest = if full_rebuild {
+                        info!("  Mode: FULL REBUILD (ignoring existing manifest)");
+                        None
+                    } else {
+                        let manifest_path = output.join("manifest.json");
+                        if manifest_path.exists() {
+                            match DataManifest::load(&manifest_path) {
+                                Ok(m) => {
+                                    info!("  Loaded existing manifest ({} files, {} archives)",
+                                        m.total_files, m.archives.len());
+                                    Some(m)
+                                }
+                                Err(e) => {
+                                    warn!("  Failed to load manifest (full rebuild): {}", e);
+                                    None
+                                }
+                            }
+                        } else {
+                            info!("  No existing manifest found, will process all files");
+                            None
+                        }
+                    };
+
+                    // =========================================================
+                    // Pre-flight summary: show what will change before doing work
+                    // =========================================================
+                    {
+                        let total_files: usize = scanned_folders_for_report.values()
+                            .map(|f| f.files.len()).sum();
+                        let total_codes = scanned_folders_for_report.len();
+
+                        // Classify files per-code using shared helper
+                        let mut files_new = 0usize;
+                        let mut files_changed = 0usize;
+                        let mut files_unchanged = 0usize;
+                        // Track per-code: does this code have any new/changed files?
+                        let mut code_has_changes: HashMap<&String, bool> = HashMap::new();
+
+                        for (code, folder) in &scanned_folders_for_report {
+                            let code_dir = assets_path.join(code);
+                            let mut this_code_changed = false;
+                            for source in &folder.files {
+                                let rel_path = match source.strip_prefix(&folder.path) {
+                                    Ok(p) => p.to_path_buf(),
+                                    Err(_) => source.file_name()
+                                        .map(PathBuf::from)
+                                        .unwrap_or_else(|| source.clone()),
+                                };
+                                let target = code_dir.join(&rel_path);
+                                let asset_path = format!("assets/{}/{}", code, rel_path.display());
+                                match classify_file_action(&asset_path, &target, existing_manifest.as_ref()) {
+                                    FileAction::New => { files_new += 1; this_code_changed = true; }
+                                    FileAction::Changed => { files_changed += 1; this_code_changed = true; }
+                                    FileAction::Unchanged => { files_unchanged += 1; }
+                                }
+                            }
+                            code_has_changes.insert(code, this_code_changed);
+                        }
+
+                        // If no manifest, all files are new
+                        if existing_manifest.is_none() {
+                            files_new = total_files;
+                            files_changed = 0;
+                            files_unchanged = 0;
+                            for v in code_has_changes.values_mut() { *v = true; }
+                        }
+
+                        // Archive prediction using per-code changes
+                        let (archives_create, archives_adopt, archives_rebuild, archives_unchanged) =
+                            if let Some(ref arch_path) = archives_dir {
+                                let mut create = 0usize;
+                                let mut adopt = 0usize;
+                                let mut rebuild = 0usize;
+                                let mut unchanged = 0usize;
+                                for code in scanned_folders_for_report.keys() {
+                                    let archive_path = arch_path.join(format!("{}.zip", code));
+                                    let changed = code_has_changes.get(code).copied().unwrap_or(true);
+                                    if !archive_path.exists() {
+                                        create += 1;
+                                    } else if existing_manifest.as_ref()
+                                        .and_then(|em| em.archives.get(code)).is_none()
+                                    {
+                                        adopt += 1;
+                                    } else if changed {
+                                        rebuild += 1;
+                                    } else {
+                                        unchanged += 1;
+                                    }
+                                }
+                                (create, adopt, rebuild, unchanged)
+                            } else {
+                                (0, 0, 0, 0)
+                            };
+
+                        info!("");
+                        info!("--- Pipeline Summary ---");
+                        info!("  Items: {} codes from {} scanned folders", total_codes, total_codes);
+                        info!("  Files: {} total", total_files);
+                        if existing_manifest.is_some() {
+                            info!("    {} new, {} changed, {} unchanged",
+                                files_new, files_changed, files_unchanged);
+                            let to_copy = files_new + files_changed;
+                            if to_copy == 0 {
+                                info!("    -> No files to copy");
+                            } else {
+                                info!("    -> {} files to copy", to_copy);
+                            }
+                        } else {
+                            info!("    -> All {} files will be copied (no prior manifest)", total_files);
+                        }
+                        if archives_dir.is_some() {
+                            info!("  Archives: {} codes", total_codes);
+                            let mut parts = Vec::new();
+                            if archives_create > 0 { parts.push(format!("{} to create", archives_create)); }
+                            if archives_adopt > 0 { parts.push(format!("{} to adopt (exist on disk)", archives_adopt)); }
+                            if archives_rebuild > 0 { parts.push(format!("{} to rebuild", archives_rebuild)); }
+                            if archives_unchanged > 0 { parts.push(format!("{} unchanged", archives_unchanged)); }
+                            if parts.is_empty() {
+                                info!("    -> All {} archives will be created", total_codes);
+                            } else {
+                                info!("    {}", parts.join(", "));
+                            }
+                        }
+                        info!("------------------------");
+                        info!("");
+                    }
+
+                    // Prompt for confirmation (unless --yes or --dry-run)
+                    if !dry_run && !yes {
+                        // Suspend the multi_progress so our prompt isn't clobbered
+                        multi_progress.suspend(|| {
+                            eprint!("Proceed? [Y/n] ");
+                            use std::io::Write;
+                            std::io::stderr().flush().ok();
+                            let mut input = String::new();
+                            std::io::stdin().read_line(&mut input).ok();
+                            let input = input.trim().to_lowercase();
+                            if input == "n" || input == "no" {
+                                info!("Aborted by user.");
+                                std::process::exit(0);
+                            }
+                        });
+                    }
+
+                    // Step: Copy files to assets directory
+                    let copy_pb = multi_progress.add(ProgressBar::new(0));
+                    copy_pb.set_style(
+                        ProgressStyle::default_bar()
+                            .template("{spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} {msg}")
+                            .expect("Invalid bar template")
+                            .progress_chars("#>-"),
+                    );
+
+                    let (mut manifest, copy_stats) = copy_files_to_assets(
+                        &scanned_folders_for_report,
+                        assets_path,
+                        existing_manifest.as_ref(),
+                        algorithm,
+                        dry_run,
+                        &copy_pb,
+                    )?;
+
+                    // Build accurate finish message from copy stats
+                    {
+                        let mut parts = Vec::new();
+                        if copy_stats.copied > 0 {
+                            parts.push(format!("{} copied ({})", copy_stats.copied, format_size(copy_stats.bytes_copied)));
+                        }
+                        if copy_stats.skipped > 0 {
+                            parts.push(format!("{} unchanged", copy_stats.skipped));
+                        }
+                        copy_pb.finish_with_message(format!("Files: {}", parts.join(", ")));
+                    }
+
+                    // Step: Create archives if archives_dir is provided
+                    if let Some(ref arch_path) = archives_dir {
+                        let archive_pb = multi_progress.add(ProgressBar::new(0));
+                        archive_pb.set_style(
+                            ProgressStyle::default_bar()
+                                .template("{spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} {msg}")
+                                .expect("Invalid bar template")
+                                .progress_chars("#>-"),
+                        );
+
+                        create_archives_from_assets(
+                            &scanned_folders_for_report,
+                            assets_path,
+                            arch_path,
+                            &mut manifest,
+                            existing_manifest.as_ref(),
+                            dry_run,
+                            &archive_pb,
+                        )?;
+                    }
+
+                    // Save manifest
+                    if !dry_run {
+                        let manifest_path = output.join("manifest.json");
+                        manifest.save(&manifest_path)?;
+                        info!("  Saved manifest to {:?}", manifest_path);
+                    }
+
+                    data_manifest = Some(manifest);
+                }
+            }
+
+            // Populate file hashes and archive hashes from manifest into items
+            if let Some(ref manifest) = data_manifest {
+                for item in &mut items {
+                    // Populate file hashes
+                    for file_info in &mut item.files {
+                        let rel = if let Some(ref folder) = item.folder_path {
+                            file_info.path.strip_prefix(folder)
+                                .map(|p| p.to_string_lossy().to_string())
+                                .unwrap_or_default()
+                        } else {
+                            file_info.path.file_name()
+                                .map(|n| n.to_string_lossy().to_string())
+                                .unwrap_or_default()
+                        };
+                        let asset_path = format!("assets/{}/{}", item.code, rel);
+                        if let Some(entry) = manifest.files.get(&asset_path) {
+                            file_info.hash = Some(entry.hash.clone());
+                        }
+                    }
+                    // Populate archive hash
+                    if let Some(archive_entry) = manifest.archives.get(&item.code) {
+                        item.archive_hash = Some(archive_entry.hash.clone());
+                    }
+                }
             }
 
             // Generate STAC catalog
@@ -2946,15 +3487,271 @@ fn format_size(bytes: u64) -> String {
 }
 
 // =============================================================================
+// File Hashing
+// =============================================================================
+
+/// Compute hash of a file using the specified algorithm
+fn hash_file(path: &Path, algorithm: HashAlgorithm) -> Result<String> {
+    use std::io::Read;
+
+    let mut file = File::open(path)?;
+    let mut buffer = vec![0u8; 64 * 1024]; // 64KB buffer
+
+    match algorithm {
+        HashAlgorithm::Sha256 => {
+            use sha2::{Sha256, Digest};
+            let mut hasher = Sha256::new();
+            loop {
+                let bytes_read = file.read(&mut buffer)?;
+                if bytes_read == 0 {
+                    break;
+                }
+                hasher.update(&buffer[..bytes_read]);
+            }
+            Ok(format!("{:x}", hasher.finalize()))
+        }
+        HashAlgorithm::Xxhash => {
+            use xxhash_rust::xxh64::Xxh64;
+            let mut hasher = Xxh64::new(0);
+            loop {
+                let bytes_read = file.read(&mut buffer)?;
+                if bytes_read == 0 {
+                    break;
+                }
+                hasher.update(&buffer[..bytes_read]);
+            }
+            Ok(format!("{:016x}", hasher.digest()))
+        }
+    }
+}
+
+/// Get file modification time as Unix timestamp
+#[cfg(unix)]
+fn get_mtime(path: &Path) -> Result<i64> {
+    use std::os::unix::fs::MetadataExt;
+    let meta = fs::metadata(path)?;
+    Ok(meta.mtime())
+}
+
+#[cfg(not(unix))]
+fn get_mtime(path: &Path) -> Result<i64> {
+    let meta = fs::metadata(path)?;
+    let modified = meta.modified()?;
+    let duration = modified.duration_since(std::time::UNIX_EPOCH)?;
+    Ok(duration.as_secs() as i64)
+}
+
+// =============================================================================
+// Integrated Pipeline Functions
+// =============================================================================
+
+/// Copy files from scanned folders to assets directory with hashing
+/// Returns a DataManifest with all processed files
+fn copy_files_to_assets(
+    scanned: &HashMap<String, ScannedFolder>,
+    assets_dir: &Path,
+    existing_manifest: Option<&DataManifest>,
+    algorithm: HashAlgorithm,
+    dry_run: bool,
+    progress: &ProgressBar,
+) -> Result<(DataManifest, CopyStats)> {
+    let mut manifest = DataManifest::new(algorithm);
+    let mut stats = CopyStats { total: 0, copied: 0, skipped: 0, bytes_copied: 0 };
+
+    let total_files: usize = scanned.values().map(|f| f.files.len()).sum();
+    progress.set_length(total_files as u64);
+    progress.set_message("Processing files...");
+
+    for (code, folder) in scanned {
+        let code_dir = assets_dir.join(code);
+
+        if !dry_run {
+            fs::create_dir_all(&code_dir)?;
+        }
+
+        for source in &folder.files {
+            let rel_path = match source.strip_prefix(&folder.path) {
+                Ok(p) => p.to_path_buf(),
+                Err(_) => source.file_name()
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| source.clone()),
+            };
+            let target = code_dir.join(&rel_path);
+            let asset_path = format!("assets/{}/{}", code, rel_path.display());
+            let action = classify_file_action(&asset_path, &target, existing_manifest);
+
+            stats.total += 1;
+
+            let (size, hash, mtime) = match action {
+                FileAction::Unchanged => {
+                    // Carry forward existing manifest entry
+                    let entry = existing_manifest.unwrap().files.get(&asset_path).unwrap();
+                    stats.skipped += 1;
+                    (entry.size, entry.hash.clone(), entry.mtime)
+                }
+                _ if dry_run => {
+                    let meta = fs::metadata(source)?;
+                    let mtime = get_mtime(source).unwrap_or(0);
+                    stats.copied += 1;
+                    stats.bytes_copied += meta.len();
+                    (meta.len(), "dry-run".to_string(), mtime)
+                }
+                _ => {
+                    // New or Changed — copy, hash, record
+                    if let Some(parent) = target.parent() {
+                        fs::create_dir_all(parent)?;
+                    }
+                    fs::copy(source, &target)?;
+                    let hash = hash_file(&target, algorithm)?;
+                    let size = fs::metadata(&target)?.len();
+                    let mtime = get_mtime(source)?;
+                    stats.copied += 1;
+                    stats.bytes_copied += size;
+                    (size, hash, mtime)
+                }
+            };
+
+            let entry = FileManifestEntry {
+                asset_path: asset_path.clone(),
+                archive_path: format!("{}/{}", code, rel_path.display()),
+                source_path: source.to_string_lossy().to_string(),
+                size,
+                hash,
+                code: code.clone(),
+                provider: folder.provider.clone(),
+                mtime,
+            };
+
+            manifest.files.insert(asset_path, entry);
+            progress.inc(1);
+        }
+    }
+
+    manifest.update_totals();
+    Ok((manifest, stats))
+}
+
+/// Compute a content fingerprint for a code's files in the manifest.
+/// The fingerprint changes if any file's name, size, or hash changes.
+fn compute_archive_fingerprint(manifest: &DataManifest, code: &str) -> String {
+    use sha2::{Sha256, Digest};
+    let mut entries: Vec<_> = manifest.files.iter()
+        .filter(|(_, e)| e.code == code)
+        .collect();
+    entries.sort_by_key(|(path, _)| *path);
+
+    let mut hasher = Sha256::new();
+    for (path, entry) in &entries {
+        hasher.update(format!("{}:{}:{}\n", path, entry.size, entry.hash).as_bytes());
+    }
+    format!("{:x}", hasher.finalize())
+}
+
+fn create_archives_from_assets(
+    scanned: &HashMap<String, ScannedFolder>,
+    assets_dir: &Path,
+    archives_dir: &Path,
+    manifest: &mut DataManifest,
+    existing_manifest: Option<&DataManifest>,
+    dry_run: bool,
+    progress: &ProgressBar,
+) -> Result<ArchiveStats> {
+    progress.set_length(scanned.len() as u64);
+    progress.set_message("Processing archives...");
+
+    if !dry_run {
+        fs::create_dir_all(archives_dir)?;
+    }
+
+    let mut stats = ArchiveStats { created: 0, adopted: 0, rebuilt: 0, unchanged: 0 };
+
+    for code in scanned.keys() {
+        let source_dir = assets_dir.join(code);
+        let archive_path = archives_dir.join(format!("{}.zip", code));
+
+        if source_dir.exists() || dry_run {
+            let fingerprint = compute_archive_fingerprint(manifest, code);
+            let file_count = manifest.files.values().filter(|e| e.code == *code).count();
+
+            if dry_run {
+                manifest.archives.insert(
+                    code.clone(),
+                    ArchiveManifestEntry {
+                        path: archive_path.to_string_lossy().to_string(),
+                        size: 0,
+                        hash: String::new(),
+                        content_fingerprint: fingerprint,
+                        file_count,
+                    },
+                );
+            } else {
+                let action = classify_archive_action(code, &archive_path, &fingerprint, existing_manifest);
+
+                match action {
+                    ArchiveAction::Unchanged => {
+                        let existing_entry = existing_manifest.unwrap().archives.get(code).unwrap();
+                        manifest.archives.insert(code.clone(), existing_entry.clone());
+                        stats.unchanged += 1;
+                    }
+                    ArchiveAction::Adopt => {
+                        let size = fs::metadata(&archive_path).map(|m| m.len()).unwrap_or(0);
+                        let archive_hash = hash_file(&archive_path, HashAlgorithm::Sha256)
+                            .unwrap_or_default();
+                        record_archive_entry(
+                            manifest, code, &archive_path, &archive_hash,
+                            size, fingerprint, file_count, archives_dir, true,
+                        );
+                        stats.adopted += 1;
+                    }
+                    ArchiveAction::Create | ArchiveAction::Rebuild => {
+                        match create_archive(&source_dir, &archive_path) {
+                            Ok(size) => {
+                                let archive_hash = hash_file(&archive_path, HashAlgorithm::Sha256)
+                                    .unwrap_or_default();
+                                record_archive_entry(
+                                    manifest, code, &archive_path, &archive_hash,
+                                    size, fingerprint, file_count, archives_dir, true,
+                                );
+                                if action == ArchiveAction::Rebuild {
+                                    stats.rebuilt += 1;
+                                } else {
+                                    stats.created += 1;
+                                }
+                            }
+                            Err(e) => {
+                                warn!("Failed to create archive for {}: {}", code, e);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        progress.inc(1);
+    }
+
+    // Build finish message from non-zero stats
+    let mut parts = Vec::new();
+    if stats.created > 0 { parts.push(format!("{} created", stats.created)); }
+    if stats.adopted > 0 { parts.push(format!("{} adopted", stats.adopted)); }
+    if stats.rebuilt > 0 { parts.push(format!("{} rebuilt", stats.rebuilt)); }
+    if stats.unchanged > 0 { parts.push(format!("{} unchanged", stats.unchanged)); }
+    progress.finish_with_message(format!("Archives: {}", parts.join(", ")));
+
+    Ok(stats)
+}
+
+// =============================================================================
 // Folder Scanning
 // =============================================================================
 
 /// Scan FINAL_Data directory for provider folders and map to item codes
+/// Supports nested dataset detection where child codes exist within parent folders
 fn scan_data_folders(
     data: &Path,
     dnage_mappings_path: Option<&Path>,
 ) -> Result<HashMap<String, ScannedFolder>> {
-    let mut folders = HashMap::new();
+    let mut folders: HashMap<String, ScannedFolder> = HashMap::new();
 
     // Load DNAGE mappings if provided
     let dnage_mappings: HashMap<String, serde_json::Value> = if let Some(path) = dnage_mappings_path {
@@ -2988,25 +3785,32 @@ fn scan_data_folders(
             let folder_name = entry.file_name().to_string_lossy().to_string();
 
             // Extract code from folder name (e.g., "13Da01_Orthophoto_..." -> "13Da01")
-            let code = extract_code_from_folder(&folder_name, &dnage_mappings);
+            let parent_code = extract_code_from_folder(&folder_name, &dnage_mappings);
 
-            if let Some(code) = code {
-                // Collect files in this folder
-                let files: Vec<PathBuf> = WalkDir::new(entry.path())
-                    .into_iter()
-                    .filter_map(|e| e.ok())
-                    .filter(|e| e.file_type().is_file())
-                    .map(|e| e.path().to_path_buf())
-                    .collect();
+            if let Some(parent_code) = parent_code {
+                // Scan for nested code folders and collect files
+                let nested_results = scan_folder_with_nested(entry.path(), &parent_code, provider);
 
-                folders.insert(code.clone(), ScannedFolder {
-                    code,
-                    path: entry.path().to_path_buf(),
-                    provider: provider.to_string(),
-                    files,
-                    archive_path: None,
-                    archive_size: None,
-                });
+                // Add all discovered folders (parent and children)
+                for (code, folder) in nested_results {
+                    // If parent already exists, merge files and nested_codes
+                    if let Some(existing) = folders.get_mut(&code) {
+                        // Merge files (avoid duplicates)
+                        for file in folder.files {
+                            if !existing.files.contains(&file) {
+                                existing.files.push(file);
+                            }
+                        }
+                        // Merge nested_codes
+                        for nested in folder.nested_codes {
+                            if !existing.nested_codes.contains(&nested) {
+                                existing.nested_codes.push(nested);
+                            }
+                        }
+                    } else {
+                        folders.insert(code, folder);
+                    }
+                }
             }
         }
     }
@@ -3034,12 +3838,113 @@ fn scan_data_folders(
                     files,
                     archive_path: None,
                     archive_size: None,
+                    nested_codes: Vec::new(),
                 });
             }
         }
     }
 
     Ok(folders)
+}
+
+/// Scan a folder and detect nested code subfolders
+/// Returns HashMap<code, ScannedFolder> with:
+/// - Parent (00 suffix): Gets ALL files in folder
+/// - Children (01, 02, ...): Get files from their specific subfolder
+/// - Both parent and children exist as separate entries
+fn scan_folder_with_nested(
+    folder_path: &Path,
+    parent_code: &str,
+    provider: &str,
+) -> HashMap<String, ScannedFolder> {
+    let mut results: HashMap<String, ScannedFolder> = HashMap::new();
+
+    // Initialize parent with empty file/nested lists
+    results.insert(parent_code.to_string(), ScannedFolder {
+        code: parent_code.to_string(),
+        path: folder_path.to_path_buf(),
+        provider: provider.to_string(),
+        files: Vec::new(),
+        archive_path: None,
+        archive_size: None,
+        nested_codes: Vec::new(),
+    });
+
+    // Walk all entries in the folder
+    for entry in WalkDir::new(folder_path).into_iter().filter_map(|e| e.ok()) {
+        let path = entry.path();
+
+        // Check for nested code folder (directory with a different code pattern)
+        if path.is_dir() && path != folder_path {
+            let dir_name = path.file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+
+            // Try to extract a code from this subdirectory name
+            if let Some(nested_code) = extract_nested_code(&dir_name) {
+                // Only create new entry if it's different from parent
+                if nested_code != parent_code {
+                    // Track as nested code in parent
+                    if let Some(parent) = results.get_mut(parent_code) {
+                        if !parent.nested_codes.contains(&nested_code) {
+                            parent.nested_codes.push(nested_code.clone());
+                        }
+                    }
+
+                    // Create entry for nested code if not exists
+                    results.entry(nested_code.clone()).or_insert_with(|| ScannedFolder {
+                        code: nested_code,
+                        path: path.to_path_buf(),
+                        provider: provider.to_string(),
+                        files: Vec::new(),
+                        archive_path: None,
+                        archive_size: None,
+                        nested_codes: Vec::new(),
+                    });
+                }
+            }
+        }
+
+        // Add files to appropriate codes
+        if path.is_file() {
+            // Always add to parent
+            if let Some(parent) = results.get_mut(parent_code) {
+                parent.files.push(path.to_path_buf());
+            }
+
+            // Also add to nested code if file is inside a nested code folder
+            for ancestor in path.ancestors().skip(1) {
+                if ancestor == folder_path {
+                    break;
+                }
+                let ancestor_name = ancestor.file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_default();
+
+                if let Some(nested_code) = extract_nested_code(&ancestor_name) {
+                    if nested_code != parent_code {
+                        if let Some(folder) = results.get_mut(&nested_code) {
+                            if !folder.files.contains(&path.to_path_buf()) {
+                                folder.files.push(path.to_path_buf());
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    results
+}
+
+/// Extract a nested code from a folder/file name
+/// Matches patterns like "01Aa01_Sensalpin-Camera" or just "01Aa01"
+fn extract_nested_code(name: &str) -> Option<String> {
+    let code_re = regex::Regex::new(r"^(\d{2}[A-Z][a-z]\d{2})").ok()?;
+    code_re.captures(name).and_then(|caps| {
+        caps.get(1).map(|m| m.as_str().to_string())
+    })
 }
 
 /// Extract item code from folder name

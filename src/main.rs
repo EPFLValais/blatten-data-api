@@ -87,9 +87,61 @@ struct SearchParams {
     source: Option<String>,
     /// Filter by processing level (1-4)
     processing_level: Option<i32>,
+    /// Filter by sensor name (exact match)
+    sensor: Option<String>,
+    /// Full-text search across item metadata and asset names
+    q: Option<String>,
     /// Exclude assets from response (for lightweight listing)
     #[serde(default)]
     exclude_assets: bool,
+}
+
+/// Deserializer that accepts either a string or array of strings for the `q` parameter
+fn deserialize_q_param<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de;
+
+    struct QVisitor;
+
+    impl<'de> de::Visitor<'de> for QVisitor {
+        type Value = Option<Vec<String>>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a string or array of strings")
+        }
+
+        fn visit_none<E: de::Error>(self) -> Result<Self::Value, E> {
+            Ok(None)
+        }
+
+        fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
+            Ok(None)
+        }
+
+        fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+            let terms: Vec<String> = v.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+            if terms.is_empty() { Ok(None) } else { Ok(Some(terms)) }
+        }
+
+        fn visit_string<E: de::Error>(self, v: String) -> Result<Self::Value, E> {
+            self.visit_str(&v)
+        }
+
+        fn visit_seq<A: de::SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+            let mut terms = Vec::new();
+            while let Some(s) = seq.next_element::<String>()? {
+                let trimmed = s.trim().to_string();
+                if !trimmed.is_empty() {
+                    terms.push(trimmed);
+                }
+            }
+            if terms.is_empty() { Ok(None) } else { Ok(Some(terms)) }
+        }
+    }
+
+    deserializer.deserialize_any(QVisitor)
 }
 
 /// POST body for search (same fields as GET params)
@@ -102,6 +154,9 @@ struct SearchBody {
     offset: Option<usize>,
     source: Option<String>,
     processing_level: Option<i32>,
+    sensor: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_q_param")]
+    q: Option<Vec<String>>,
     #[serde(default)]
     exclude_assets: bool,
 }
@@ -294,6 +349,8 @@ struct ValidatedSearch {
     offset: usize,
     source: Option<String>,
     processing_level: Option<i32>,
+    sensor: Option<String>,
+    q: Option<Vec<String>>,
     exclude_assets: bool,
 }
 
@@ -332,6 +389,13 @@ impl ValidatedSearch {
             offset,
             source: params.source,
             processing_level: params.processing_level,
+            sensor: params.sensor,
+            q: params.q.map(|q| {
+                q.split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect::<Vec<_>>()
+            }).filter(|v: &Vec<String>| !v.is_empty()),
             exclude_assets: params.exclude_assets,
         })
     }
@@ -366,6 +430,8 @@ impl ValidatedSearch {
             offset,
             source: body.source,
             processing_level: body.processing_level,
+            sensor: body.sensor,
+            q: body.q.filter(|v| !v.is_empty()),
             exclude_assets: body.exclude_assets,
         })
     }
@@ -387,6 +453,9 @@ const CONFORMANCE_CLASSES: &[&str] = &[
     "http://www.opengis.net/spec/ogcapi-features-1/1.0/conf/core",
     "http://www.opengis.net/spec/ogcapi-features-1/1.0/conf/geojson",
     "http://www.opengis.net/spec/ogcapi-features-1/1.0/conf/oas30",
+    // Free-Text Search
+    "https://api.stacspec.org/v1.0.0-rc.1/item-search#free-text",
+    "https://api.stacspec.org/v1.0.0-rc.1/ogcapi-features#free-text",
 ];
 
 // ============================================================================
@@ -458,6 +527,58 @@ fn filter_item(item: &StacItem, params: &ValidatedSearch) -> bool {
             .get_property("blatten:processing_level")
             .and_then(|v| v.as_i64());
         if item_level != Some(level as i64) {
+            return false;
+        }
+    }
+
+    // Sensor filter (exact match)
+    if let Some(ref sensor) = params.sensor {
+        let item_sensor = item
+            .get_property("blatten:sensor")
+            .and_then(|v| v.as_str());
+        if item_sensor != Some(sensor.as_str()) {
+            return false;
+        }
+    }
+
+    // Free-text search (STAC Free-Text Search Extension)
+    // Multiple terms use OR semantics: match if ANY term matches ANY field
+    if let Some(ref terms) = params.q {
+        let term_matches = |query: &str| -> bool {
+            let check_str = |field: &str| -> bool {
+                item.get_property(field)
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_lowercase().contains(query))
+                    .unwrap_or(false)
+            };
+
+            let id_matches = item.id.to_lowercase().contains(query);
+            let prop_matches = check_str("title")
+                || check_str("description")
+                || check_str("blatten:sensor")
+                || check_str("blatten:source")
+                || check_str("blatten:code")
+                || check_str("blatten:format")
+                || check_str("blatten:dataset")
+                || check_str("blatten:product_type")
+                || check_str("blatten:bundle");
+
+            if id_matches || prop_matches {
+                return true;
+            }
+
+            // Search asset keys, titles, and hrefs
+            item.assets
+                .iter()
+                .any(|(key, asset)| {
+                    key.to_lowercase().contains(query)
+                        || asset.title.as_ref().map(|t| t.to_lowercase().contains(query)).unwrap_or(false)
+                        || asset.href.to_lowercase().contains(query)
+                })
+        };
+
+        let any_term_matches = terms.iter().any(|term| term_matches(&term.to_lowercase()));
+        if !any_term_matches {
             return false;
         }
     }
@@ -658,7 +779,7 @@ async fn landing_page(State(state): State<AppState>) -> impl IntoResponse {
         "id": "birch-glacier-collapse",
         "stac_version": STAC_VERSION,
         "title": "Birch Glacier Collapse and Landslide Dataset",
-        "description": "STAC API for the 2025 Birch glacier collapse and landslide dataset at Blatten, CH-VS",
+        "description": "STAC API for the dataset collected during the 2025 Birch glacier collapse and landslide at Blatten, CH-VS. Licensed under Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0). By using this API you confirm that you have read the Dataset Overview and Detailed Report. This data is provided \"as is\" without warranty of any kind, express or implied.",
         "conformsTo": CONFORMANCE_CLASSES,
         "links": [
             {
@@ -692,6 +813,29 @@ async fn landing_page(State(state): State<AppState>) -> impl IntoResponse {
                 "href": format!("{}/stac/search", state.base_url),
                 "type": "application/geo+json",
                 "method": "POST"
+            },
+            {
+                "rel": "describedby",
+                "href": "/s3/docs/dataset_overview.csv",
+                "type": "text/csv",
+                "title": "Dataset Overview"
+            },
+            {
+                "rel": "describedby",
+                "href": "/s3/docs/detailed_report.pdf",
+                "type": "application/pdf",
+                "title": "Detailed Report"
+            },
+            {
+                "rel": "license",
+                "href": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+                "title": "Attribution-NonCommercial-ShareAlike 4.0 International"
+            },
+            {
+                "rel": "about",
+                "href": "https://blatten-data.epfl.ch/",
+                "type": "text/html",
+                "title": "Blatten Data website"
             }
         ]
     });
