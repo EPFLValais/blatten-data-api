@@ -3,10 +3,10 @@
   "id": "dsm",
   "stac_version": "1.1.0",
   "stac_extensions": [
-    "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json"
+    "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
   ],
-  "title": "Digital Surface Models",
-  "description": "Digital Surface Models (DSM) from drone and heliborne surveys",
+  "title": "Digital Surface Model DSM",
+  "description": "",
   "license": "CC-BY-NC-SA-4.0",
   "keywords": [
     "Birch Glacier",
@@ -14,7 +14,7 @@
     "Switzerland",
     "glacier collapse",
     "landslide",
-    "digital surface models"
+    "digital surface model dsm"
   ],
   "providers": [
     {

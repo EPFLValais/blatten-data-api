@@ -3,10 +3,10 @@
   "id": "hydrology",
   "stac_version": "1.1.0",
   "stac_extensions": [
-    "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json"
+    "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
   ],
-  "title": "Hydrology Data",
-  "description": "River discharge and water flow measurements",
+  "title": "Hydrology - River",
+  "description": "",
   "license": "CC-BY-NC-SA-4.0",
   "keywords": [
     "Birch Glacier",
@@ -14,7 +14,7 @@
     "Switzerland",
     "glacier collapse",
     "landslide",
-    "hydrology data"
+    "hydrology - river"
   ],
   "providers": [
     {
@@ -60,8 +60,8 @@
       3
     ],
     "source": [
-      "DNAGE (HYDRO-VS)",
-      "DNAGE (HYDRO OFEV)"
+      "DNAGE (HYDRO OFEV)",
+      "DNAGE (HYDRO-VS)"
     ]
   },
   "links": [

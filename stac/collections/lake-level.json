@@ -3,10 +3,10 @@
   "id": "lake-level",
   "stac_version": "1.1.0",
   "stac_extensions": [
-    "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json"
+    "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
   ],
-  "title": "Lake Level",
-  "description": "Lake level and volume measurements",
+  "title": "Hydrology - Lake",
+  "description": "",
   "license": "CC-BY-NC-SA-4.0",
   "keywords": [
     "Birch Glacier",
@@ -14,7 +14,7 @@
     "Switzerland",
     "glacier collapse",
     "landslide",
-    "lake level"
+    "hydrology - lake"
   ],
   "providers": [
     {
@@ -56,8 +56,8 @@
   },
   "summaries": {
     "processing_level": [
-      3,
-      2
+      2,
+      3
     ],
     "source": [
       "DNAGE (Geoazimut)"

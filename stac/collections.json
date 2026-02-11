@@ -2,13 +2,13 @@
   "collections": [
     {
       "type": "Collection",
-      "id": "point-cloud",
+      "id": "radar-velocity",
       "stac_version": "1.1.0",
       "stac_extensions": [
-        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json"
+        "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
       ],
-      "title": "Point Clouds",
-      "description": "LiDAR and photogrammetric point cloud data",
+      "title": "Radar Velocity - ROI Zones",
+      "description": "",
       "license": "CC-BY-NC-SA-4.0",
       "keywords": [
         "Birch Glacier",
@@ -16,7 +16,187 @@
         "Switzerland",
         "glacier collapse",
         "landslide",
-        "point clouds"
+        "radar velocity - roi zones"
+      ],
+      "providers": [
+        {
+          "name": "Canton du Valais",
+          "roles": [
+            "licensor",
+            "host"
+          ],
+          "url": "https://www.vs.ch/"
+        },
+        {
+          "name": "EPFL ALPOLE",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://www.epfl.ch/research/domains/alpole/"
+        }
+      ],
+      "extent": {
+        "spatial": {
+          "bbox": [
+            [
+              7.8111182598599855,
+              46.42187522434867,
+              7.813118259859986,
+              46.42387522434866
+            ]
+          ]
+        },
+        "temporal": {
+          "interval": [
+            [
+              "2025-05-19T00:00:00Z",
+              "2025-06-30T23:59:59Z"
+            ]
+          ]
+        }
+      },
+      "summaries": {
+        "processing_level": [
+          4
+        ],
+        "source": [
+          "Geoprevent"
+        ]
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "https://blatten-data.epfl.ch/stac/collections/radar-velocity",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "type": "application/json"
+        },
+        {
+          "rel": "parent",
+          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "type": "application/json"
+        },
+        {
+          "rel": "items",
+          "href": "https://blatten-data.epfl.ch/stac/collections/radar-velocity/items",
+          "type": "application/geo+json"
+        }
+      ],
+      "assets": {}
+    },
+    {
+      "type": "Collection",
+      "id": "webcam-image",
+      "stac_version": "1.1.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
+      ],
+      "title": "Webcam-Image",
+      "description": "",
+      "license": "CC-BY-NC-SA-4.0",
+      "keywords": [
+        "Birch Glacier",
+        "Blatten",
+        "Switzerland",
+        "glacier collapse",
+        "landslide",
+        "webcam-image"
+      ],
+      "providers": [
+        {
+          "name": "Canton du Valais",
+          "roles": [
+            "licensor",
+            "host"
+          ],
+          "url": "https://www.vs.ch/"
+        },
+        {
+          "name": "EPFL ALPOLE",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://www.epfl.ch/research/domains/alpole/"
+        }
+      ],
+      "extent": {
+        "spatial": {
+          "bbox": [
+            [
+              7.792003677760034,
+              46.399851221486394,
+              7.848483125190064,
+              46.42387522434866
+            ]
+          ]
+        },
+        "temporal": {
+          "interval": [
+            [
+              "2020-02-05T00:00:00Z",
+              "2025-09-30T23:59:59Z"
+            ]
+          ]
+        }
+      },
+      "summaries": {
+        "processing_level": [
+          2,
+          4
+        ],
+        "source": [
+          "DNAGE (Geoazimut)",
+          "DNAGE (Guardaval)",
+          "Sensalpin",
+          "Geoprevent"
+        ]
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "https://blatten-data.epfl.ch/stac/collections/webcam-image",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "type": "application/json"
+        },
+        {
+          "rel": "parent",
+          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "type": "application/json"
+        },
+        {
+          "rel": "items",
+          "href": "https://blatten-data.epfl.ch/stac/collections/webcam-image/items",
+          "type": "application/geo+json"
+        }
+      ],
+      "assets": {}
+    },
+    {
+      "type": "Collection",
+      "id": "point-cloud",
+      "stac_version": "1.1.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
+      ],
+      "title": "Point Cloud",
+      "description": "",
+      "license": "CC-BY-NC-SA-4.0",
+      "keywords": [
+        "Birch Glacier",
+        "Blatten",
+        "Switzerland",
+        "glacier collapse",
+        "landslide",
+        "point cloud"
       ],
       "providers": [
         {
@@ -90,13 +270,13 @@
     },
     {
       "type": "Collection",
-      "id": "radar-amplitude",
+      "id": "3d-model",
       "stac_version": "1.1.0",
       "stac_extensions": [
-        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json"
+        "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
       ],
-      "title": "Radar Amplitude",
-      "description": "Interferometric radar amplitude data",
+      "title": "3D-Model",
+      "description": "",
       "license": "CC-BY-NC-SA-4.0",
       "keywords": [
         "Birch Glacier",
@@ -104,7 +284,7 @@
         "Switzerland",
         "glacier collapse",
         "landslide",
-        "radar amplitude"
+        "3d-model"
       ],
       "providers": [
         {
@@ -128,34 +308,34 @@
         "spatial": {
           "bbox": [
             [
-              7.811118259859858,
-              46.42187522434856,
-              7.813118259859858,
-              46.423875224348556
+              7.715785138478515,
+              46.33184896456103,
+              7.801931034459737,
+              46.40661853154165
             ]
           ]
         },
         "temporal": {
           "interval": [
             [
-              "2025-05-19T00:00:00Z",
-              "2025-06-30T23:59:59Z"
+              "2025-05-23T00:00:00Z",
+              "2025-06-10T23:59:59Z"
             ]
           ]
         }
       },
       "summaries": {
         "processing_level": [
-          3
+          4
         ],
         "source": [
-          "Geoprevent"
+          "Terradata"
         ]
       },
       "links": [
         {
           "rel": "self",
-          "href": "https://blatten-data.epfl.ch/stac/collections/radar-amplitude",
+          "href": "https://blatten-data.epfl.ch/stac/collections/3d-model",
           "type": "application/json"
         },
         {
@@ -170,7 +350,7 @@
         },
         {
           "rel": "items",
-          "href": "https://blatten-data.epfl.ch/stac/collections/radar-amplitude/items",
+          "href": "https://blatten-data.epfl.ch/stac/collections/3d-model/items",
           "type": "application/geo+json"
         }
       ],
@@ -178,13 +358,13 @@
     },
     {
       "type": "Collection",
-      "id": "deformation-analysis",
+      "id": "radar-coherence",
       "stac_version": "1.1.0",
       "stac_extensions": [
-        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json"
+        "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
       ],
-      "title": "Deformation Analysis",
-      "description": "DEFOX deformation analysis imagery",
+      "title": "Radar Velocity - ESRI",
+      "description": "",
       "license": "CC-BY-NC-SA-4.0",
       "keywords": [
         "Birch Glacier",
@@ -192,7 +372,7 @@
         "Switzerland",
         "glacier collapse",
         "landslide",
-        "deformation analysis"
+        "radar velocity - esri"
       ],
       "providers": [
         {
@@ -216,454 +396,10 @@
         "spatial": {
           "bbox": [
             [
-              7.838645748295971,
-              46.40440164951802,
-              7.840645748295971,
-              46.40640164951802
-            ]
-          ]
-        },
-        "temporal": {
-          "interval": [
-            [
-              "2025-05-30T00:00:00Z",
-              "2025-06-30T23:59:59Z"
-            ]
-          ]
-        }
-      },
-      "summaries": {
-        "processing_level": [
-          3
-        ],
-        "source": [
-          "Geoprevent"
-        ]
-      },
-      "links": [
-        {
-          "rel": "self",
-          "href": "https://blatten-data.epfl.ch/stac/collections/deformation-analysis",
-          "type": "application/json"
-        },
-        {
-          "rel": "root",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
-          "type": "application/json"
-        },
-        {
-          "rel": "parent",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
-          "type": "application/json"
-        },
-        {
-          "rel": "items",
-          "href": "https://blatten-data.epfl.ch/stac/collections/deformation-analysis/items",
-          "type": "application/geo+json"
-        }
-      ],
-      "assets": {}
-    },
-    {
-      "type": "Collection",
-      "id": "radar-timeseries",
-      "stac_version": "1.1.0",
-      "stac_extensions": [
-        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json"
-      ],
-      "title": "Radar Timeseries",
-      "description": "Interferometric radar time series data",
-      "license": "CC-BY-NC-SA-4.0",
-      "keywords": [
-        "Birch Glacier",
-        "Blatten",
-        "Switzerland",
-        "glacier collapse",
-        "landslide",
-        "radar timeseries"
-      ],
-      "providers": [
-        {
-          "name": "Canton du Valais",
-          "roles": [
-            "licensor",
-            "host"
-          ],
-          "url": "https://www.vs.ch/"
-        },
-        {
-          "name": "EPFL ALPOLE",
-          "roles": [
-            "processor",
-            "host"
-          ],
-          "url": "https://www.epfl.ch/research/domains/alpole/"
-        }
-      ],
-      "extent": {
-        "spatial": {
-          "bbox": [
-            [
-              7.811118259859858,
-              46.42187522434856,
-              7.813118259859858,
-              46.423875224348556
-            ]
-          ]
-        },
-        "temporal": {
-          "interval": [
-            [
-              "2025-05-19T00:00:00Z",
-              "2025-06-30T23:59:59Z"
-            ]
-          ]
-        }
-      },
-      "summaries": {
-        "processing_level": [
-          2
-        ],
-        "source": [
-          "Geoprevent"
-        ]
-      },
-      "links": [
-        {
-          "rel": "self",
-          "href": "https://blatten-data.epfl.ch/stac/collections/radar-timeseries",
-          "type": "application/json"
-        },
-        {
-          "rel": "root",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
-          "type": "application/json"
-        },
-        {
-          "rel": "parent",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
-          "type": "application/json"
-        },
-        {
-          "rel": "items",
-          "href": "https://blatten-data.epfl.ch/stac/collections/radar-timeseries/items",
-          "type": "application/geo+json"
-        }
-      ],
-      "assets": {}
-    },
-    {
-      "type": "Collection",
-      "id": "gnss-data",
-      "stac_version": "1.1.0",
-      "stac_extensions": [
-        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json"
-      ],
-      "title": "GNSS Position Data",
-      "description": "High-precision GNSS/GPS position time series",
-      "license": "CC-BY-NC-SA-4.0",
-      "keywords": [
-        "Birch Glacier",
-        "Blatten",
-        "Switzerland",
-        "glacier collapse",
-        "landslide",
-        "gnss position data"
-      ],
-      "providers": [
-        {
-          "name": "Canton du Valais",
-          "roles": [
-            "licensor",
-            "host"
-          ],
-          "url": "https://www.vs.ch/"
-        },
-        {
-          "name": "EPFL ALPOLE",
-          "roles": [
-            "processor",
-            "host"
-          ],
-          "url": "https://www.epfl.ch/research/domains/alpole/"
-        }
-      ],
-      "extent": {
-        "spatial": {
-          "bbox": [
-            [
-              7.80480379672543,
-              46.39583767989785,
-              7.841415495592613,
-              46.4189868326746
-            ]
-          ]
-        },
-        "temporal": {
-          "interval": [
-            [
-              "2025-05-16T00:00:00Z",
-              "2025-06-30T23:59:59Z"
-            ]
-          ]
-        }
-      },
-      "summaries": {
-        "processing_level": [
-          1
-        ],
-        "source": [
-          "DNAGE (Glaciorisk)"
-        ]
-      },
-      "links": [
-        {
-          "rel": "self",
-          "href": "https://blatten-data.epfl.ch/stac/collections/gnss-data",
-          "type": "application/json"
-        },
-        {
-          "rel": "root",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
-          "type": "application/json"
-        },
-        {
-          "rel": "parent",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
-          "type": "application/json"
-        },
-        {
-          "rel": "items",
-          "href": "https://blatten-data.epfl.ch/stac/collections/gnss-data/items",
-          "type": "application/geo+json"
-        }
-      ],
-      "assets": {}
-    },
-    {
-      "type": "Collection",
-      "id": "lake-level",
-      "stac_version": "1.1.0",
-      "stac_extensions": [
-        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json"
-      ],
-      "title": "Lake Level",
-      "description": "Lake level and volume measurements",
-      "license": "CC-BY-NC-SA-4.0",
-      "keywords": [
-        "Birch Glacier",
-        "Blatten",
-        "Switzerland",
-        "glacier collapse",
-        "landslide",
-        "lake level"
-      ],
-      "providers": [
-        {
-          "name": "Canton du Valais",
-          "roles": [
-            "licensor",
-            "host"
-          ],
-          "url": "https://www.vs.ch/"
-        },
-        {
-          "name": "EPFL ALPOLE",
-          "roles": [
-            "processor",
-            "host"
-          ],
-          "url": "https://www.epfl.ch/research/domains/alpole/"
-        }
-      ],
-      "extent": {
-        "spatial": {
-          "bbox": [
-            [
-              7.819993348413511,
-              46.42029214976914,
-              7.821993348413511,
-              46.422292149769135
-            ]
-          ]
-        },
-        "temporal": {
-          "interval": [
-            [
-              "2025-05-29T00:00:00Z",
-              "2025-06-30T23:59:59Z"
-            ]
-          ]
-        }
-      },
-      "summaries": {
-        "processing_level": [
-          3,
-          2
-        ],
-        "source": [
-          "DNAGE (Geoazimut)"
-        ]
-      },
-      "links": [
-        {
-          "rel": "self",
-          "href": "https://blatten-data.epfl.ch/stac/collections/lake-level",
-          "type": "application/json"
-        },
-        {
-          "rel": "root",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
-          "type": "application/json"
-        },
-        {
-          "rel": "parent",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
-          "type": "application/json"
-        },
-        {
-          "rel": "items",
-          "href": "https://blatten-data.epfl.ch/stac/collections/lake-level/items",
-          "type": "application/geo+json"
-        }
-      ],
-      "assets": {}
-    },
-    {
-      "type": "Collection",
-      "id": "webcam-image",
-      "stac_version": "1.1.0",
-      "stac_extensions": [
-        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json"
-      ],
-      "title": "Webcam Images",
-      "description": "Time-series webcam imagery from monitoring cameras",
-      "license": "CC-BY-NC-SA-4.0",
-      "keywords": [
-        "Birch Glacier",
-        "Blatten",
-        "Switzerland",
-        "glacier collapse",
-        "landslide",
-        "webcam images"
-      ],
-      "providers": [
-        {
-          "name": "Canton du Valais",
-          "roles": [
-            "licensor",
-            "host"
-          ],
-          "url": "https://www.vs.ch/"
-        },
-        {
-          "name": "EPFL ALPOLE",
-          "roles": [
-            "processor",
-            "host"
-          ],
-          "url": "https://www.epfl.ch/research/domains/alpole/"
-        }
-      ],
-      "extent": {
-        "spatial": {
-          "bbox": [
-            [
-              7.792003677760034,
-              46.404200903699554,
-              7.848483125190064,
-              46.423875224348556
-            ]
-          ]
-        },
-        "temporal": {
-          "interval": [
-            [
-              "2020-02-05T00:00:00Z",
-              "2025-09-30T23:59:59Z"
-            ]
-          ]
-        }
-      },
-      "summaries": {
-        "processing_level": [
-          4,
-          2
-        ],
-        "source": [
-          "DNAGE (Geoazimut)",
-          "Geoprevent",
-          "DNAGE (Guardaval)"
-        ]
-      },
-      "links": [
-        {
-          "rel": "self",
-          "href": "https://blatten-data.epfl.ch/stac/collections/webcam-image",
-          "type": "application/json"
-        },
-        {
-          "rel": "root",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
-          "type": "application/json"
-        },
-        {
-          "rel": "parent",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
-          "type": "application/json"
-        },
-        {
-          "rel": "items",
-          "href": "https://blatten-data.epfl.ch/stac/collections/webcam-image/items",
-          "type": "application/geo+json"
-        }
-      ],
-      "assets": {}
-    },
-    {
-      "type": "Collection",
-      "id": "radar-velocity",
-      "stac_version": "1.1.0",
-      "stac_extensions": [
-        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json"
-      ],
-      "title": "Radar Velocity Data",
-      "description": "Interferometric radar velocity measurements per ROI",
-      "license": "CC-BY-NC-SA-4.0",
-      "keywords": [
-        "Birch Glacier",
-        "Blatten",
-        "Switzerland",
-        "glacier collapse",
-        "landslide",
-        "radar velocity data"
-      ],
-      "providers": [
-        {
-          "name": "Canton du Valais",
-          "roles": [
-            "licensor",
-            "host"
-          ],
-          "url": "https://www.vs.ch/"
-        },
-        {
-          "name": "EPFL ALPOLE",
-          "roles": [
-            "processor",
-            "host"
-          ],
-          "url": "https://www.epfl.ch/research/domains/alpole/"
-        }
-      ],
-      "extent": {
-        "spatial": {
-          "bbox": [
-            [
-              7.811118259859858,
-              46.42187522434856,
-              7.813118259859858,
-              46.423875224348556
+              7.802669387936483,
+              46.392627327878365,
+              7.848306376728169,
+              46.417195772703195
             ]
           ]
         },
@@ -687,7 +423,7 @@
       "links": [
         {
           "rel": "self",
-          "href": "https://blatten-data.epfl.ch/stac/collections/radar-velocity",
+          "href": "https://blatten-data.epfl.ch/stac/collections/radar-coherence",
           "type": "application/json"
         },
         {
@@ -702,95 +438,7 @@
         },
         {
           "rel": "items",
-          "href": "https://blatten-data.epfl.ch/stac/collections/radar-velocity/items",
-          "type": "application/geo+json"
-        }
-      ],
-      "assets": {}
-    },
-    {
-      "type": "Collection",
-      "id": "dsm",
-      "stac_version": "1.1.0",
-      "stac_extensions": [
-        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json"
-      ],
-      "title": "Digital Surface Models",
-      "description": "Digital Surface Models (DSM) from drone and heliborne surveys",
-      "license": "CC-BY-NC-SA-4.0",
-      "keywords": [
-        "Birch Glacier",
-        "Blatten",
-        "Switzerland",
-        "glacier collapse",
-        "landslide",
-        "digital surface models"
-      ],
-      "providers": [
-        {
-          "name": "Canton du Valais",
-          "roles": [
-            "licensor",
-            "host"
-          ],
-          "url": "https://www.vs.ch/"
-        },
-        {
-          "name": "EPFL ALPOLE",
-          "roles": [
-            "processor",
-            "host"
-          ],
-          "url": "https://www.epfl.ch/research/domains/alpole/"
-        }
-      ],
-      "extent": {
-        "spatial": {
-          "bbox": [
-            [
-              7.753966742928162,
-              46.379931470326966,
-              7.854158535175767,
-              46.42608908012216
-            ]
-          ]
-        },
-        "temporal": {
-          "interval": [
-            [
-              "2025-05-23T00:00:00Z",
-              "2025-09-03T23:59:59Z"
-            ]
-          ]
-        }
-      },
-      "summaries": {
-        "processing_level": [
-          3
-        ],
-        "source": [
-          "Terradata"
-        ]
-      },
-      "links": [
-        {
-          "rel": "self",
-          "href": "https://blatten-data.epfl.ch/stac/collections/dsm",
-          "type": "application/json"
-        },
-        {
-          "rel": "root",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
-          "type": "application/json"
-        },
-        {
-          "rel": "parent",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
-          "type": "application/json"
-        },
-        {
-          "rel": "items",
-          "href": "https://blatten-data.epfl.ch/stac/collections/dsm/items",
+          "href": "https://blatten-data.epfl.ch/stac/collections/radar-coherence/items",
           "type": "application/geo+json"
         }
       ],
@@ -801,10 +449,10 @@
       "id": "orthophoto",
       "stac_version": "1.1.0",
       "stac_extensions": [
-        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json"
+        "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
       ],
-      "title": "Orthophotos",
-      "description": "Orthorectified aerial and drone imagery",
+      "title": "Orthophoto",
+      "description": "",
       "license": "CC-BY-NC-SA-4.0",
       "keywords": [
         "Birch Glacier",
@@ -812,7 +460,7 @@
         "Switzerland",
         "glacier collapse",
         "landslide",
-        "orthophotos"
+        "orthophoto"
       ],
       "providers": [
         {
@@ -886,13 +534,13 @@
     },
     {
       "type": "Collection",
-      "id": "dem",
+      "id": "dsm",
       "stac_version": "1.1.0",
       "stac_extensions": [
-        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json"
+        "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
       ],
-      "title": "Digital Elevation Models",
-      "description": "Digital Elevation Models (DEM) from surveys",
+      "title": "Digital Surface Model DSM",
+      "description": "",
       "license": "CC-BY-NC-SA-4.0",
       "keywords": [
         "Birch Glacier",
@@ -900,7 +548,7 @@
         "Switzerland",
         "glacier collapse",
         "landslide",
-        "digital elevation models"
+        "digital surface model dsm"
       ],
       "providers": [
         {
@@ -924,10 +572,10 @@
         "spatial": {
           "bbox": [
             [
-              7.75058872258838,
-              46.37911007283338,
-              7.854947893736096,
-              46.4289188359089
+              7.753966742928162,
+              46.379931470326966,
+              7.854158535175767,
+              46.42608908012216
             ]
           ]
         },
@@ -935,14 +583,14 @@
           "interval": [
             [
               "2025-05-23T00:00:00Z",
-              "2025-07-11T23:59:59Z"
+              "2025-09-03T23:59:59Z"
             ]
           ]
         }
       },
       "summaries": {
         "processing_level": [
-          4
+          3
         ],
         "source": [
           "Terradata"
@@ -951,7 +599,7 @@
       "links": [
         {
           "rel": "self",
-          "href": "https://blatten-data.epfl.ch/stac/collections/dem",
+          "href": "https://blatten-data.epfl.ch/stac/collections/dsm",
           "type": "application/json"
         },
         {
@@ -966,7 +614,7 @@
         },
         {
           "rel": "items",
-          "href": "https://blatten-data.epfl.ch/stac/collections/dem/items",
+          "href": "https://blatten-data.epfl.ch/stac/collections/dsm/items",
           "type": "application/geo+json"
         }
       ],
@@ -974,13 +622,13 @@
     },
     {
       "type": "Collection",
-      "id": "radar-displacement",
+      "id": "lake-level",
       "stac_version": "1.1.0",
       "stac_extensions": [
-        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json"
+        "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
       ],
-      "title": "Radar Displacement",
-      "description": "Interferometric radar displacement measurements",
+      "title": "Hydrology - Lake",
+      "description": "",
       "license": "CC-BY-NC-SA-4.0",
       "keywords": [
         "Birch Glacier",
@@ -988,7 +636,7 @@
         "Switzerland",
         "glacier collapse",
         "landslide",
-        "radar displacement"
+        "hydrology - lake"
       ],
       "providers": [
         {
@@ -1012,10 +660,365 @@
         "spatial": {
           "bbox": [
             [
-              7.811118259859858,
-              46.42187522434856,
-              7.813118259859858,
-              46.423875224348556
+              7.819993348413511,
+              46.42029214976914,
+              7.821993348413511,
+              46.422292149769135
+            ]
+          ]
+        },
+        "temporal": {
+          "interval": [
+            [
+              "2025-05-29T00:00:00Z",
+              "2025-06-30T23:59:59Z"
+            ]
+          ]
+        }
+      },
+      "summaries": {
+        "processing_level": [
+          2,
+          3
+        ],
+        "source": [
+          "DNAGE (Geoazimut)"
+        ]
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "https://blatten-data.epfl.ch/stac/collections/lake-level",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "type": "application/json"
+        },
+        {
+          "rel": "parent",
+          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "type": "application/json"
+        },
+        {
+          "rel": "items",
+          "href": "https://blatten-data.epfl.ch/stac/collections/lake-level/items",
+          "type": "application/geo+json"
+        }
+      ],
+      "assets": {}
+    },
+    {
+      "type": "Collection",
+      "id": "gnss-data",
+      "stac_version": "1.1.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
+      ],
+      "title": "GPS-Data",
+      "description": "",
+      "license": "CC-BY-NC-SA-4.0",
+      "keywords": [
+        "Birch Glacier",
+        "Blatten",
+        "Switzerland",
+        "glacier collapse",
+        "landslide",
+        "gps-data"
+      ],
+      "providers": [
+        {
+          "name": "Canton du Valais",
+          "roles": [
+            "licensor",
+            "host"
+          ],
+          "url": "https://www.vs.ch/"
+        },
+        {
+          "name": "EPFL ALPOLE",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://www.epfl.ch/research/domains/alpole/"
+        }
+      ],
+      "extent": {
+        "spatial": {
+          "bbox": [
+            [
+              7.80480379672543,
+              46.39583767989785,
+              7.841415495592613,
+              46.4189868326746
+            ]
+          ]
+        },
+        "temporal": {
+          "interval": [
+            [
+              "2025-05-16T00:00:00Z",
+              "2025-06-30T23:59:59Z"
+            ]
+          ]
+        }
+      },
+      "summaries": {
+        "processing_level": [
+          1
+        ],
+        "source": [
+          "DNAGE (Glaciorisk)"
+        ]
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "https://blatten-data.epfl.ch/stac/collections/gnss-data",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "type": "application/json"
+        },
+        {
+          "rel": "parent",
+          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "type": "application/json"
+        },
+        {
+          "rel": "items",
+          "href": "https://blatten-data.epfl.ch/stac/collections/gnss-data/items",
+          "type": "application/geo+json"
+        }
+      ],
+      "assets": {}
+    },
+    {
+      "type": "Collection",
+      "id": "deformation-analysis",
+      "stac_version": "1.1.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
+      ],
+      "title": "Deformation Analysis - Image",
+      "description": "",
+      "license": "CC-BY-NC-SA-4.0",
+      "keywords": [
+        "Birch Glacier",
+        "Blatten",
+        "Switzerland",
+        "glacier collapse",
+        "landslide",
+        "deformation analysis - image"
+      ],
+      "providers": [
+        {
+          "name": "Canton du Valais",
+          "roles": [
+            "licensor",
+            "host"
+          ],
+          "url": "https://www.vs.ch/"
+        },
+        {
+          "name": "EPFL ALPOLE",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://www.epfl.ch/research/domains/alpole/"
+        }
+      ],
+      "extent": {
+        "spatial": {
+          "bbox": [
+            [
+              7.838645748296098,
+              46.404401649518064,
+              7.840645748296098,
+              46.40640164951806
+            ]
+          ]
+        },
+        "temporal": {
+          "interval": [
+            [
+              "2025-05-30T00:00:00Z",
+              "2025-06-30T23:59:59Z"
+            ]
+          ]
+        }
+      },
+      "summaries": {
+        "processing_level": [
+          3
+        ],
+        "source": [
+          "Geoprevent"
+        ]
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "https://blatten-data.epfl.ch/stac/collections/deformation-analysis",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "type": "application/json"
+        },
+        {
+          "rel": "parent",
+          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "type": "application/json"
+        },
+        {
+          "rel": "items",
+          "href": "https://blatten-data.epfl.ch/stac/collections/deformation-analysis/items",
+          "type": "application/geo+json"
+        }
+      ],
+      "assets": {}
+    },
+    {
+      "type": "Collection",
+      "id": "hydrology",
+      "stac_version": "1.1.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
+      ],
+      "title": "Hydrology - River",
+      "description": "",
+      "license": "CC-BY-NC-SA-4.0",
+      "keywords": [
+        "Birch Glacier",
+        "Blatten",
+        "Switzerland",
+        "glacier collapse",
+        "landslide",
+        "hydrology - river"
+      ],
+      "providers": [
+        {
+          "name": "Canton du Valais",
+          "roles": [
+            "licensor",
+            "host"
+          ],
+          "url": "https://www.vs.ch/"
+        },
+        {
+          "name": "EPFL ALPOLE",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://www.epfl.ch/research/domains/alpole/"
+        }
+      ],
+      "extent": {
+        "spatial": {
+          "bbox": [
+            [
+              7.744080639135969,
+              46.30972217810538,
+              7.840145332585054,
+              46.42839170685856
+            ]
+          ]
+        },
+        "temporal": {
+          "interval": [
+            [
+              "2025-05-01T00:00:00Z",
+              "2025-06-30T23:59:59Z"
+            ]
+          ]
+        }
+      },
+      "summaries": {
+        "processing_level": [
+          2,
+          3
+        ],
+        "source": [
+          "DNAGE (HYDRO OFEV)",
+          "DNAGE (HYDRO-VS)"
+        ]
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "https://blatten-data.epfl.ch/stac/collections/hydrology",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "type": "application/json"
+        },
+        {
+          "rel": "parent",
+          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "type": "application/json"
+        },
+        {
+          "rel": "items",
+          "href": "https://blatten-data.epfl.ch/stac/collections/hydrology/items",
+          "type": "application/geo+json"
+        }
+      ],
+      "assets": {}
+    },
+    {
+      "type": "Collection",
+      "id": "radar-displacement",
+      "stac_version": "1.1.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
+      ],
+      "title": "Radar Velocity - DTM",
+      "description": "",
+      "license": "CC-BY-NC-SA-4.0",
+      "keywords": [
+        "Birch Glacier",
+        "Blatten",
+        "Switzerland",
+        "glacier collapse",
+        "landslide",
+        "radar velocity - dtm"
+      ],
+      "providers": [
+        {
+          "name": "Canton du Valais",
+          "roles": [
+            "licensor",
+            "host"
+          ],
+          "url": "https://www.vs.ch/"
+        },
+        {
+          "name": "EPFL ALPOLE",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://www.epfl.ch/research/domains/alpole/"
+        }
+      ],
+      "extent": {
+        "spatial": {
+          "bbox": [
+            [
+              7.8111182598599855,
+              46.42187522434867,
+              7.813118259859986,
+              46.42387522434866
             ]
           ]
         },
@@ -1062,13 +1065,13 @@
     },
     {
       "type": "Collection",
-      "id": "3d-model",
+      "id": "radar-timeseries",
       "stac_version": "1.1.0",
       "stac_extensions": [
-        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json"
+        "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
       ],
-      "title": "3D Models",
-      "description": "3D visualization models for Sketchfab and similar platforms",
+      "title": "Radar Interferograms",
+      "description": "",
       "license": "CC-BY-NC-SA-4.0",
       "keywords": [
         "Birch Glacier",
@@ -1076,7 +1079,7 @@
         "Switzerland",
         "glacier collapse",
         "landslide",
-        "3d models"
+        "radar interferograms"
       ],
       "providers": [
         {
@@ -1100,34 +1103,34 @@
         "spatial": {
           "bbox": [
             [
-              7.78,
-              46.38,
-              7.88,
-              46.44
+              7.8111182598599855,
+              46.42187522434867,
+              7.813118259859986,
+              46.42387522434866
             ]
           ]
         },
         "temporal": {
           "interval": [
             [
-              "2025-05-23T00:00:00Z",
-              "2025-06-10T23:59:59Z"
+              "2025-05-19T00:00:00Z",
+              "2025-06-30T23:59:59Z"
             ]
           ]
         }
       },
       "summaries": {
         "processing_level": [
-          4
+          2
         ],
         "source": [
-          "Terradata"
+          "Geoprevent"
         ]
       },
       "links": [
         {
           "rel": "self",
-          "href": "https://blatten-data.epfl.ch/stac/collections/3d-model",
+          "href": "https://blatten-data.epfl.ch/stac/collections/radar-timeseries",
           "type": "application/json"
         },
         {
@@ -1142,7 +1145,7 @@
         },
         {
           "rel": "items",
-          "href": "https://blatten-data.epfl.ch/stac/collections/3d-model/items",
+          "href": "https://blatten-data.epfl.ch/stac/collections/radar-timeseries/items",
           "type": "application/geo+json"
         }
       ],
@@ -1153,10 +1156,10 @@
       "id": "thermal-image",
       "stac_version": "1.1.0",
       "stac_extensions": [
-        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json"
+        "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
       ],
-      "title": "Thermal Imagery",
-      "description": "Heliborne thermal infrared imagery",
+      "title": "Thermal Image",
+      "description": "",
       "license": "CC-BY-NC-SA-4.0",
       "keywords": [
         "Birch Glacier",
@@ -1164,7 +1167,7 @@
         "Switzerland",
         "glacier collapse",
         "landslide",
-        "thermal imagery"
+        "thermal image"
       ],
       "providers": [
         {
@@ -1238,13 +1241,13 @@
     },
     {
       "type": "Collection",
-      "id": "radar-coherence",
+      "id": "dem",
       "stac_version": "1.1.0",
       "stac_extensions": [
-        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json"
+        "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
       ],
-      "title": "Radar Coherence",
-      "description": "Interferometric radar coherence data",
+      "title": "Digital Terrain Model DTM",
+      "description": "",
       "license": "CC-BY-NC-SA-4.0",
       "keywords": [
         "Birch Glacier",
@@ -1252,7 +1255,7 @@
         "Switzerland",
         "glacier collapse",
         "landslide",
-        "radar coherence"
+        "digital terrain model dtm"
       ],
       "providers": [
         {
@@ -1276,10 +1279,98 @@
         "spatial": {
           "bbox": [
             [
-              7.811118259859858,
-              46.42187522434856,
-              7.813118259859858,
-              46.423875224348556
+              7.75058872258838,
+              46.37911007283338,
+              7.854947893736096,
+              46.4289188359089
+            ]
+          ]
+        },
+        "temporal": {
+          "interval": [
+            [
+              "2025-05-23T00:00:00Z",
+              "2025-07-11T23:59:59Z"
+            ]
+          ]
+        }
+      },
+      "summaries": {
+        "processing_level": [
+          4
+        ],
+        "source": [
+          "Terradata"
+        ]
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "https://blatten-data.epfl.ch/stac/collections/dem",
+          "type": "application/json"
+        },
+        {
+          "rel": "root",
+          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "type": "application/json"
+        },
+        {
+          "rel": "parent",
+          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "type": "application/json"
+        },
+        {
+          "rel": "items",
+          "href": "https://blatten-data.epfl.ch/stac/collections/dem/items",
+          "type": "application/geo+json"
+        }
+      ],
+      "assets": {}
+    },
+    {
+      "type": "Collection",
+      "id": "radar-amplitude",
+      "stac_version": "1.1.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
+      ],
+      "title": "Radar Velocity - Map",
+      "description": "",
+      "license": "CC-BY-NC-SA-4.0",
+      "keywords": [
+        "Birch Glacier",
+        "Blatten",
+        "Switzerland",
+        "glacier collapse",
+        "landslide",
+        "radar velocity - map"
+      ],
+      "providers": [
+        {
+          "name": "Canton du Valais",
+          "roles": [
+            "licensor",
+            "host"
+          ],
+          "url": "https://www.vs.ch/"
+        },
+        {
+          "name": "EPFL ALPOLE",
+          "roles": [
+            "processor",
+            "host"
+          ],
+          "url": "https://www.epfl.ch/research/domains/alpole/"
+        }
+      ],
+      "extent": {
+        "spatial": {
+          "bbox": [
+            [
+              7.8111182598599855,
+              46.42187522434867,
+              7.813118259859986,
+              46.42387522434866
             ]
           ]
         },
@@ -1294,7 +1385,7 @@
       },
       "summaries": {
         "processing_level": [
-          4
+          3
         ],
         "source": [
           "Geoprevent"
@@ -1303,7 +1394,7 @@
       "links": [
         {
           "rel": "self",
-          "href": "https://blatten-data.epfl.ch/stac/collections/radar-coherence",
+          "href": "https://blatten-data.epfl.ch/stac/collections/radar-amplitude",
           "type": "application/json"
         },
         {
@@ -1318,97 +1409,7 @@
         },
         {
           "rel": "items",
-          "href": "https://blatten-data.epfl.ch/stac/collections/radar-coherence/items",
-          "type": "application/geo+json"
-        }
-      ],
-      "assets": {}
-    },
-    {
-      "type": "Collection",
-      "id": "hydrology",
-      "stac_version": "1.1.0",
-      "stac_extensions": [
-        "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json"
-      ],
-      "title": "Hydrology Data",
-      "description": "River discharge and water flow measurements",
-      "license": "CC-BY-NC-SA-4.0",
-      "keywords": [
-        "Birch Glacier",
-        "Blatten",
-        "Switzerland",
-        "glacier collapse",
-        "landslide",
-        "hydrology data"
-      ],
-      "providers": [
-        {
-          "name": "Canton du Valais",
-          "roles": [
-            "licensor",
-            "host"
-          ],
-          "url": "https://www.vs.ch/"
-        },
-        {
-          "name": "EPFL ALPOLE",
-          "roles": [
-            "processor",
-            "host"
-          ],
-          "url": "https://www.epfl.ch/research/domains/alpole/"
-        }
-      ],
-      "extent": {
-        "spatial": {
-          "bbox": [
-            [
-              7.744080639135969,
-              46.30972217810538,
-              7.840145332585054,
-              46.42839170685856
-            ]
-          ]
-        },
-        "temporal": {
-          "interval": [
-            [
-              "2025-05-01T00:00:00Z",
-              "2025-06-30T23:59:59Z"
-            ]
-          ]
-        }
-      },
-      "summaries": {
-        "processing_level": [
-          2,
-          3
-        ],
-        "source": [
-          "DNAGE (HYDRO-VS)",
-          "DNAGE (HYDRO OFEV)"
-        ]
-      },
-      "links": [
-        {
-          "rel": "self",
-          "href": "https://blatten-data.epfl.ch/stac/collections/hydrology",
-          "type": "application/json"
-        },
-        {
-          "rel": "root",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
-          "type": "application/json"
-        },
-        {
-          "rel": "parent",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
-          "type": "application/json"
-        },
-        {
-          "rel": "items",
-          "href": "https://blatten-data.epfl.ch/stac/collections/hydrology/items",
+          "href": "https://blatten-data.epfl.ch/stac/collections/radar-amplitude/items",
           "type": "application/geo+json"
         }
       ],

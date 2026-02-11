@@ -183,6 +183,36 @@
       "elevation_m": null,
       "items": ["21Oa00", "21Ob00", "21Oc00"],
       "_provider": "DNAGE / Geoazimut"
+    },
+
+    "helimap-3d-model-1": {
+      "name": "Helimap 3D Model - Upper Glacier",
+      "description": "Helimap/Terradata 3D model of upper glacier area (KLNBW.obj, offset from Global_Lokal.txt)",
+      "x": 2621389,
+      "y": 1139400,
+      "elevation_m": 3060,
+      "items": ["14La01"],
+      "_provider": "Terradata / Helimap"
+    },
+
+    "helimap-3d-model-2": {
+      "name": "Helimap 3D Model - Downstream Lötschental",
+      "description": "Helimap/Terradata 3D model downstream near Ferden (klnh_2.obj, offset from Global_Lokal.txt)",
+      "x": 2627897,
+      "y": 1131337,
+      "elevation_m": 2027,
+      "items": ["14La02"],
+      "_provider": "Terradata / Helimap"
+    },
+
+    "helimap-3d-model-3": {
+      "name": "Helimap 3D Model - Valley Floor Blatten",
+      "description": "Helimap/Terradata 3D model of valley floor near Blatten (KLNBIL3_250610.obj, offset from Global_Lokal.txt)",
+      "x": 2626344,
+      "y": 1139119,
+      "elevation_m": 1421,
+      "items": ["14La03"],
+      "_provider": "Terradata / Helimap"
     }
   },
 

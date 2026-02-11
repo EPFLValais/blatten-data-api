@@ -3,10 +3,10 @@
   "id": "webcam-image",
   "stac_version": "1.1.0",
   "stac_extensions": [
-    "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json"
+    "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
   ],
-  "title": "Webcam Images",
-  "description": "Time-series webcam imagery from monitoring cameras",
+  "title": "Webcam-Image",
+  "description": "",
   "license": "CC-BY-NC-SA-4.0",
   "keywords": [
     "Birch Glacier",
@@ -14,7 +14,7 @@
     "Switzerland",
     "glacier collapse",
     "landslide",
-    "webcam images"
+    "webcam-image"
   ],
   "providers": [
     {
@@ -39,9 +39,9 @@
       "bbox": [
         [
           7.792003677760034,
-          46.404200903699554,
+          46.399851221486394,
           7.848483125190064,
-          46.423875224348556
+          46.42387522434866
         ]
       ]
     },
@@ -56,13 +56,14 @@
   },
   "summaries": {
     "processing_level": [
-      4,
-      2
+      2,
+      4
     ],
     "source": [
       "DNAGE (Geoazimut)",
-      "Geoprevent",
-      "DNAGE (Guardaval)"
+      "DNAGE (Guardaval)",
+      "Sensalpin",
+      "Geoprevent"
     ]
   },
   "links": [

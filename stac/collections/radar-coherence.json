@@ -3,10 +3,10 @@
   "id": "radar-coherence",
   "stac_version": "1.1.0",
   "stac_extensions": [
-    "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json"
+    "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
   ],
-  "title": "Radar Coherence",
-  "description": "Interferometric radar coherence data",
+  "title": "Radar Velocity - ESRI",
+  "description": "",
   "license": "CC-BY-NC-SA-4.0",
   "keywords": [
     "Birch Glacier",
@@ -14,7 +14,7 @@
     "Switzerland",
     "glacier collapse",
     "landslide",
-    "radar coherence"
+    "radar velocity - esri"
   ],
   "providers": [
     {
@@ -38,10 +38,10 @@
     "spatial": {
       "bbox": [
         [
-          7.811118259859858,
-          46.42187522434856,
-          7.813118259859858,
-          46.423875224348556
+          7.802669387936483,
+          46.392627327878365,
+          7.848306376728169,
+          46.417195772703195
         ]
       ]
     },

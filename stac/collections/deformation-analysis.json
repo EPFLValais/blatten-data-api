@@ -3,10 +3,10 @@
   "id": "deformation-analysis",
   "stac_version": "1.1.0",
   "stac_extensions": [
-    "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json"
+    "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
   ],
-  "title": "Deformation Analysis",
-  "description": "DEFOX deformation analysis imagery",
+  "title": "Deformation Analysis - Image",
+  "description": "",
   "license": "CC-BY-NC-SA-4.0",
   "keywords": [
     "Birch Glacier",
@@ -14,7 +14,7 @@
     "Switzerland",
     "glacier collapse",
     "landslide",
-    "deformation analysis"
+    "deformation analysis - image"
   ],
   "providers": [
     {
@@ -38,10 +38,10 @@
     "spatial": {
       "bbox": [
         [
-          7.838645748295971,
-          46.40440164951802,
-          7.840645748295971,
-          46.40640164951802
+          7.838645748296098,
+          46.404401649518064,
+          7.840645748296098,
+          46.40640164951806
         ]
       ]
     },

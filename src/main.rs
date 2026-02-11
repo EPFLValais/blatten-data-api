@@ -816,13 +816,13 @@ async fn landing_page(State(state): State<AppState>) -> impl IntoResponse {
             },
             {
                 "rel": "describedby",
-                "href": "/s3/docs/dataset_overview.csv",
+                "href": format!("{}/s3/docs/dataset_overview.csv", state.base_url),
                 "type": "text/csv",
                 "title": "Dataset Overview"
             },
             {
                 "rel": "describedby",
-                "href": "/s3/docs/detailed_report.pdf",
+                "href": format!("{}/s3/docs/detailed_report.pdf", state.base_url),
                 "type": "application/pdf",
                 "title": "Detailed Report"
             },

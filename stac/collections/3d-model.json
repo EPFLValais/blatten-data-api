@@ -3,10 +3,10 @@
   "id": "3d-model",
   "stac_version": "1.1.0",
   "stac_extensions": [
-    "https://stac-extensions.github.io/timestamps/v1.2.0/schema.json"
+    "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
   ],
-  "title": "3D Models",
-  "description": "3D visualization models for Sketchfab and similar platforms",
+  "title": "3D-Model",
+  "description": "",
   "license": "CC-BY-NC-SA-4.0",
   "keywords": [
     "Birch Glacier",
@@ -14,7 +14,7 @@
     "Switzerland",
     "glacier collapse",
     "landslide",
-    "3d models"
+    "3d-model"
   ],
   "providers": [
     {
@@ -38,10 +38,10 @@
     "spatial": {
       "bbox": [
         [
-          7.78,
-          46.38,
-          7.88,
-          46.44
+          7.715785138478515,
+          46.33184896456103,
+          7.801931034459737,
+          46.40661853154165
         ]
       ]
     },
