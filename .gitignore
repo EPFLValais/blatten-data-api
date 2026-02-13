@@ -1,4 +1,8 @@
 target
 *.md
 
-validation_report.json
+# Generator cache / build artifacts
+stac/manifest.json
+stac/.stac-cache/
+stac/validation_report.json
+stac/collections/*_items.ndjson

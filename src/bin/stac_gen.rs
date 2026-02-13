@@ -1948,39 +1948,22 @@ fn generate_catalog(
                 .find(|d| d.id == coll_id)
                 .expect("Unknown collection");
 
-            // Get STAC items for this collection
-            let coll_stac_items: Vec<&serde_json::Value> = items_with_stac
-                .iter()
-                .filter(|(meta, _)| meta.collection_id.as_deref() == Some(coll_id.as_str()))
-                .map(|(_, stac)| stac)
-                .collect();
-
             // Create collection JSON
             let collection = create_stac_collection(def, coll_items, base_url);
             let collection_json = serde_json::to_string_pretty(&collection).unwrap();
 
-            // Build NDJSON content in memory
-            let items_ndjson: String = coll_stac_items
-                .iter()
-                .map(|item| serde_json::to_string(item).unwrap())
-                .collect::<Vec<_>>()
-                .join("\n");
-
             coll_pb.inc(1);
-            (coll_id.clone(), collection, collection_json, items_ndjson)
+            (coll_id.clone(), collection, collection_json)
         })
         .collect();
 
     // Extract collections for later use
-    let stac_collections: Vec<_> = collection_data.iter().map(|(_, c, _, _)| c.clone()).collect();
+    let stac_collections: Vec<_> = collection_data.iter().map(|(_, c, _)| c.clone()).collect();
 
     // Write all collection files (fast, already serialized)
-    for (coll_id, _, collection_json, items_ndjson) in &collection_data {
+    for (coll_id, _, collection_json) in &collection_data {
         let coll_path = output_dir.join("collections").join(format!("{}.json", coll_id));
         fs::write(&coll_path, collection_json)?;
-
-        let items_path = output_dir.join("collections").join(format!("{}_items.ndjson", coll_id));
-        fs::write(&items_path, items_ndjson)?;
     }
 
     coll_pb.finish_with_message(format!("Wrote {} collection files", stac_collections.len()));
@@ -2271,9 +2254,20 @@ fn main() -> Result<()> {
                         info!("  Mode: FULL REBUILD (ignoring existing manifest)");
                         None
                     } else {
-                        let manifest_path = output.join("manifest.json");
-                        if manifest_path.exists() {
-                            match DataManifest::load(&manifest_path) {
+                        let cache_dir = output.join(".stac-cache");
+                        let manifest_path = cache_dir.join("manifest.json");
+                        // Also check old location for migration
+                        let old_manifest_path = output.join("manifest.json");
+                        let effective_path = if manifest_path.exists() {
+                            manifest_path.clone()
+                        } else if old_manifest_path.exists() {
+                            info!("  Migrating manifest from old location (stac/manifest.json → stac/.stac-cache/manifest.json)");
+                            old_manifest_path.clone()
+                        } else {
+                            manifest_path.clone() // won't exist, handled below
+                        };
+                        if effective_path.exists() {
+                            match DataManifest::load(&effective_path) {
                                 Ok(m) => {
                                     info!("  Loaded existing manifest ({} files, {} archives)",
                                         m.total_files, m.archives.len());
@@ -2361,10 +2355,17 @@ fn main() -> Result<()> {
 
                     // Save manifest
                     if !dry_run {
-                        fs::create_dir_all(&output)?;
-                        let manifest_path = output.join("manifest.json");
+                        let cache_dir = output.join(".stac-cache");
+                        fs::create_dir_all(&cache_dir)?;
+                        let manifest_path = cache_dir.join("manifest.json");
                         manifest.save(&manifest_path)?;
                         info!("  Saved manifest to {:?}", manifest_path);
+                        // Clean up old location if it exists
+                        let old_manifest = output.join("manifest.json");
+                        if old_manifest.exists() {
+                            let _ = fs::remove_file(&old_manifest);
+                            info!("  Removed old manifest from {:?}", old_manifest);
+                        }
                     }
 
                     data_manifest = Some(manifest);
