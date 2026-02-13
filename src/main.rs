@@ -1476,7 +1476,7 @@ fn wrap_kml_document(name: &str, placemarks: &str) -> String {
       <IconStyle>
         <color>ff0000ff</color>
         <scale>1.2</scale>
-        <Icon><href>http://maps.google.com/mapfiles/kml/pushpin/red-pushpin.png</href></Icon>
+        <Icon><href>https://maps.google.com/mapfiles/kml/pushpin/red-pushpin.png</href></Icon>
       </IconStyle>
     </Style>
     <Style id="polygon">
