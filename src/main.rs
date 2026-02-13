@@ -717,8 +717,11 @@ async fn main() -> Result<()> {
         )
         // Search
         .route("/stac/search", get(search_items_get).post(search_items_post))
-        // KML generation (for SwissTopo integration)
-        .route("/stac/kml", get(generate_kml))
+        // KML generation (path-based only — no query params to avoid injection/encoding issues).
+        // The last segment is a param (:_kml) rather than a literal because SwissTopo
+        // appends hash params to the URL path (e.g. "kml&bgLayer=...") with no "?" separator.
+        .route("/stac/collections/:collection_id/:_kml", get(generate_kml_collection_path))
+        .route("/stac/collections/:collection_id/items/:item_id/:_kml", get(generate_kml_item_path))
         // Health check
         .route("/health", get(health_check))
         .with_state(state)
@@ -1190,80 +1193,161 @@ async fn health_check(State(state): State<AppState>) -> impl IntoResponse {
 // KML Generation Endpoint
 // ============================================================================
 
-/// Query parameters for KML generation
-#[derive(Debug, Deserialize)]
-struct KmlParams {
-    /// Collection ID (required)
-    collection_id: String,
-    /// Item ID (required)
-    item_id: String,
-    /// Name/label for the placemark (optional, defaults to item title or ID)
-    name: Option<String>,
-}
-
-/// Generate KML for a STAC item's geometry
-/// Only serves KML for existing catalog items (no arbitrary coordinates)
-async fn generate_kml(
+/// Path-based KML for a single item.
+/// The `:_kml` param absorbs trailing junk SwissTopo appends (e.g. "kml&bgLayer=...").
+async fn generate_kml_item_path(
     State(state): State<AppState>,
-    Query(params): Query<KmlParams>,
+    Path((collection_id, item_id, _kml)): Path<(String, String, String)>,
 ) -> impl IntoResponse {
-    // Look up item and get its geometry
-    match state.catalog.get_item(&params.collection_id, &params.item_id) {
+    if !_kml.starts_with("kml") {
+        return (
+            StatusCode::NOT_FOUND,
+            [(header::CONTENT_TYPE, "text/plain")],
+            "Not found".to_string(),
+        );
+    }
+    match state.catalog.get_item(&collection_id, &item_id) {
         Some(item) => {
-            // Use provided name, or fall back to item title/id
-            let name = params.name.unwrap_or_else(|| {
-                item.properties
-                    .additional_fields
-                    .get("title")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| item.id.clone())
-            });
-
-            // Try geometry first, then fall back to bbox
-            let kml_content = if let Some(ref geom) = item.geometry {
-                geojson_geometry_to_kml(&name, geom)
-            } else if let Some(bbox) = item.bbox_array() {
-                let (min_lon, min_lat, max_lon, max_lat) = (bbox[0], bbox[1], bbox[2], bbox[3]);
-                generate_kml_polygon(&name, &[
-                    (min_lon, min_lat),
-                    (max_lon, min_lat),
-                    (max_lon, max_lat),
-                    (min_lon, max_lat),
-                    (min_lon, min_lat),
-                ])
-            } else {
-                return (
+            let name = item_display_name(item);
+            match item_to_kml_placemark(&name, item) {
+                Some(placemark) => (
+                    StatusCode::OK,
+                    [(header::CONTENT_TYPE, "application/vnd.google-earth.kml+xml")],
+                    wrap_kml_document(&name, &placemark),
+                ),
+                None => (
                     StatusCode::BAD_REQUEST,
                     [(header::CONTENT_TYPE, "text/plain")],
                     "Item has no geometry or bbox".to_string(),
-                );
-            };
-
-            (
-                StatusCode::OK,
-                [(header::CONTENT_TYPE, "application/vnd.google-earth.kml+xml")],
-                kml_content,
-            )
+                ),
+            }
         }
         None => (
             StatusCode::NOT_FOUND,
             [(header::CONTENT_TYPE, "text/plain")],
-            format!("Item not found: {}/{}", params.collection_id, params.item_id),
+            format!("Item not found: {}/{}", collection_id, item_id),
         ),
     }
 }
 
-/// Convert geojson::Geometry to KML
-fn geojson_geometry_to_kml(name: &str, geom: &geojson::Geometry) -> String {
+/// Path-based KML for all items in a collection.
+/// The `:_kml` param absorbs trailing junk SwissTopo appends (e.g. "kml&bgLayer=...").
+async fn generate_kml_collection_path(
+    State(state): State<AppState>,
+    Path((collection_id, _kml)): Path<(String, String)>,
+) -> impl IntoResponse {
+    if !_kml.starts_with("kml") {
+        return (
+            StatusCode::NOT_FOUND,
+            [(header::CONTENT_TYPE, "text/plain")],
+            "Not found".to_string(),
+        );
+    }
+    let items = state.catalog.get_collection_items(&collection_id);
+    if items.is_empty() {
+        return (
+            StatusCode::NOT_FOUND,
+            [(header::CONTENT_TYPE, "text/plain")],
+            format!("Collection not found or empty: {}", collection_id),
+        );
+    }
+
+    let placemarks: String = items
+        .iter()
+        .filter_map(|item| {
+            let name = item_display_name(item);
+            item_to_kml_placemark(&name, item)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    if placemarks.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            [(header::CONTENT_TYPE, "text/plain")],
+            format!("No items with geometry in collection: {}", collection_id),
+        );
+    }
+
+    (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "application/vnd.google-earth.kml+xml")],
+        wrap_kml_document(&collection_id, &placemarks),
+    )
+}
+
+/// Get display name for an item (title or ID)
+fn item_display_name(item: &stac::Item) -> String {
+    item.properties
+        .additional_fields
+        .get("title")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| item.id.clone())
+}
+
+/// Convert a STAC item to a KML `<Placemark>` fragment (no document wrapper).
+/// Returns None if the item has no geometry or bbox.
+fn item_to_kml_placemark(name: &str, item: &stac::Item) -> Option<String> {
+    if let Some(ref geom) = item.geometry {
+        geojson_geometry_to_kml_placemark(name, geom)
+    } else if let Some(bbox) = item.bbox_array() {
+        let (min_lon, min_lat, max_lon, max_lat) = (bbox[0], bbox[1], bbox[2], bbox[3]);
+        Some(kml_polygon_placemark(
+            name,
+            &[
+                (min_lon, min_lat),
+                (max_lon, min_lat),
+                (max_lon, max_lat),
+                (min_lon, max_lat),
+                (min_lon, min_lat),
+            ],
+        ))
+    } else {
+        None
+    }
+}
+
+/// Wrap placemark fragment(s) in a full KML document
+fn wrap_kml_document(name: &str, placemarks: &str) -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>{name}</name>
+    <Style id="marker">
+      <IconStyle>
+        <color>ff0000ff</color>
+        <scale>1.2</scale>
+        <Icon><href>http://maps.google.com/mapfiles/kml/pushpin/red-pushpin.png</href></Icon>
+      </IconStyle>
+    </Style>
+    <Style id="polygon">
+      <LineStyle>
+        <color>ff0000ff</color>
+        <width>2</width>
+      </LineStyle>
+      <PolyStyle>
+        <color>4d0000ff</color>
+      </PolyStyle>
+    </Style>
+{placemarks}
+  </Document>
+</kml>"#
+    )
+}
+
+/// Convert geojson::Geometry to a KML `<Placemark>` fragment.
+/// Returns None for unsupported or invalid geometry.
+fn geojson_geometry_to_kml_placemark(name: &str, geom: &geojson::Geometry) -> Option<String> {
     use geojson::Value;
 
     match &geom.value {
         Value::Point(coords) => {
             if coords.len() >= 2 {
-                generate_kml_point(name, coords[0], coords[1])
+                Some(kml_point_placemark(name, coords[0], coords[1]))
             } else {
-                generate_kml_error("Invalid Point coordinates")
+                None
             }
         }
         Value::Polygon(rings) => {
@@ -1278,13 +1362,12 @@ fn geojson_geometry_to_kml(name: &str, geom: &geojson::Geometry) -> String {
                         }
                     })
                     .collect();
-                generate_kml_polygon(name, &coords)
+                Some(kml_polygon_placemark(name, &coords))
             } else {
-                generate_kml_error("Invalid Polygon coordinates")
+                None
             }
         }
         Value::MultiPolygon(polygons) => {
-            // For MultiPolygon, just use the first polygon
             if let Some(rings) = polygons.first() {
                 if let Some(outer_ring) = rings.first() {
                     let coords: Vec<(f64, f64)> = outer_ring
@@ -1297,47 +1380,33 @@ fn geojson_geometry_to_kml(name: &str, geom: &geojson::Geometry) -> String {
                             }
                         })
                         .collect();
-                    generate_kml_polygon(name, &coords)
+                    Some(kml_polygon_placemark(name, &coords))
                 } else {
-                    generate_kml_error("Invalid MultiPolygon coordinates")
+                    None
                 }
             } else {
-                generate_kml_error("Empty MultiPolygon")
+                None
             }
         }
-        _ => generate_kml_error(&format!("Unsupported geometry type")),
+        _ => None,
     }
 }
 
-/// Generate KML for a point
-fn generate_kml_point(name: &str, lon: f64, lat: f64) -> String {
+/// Generate a KML `<Placemark>` fragment for a point
+fn kml_point_placemark(name: &str, lon: f64, lat: f64) -> String {
     format!(
-        r#"<?xml version="1.0" encoding="UTF-8"?>
-<kml xmlns="http://www.opengis.net/kml/2.2">
-  <Document>
-    <name>{}</name>
-    <Style id="marker">
-      <IconStyle>
-        <color>ff0000ff</color>
-        <scale>1.2</scale>
-        <Icon><href>http://maps.google.com/mapfiles/kml/pushpin/red-pushpin.png</href></Icon>
-      </IconStyle>
-    </Style>
-    <Placemark>
-      <name>{}</name>
+        r#"    <Placemark>
+      <name>{name}</name>
       <styleUrl>#marker</styleUrl>
       <Point>
-        <coordinates>{},{},0</coordinates>
+        <coordinates>{lon},{lat},0</coordinates>
       </Point>
-    </Placemark>
-  </Document>
-</kml>"#,
-        name, name, lon, lat
+    </Placemark>"#
     )
 }
 
-/// Generate KML for a polygon
-fn generate_kml_polygon(name: &str, coords: &[(f64, f64)]) -> String {
+/// Generate a KML `<Placemark>` fragment for a polygon
+fn kml_polygon_placemark(name: &str, coords: &[(f64, f64)]) -> String {
     let coord_str: String = coords
         .iter()
         .map(|(lon, lat)| format!("{},{},0", lon, lat))
@@ -1345,46 +1414,16 @@ fn generate_kml_polygon(name: &str, coords: &[(f64, f64)]) -> String {
         .join(" ");
 
     format!(
-        r#"<?xml version="1.0" encoding="UTF-8"?>
-<kml xmlns="http://www.opengis.net/kml/2.2">
-  <Document>
-    <name>{}</name>
-    <Style id="polygon">
-      <LineStyle>
-        <color>ff0000ff</color>
-        <width>2</width>
-      </LineStyle>
-      <PolyStyle>
-        <color>4d0000ff</color>
-      </PolyStyle>
-    </Style>
-    <Placemark>
-      <name>{}</name>
+        r#"    <Placemark>
+      <name>{name}</name>
       <styleUrl>#polygon</styleUrl>
       <Polygon>
         <outerBoundaryIs>
           <LinearRing>
-            <coordinates>{}</coordinates>
+            <coordinates>{coord_str}</coordinates>
           </LinearRing>
         </outerBoundaryIs>
       </Polygon>
-    </Placemark>
-  </Document>
-</kml>"#,
-        name, name, coord_str
-    )
-}
-
-/// Generate KML with an error message
-fn generate_kml_error(message: &str) -> String {
-    format!(
-        r#"<?xml version="1.0" encoding="UTF-8"?>
-<kml xmlns="http://www.opengis.net/kml/2.2">
-  <Document>
-    <name>Error</name>
-    <description>{}</description>
-  </Document>
-</kml>"#,
-        message
+    </Placemark>"#
     )
 }

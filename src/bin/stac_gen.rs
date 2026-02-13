@@ -37,6 +37,21 @@ fn strip_field_prefix(s: &str) -> String {
 }
 
 // =============================================================================
+// Junk File Exclusion
+// =============================================================================
+
+/// Returns true if the file should be excluded from scanning/staging/archiving.
+/// Filters out Windows metadata, macOS metadata, and stray copies of the Excel file.
+fn is_junk_file(path: &Path) -> bool {
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    let name_lower = name.to_lowercase();
+    matches!(
+        name_lower.as_str(),
+        "desktop.ini" | "thumbs.db" | ".ds_store"
+    ) || name_lower.starts_with("data_klnesthorn_sharepoint")
+}
+
+// =============================================================================
 // File Overrides / Patches
 // =============================================================================
 //
@@ -2964,7 +2979,7 @@ fn create_archive(source_dir: &Path, archive_path: &Path) -> Result<u64> {
         let name = path.strip_prefix(source_dir)
             .map_err(|e| anyhow::anyhow!("Failed to strip prefix: {}", e))?;
 
-        if path.is_file() {
+        if path.is_file() && !is_junk_file(path) {
             zip.start_file(name.to_string_lossy(), options)?;
             let mut f = File::open(path)?;
             std::io::copy(&mut f, &mut zip)?;
@@ -2987,7 +3002,7 @@ fn count_folder_contents(dir: &Path) -> (usize, u64) {
     let mut size = 0u64;
 
     for entry in WalkDir::new(dir).into_iter().filter_map(|e| e.ok()) {
-        if entry.file_type().is_file() {
+        if entry.file_type().is_file() && !is_junk_file(entry.path()) {
             count += 1;
             size += entry.metadata().map(|m| m.len()).unwrap_or(0);
         }
@@ -3283,7 +3298,7 @@ fn hash_staged_assets(
             .into_iter()
             .filter_map(|e| e.ok())
         {
-            if !entry.file_type().is_file() {
+            if !entry.file_type().is_file() || is_junk_file(entry.path()) {
                 continue;
             }
             let rel = entry.path().strip_prefix(&code_dir)
@@ -3318,7 +3333,7 @@ fn hash_staged_assets(
                 .into_iter()
                 .filter_map(|e| e.ok())
             {
-                if !file_entry.file_type().is_file() {
+                if !file_entry.file_type().is_file() || is_junk_file(file_entry.path()) {
                     continue;
                 }
                 let rel = file_entry.path().strip_prefix(code_dir)
@@ -3666,7 +3681,7 @@ fn scan_data_folders(
                         }
                     }
                 }
-            } else if entry.file_type().is_file() {
+            } else if entry.file_type().is_file() && !is_junk_file(entry.path()) {
                 // Single file (e.g., standalone .tif in Terradata/)
                 let file_name = entry.file_name().to_string_lossy().to_string();
                 if let Some(code) = extract_code_from_folder(&file_name, &folder_mappings) {
@@ -3714,7 +3729,7 @@ fn scan_data_folders(
                 let files: Vec<PathBuf> = WalkDir::new(&folder_path)
                     .into_iter()
                     .filter_map(|e| e.ok())
-                    .filter(|e| e.file_type().is_file())
+                    .filter(|e| e.file_type().is_file() && !is_junk_file(e.path()))
                     .map(|e| e.path().to_path_buf())
                     .collect();
                 all_files.extend(files);
@@ -3811,7 +3826,7 @@ fn scan_folder_with_nested(
         }
 
         // Add files to appropriate codes
-        if path.is_file() {
+        if path.is_file() && !is_junk_file(path) {
             // Always add to parent
             if let Some(parent) = results.get_mut(parent_code) {
                 parent.files.push(path.to_path_buf());
