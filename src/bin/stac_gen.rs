@@ -371,7 +371,7 @@ struct ArchiveManifestEntry {
     /// Hash of sorted (filename, size, file_hash) — changes if any file changes
     content_fingerprint: String,
     file_count: usize,
-    /// True if archive uses ZIP64 extensions (size > 4GB)
+    /// True if archive uses ZIP64 extensions (individual file >= 4GB or archive >= 4GB)
     #[serde(default)]
     is_zip64: bool,
 }
@@ -2964,14 +2964,18 @@ fn extract_archive(archive_path: &Path, target_dir: &Path) -> Result<()> {
 }
 
 /// Create a zip archive from a directory
-fn create_archive(source_dir: &Path, archive_path: &Path) -> Result<u64> {
+/// Result of creating an archive: (size_bytes, is_zip64)
+fn create_archive(source_dir: &Path, archive_path: &Path) -> Result<(u64, bool)> {
     use zip::write::SimpleFileOptions;
 
     let file = File::create(archive_path)?;
     let mut zip = zip::ZipWriter::new(file);
-    let options = SimpleFileOptions::default()
-        .compression_method(zip::CompressionMethod::Stored)
-        .large_file(true);
+    let base_options = SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Stored);
+    let dir_options = base_options;
+
+    // Track whether any entry requires ZIP64 extensions
+    let mut needs_zip64 = false;
 
     // Walk the directory and add all files (follow symlinks for staged assets)
     for entry in WalkDir::new(source_dir).follow_links(true).into_iter().filter_map(|e| e.ok()) {
@@ -2980,20 +2984,31 @@ fn create_archive(source_dir: &Path, archive_path: &Path) -> Result<u64> {
             .map_err(|e| anyhow::anyhow!("Failed to strip prefix: {}", e))?;
 
         if path.is_file() && !is_junk_file(path) {
+            let file_size = fs::metadata(path)?.len();
+            let large = file_size >= 0xFFFFFFFF;
+            if large {
+                needs_zip64 = true;
+            }
+            let options = base_options.large_file(large);
             zip.start_file(name.to_string_lossy(), options)?;
             let mut f = File::open(path)?;
             std::io::copy(&mut f, &mut zip)?;
         } else if !name.as_os_str().is_empty() {
             // Directory entry (not the root)
-            zip.add_directory(name.to_string_lossy(), options)?;
+            zip.add_directory(name.to_string_lossy(), dir_options)?;
         }
     }
 
     zip.finish()?;
 
-    // Return the size of the created archive
+    // Check final archive size — ZIP64 also needed if archive itself > 4GB
     let metadata = fs::metadata(archive_path)?;
-    Ok(metadata.len())
+    let size = metadata.len();
+    if size >= 0xFFFFFFFF {
+        needs_zip64 = true;
+    }
+
+    Ok((size, needs_zip64))
 }
 
 /// Count files and total size in a directory
@@ -3499,7 +3514,7 @@ fn stage_archives(
                         return ArchiveResult::DryRun;
                     }
                     match create_archive(&asset_dir, archive_path) {
-                        Ok(size) => {
+                        Ok((size, is_zip64)) => {
                             match hash_file(archive_path, HashAlgorithm::Sha256) {
                                 Ok(archive_hash) => {
                                     let sidecar_path = archives_dir.join(format!("{}.zip.sha256", code));
@@ -3513,7 +3528,7 @@ fn stage_archives(
                                             hash: archive_hash,
                                             content_fingerprint: fingerprint.clone(),
                                             file_count: *file_count,
-                                            is_zip64: size > 0xFFFFFFFF,
+                                            is_zip64,
                                         },
                                     }
                                 }

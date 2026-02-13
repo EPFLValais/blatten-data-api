@@ -94,6 +94,8 @@ struct SearchParams {
     /// Exclude assets from response (for lightweight listing)
     #[serde(default)]
     exclude_assets: bool,
+    /// Fields filter (STAC Fields Extension): comma-separated, prefix `-` to exclude
+    fields: Option<String>,
 }
 
 /// Deserializer that accepts either a string or array of strings for the `q` parameter
@@ -144,6 +146,15 @@ where
     deserializer.deserialize_any(QVisitor)
 }
 
+/// POST body fields filter (STAC Fields Extension)
+#[derive(Debug, Deserialize, Default)]
+struct FieldsBody {
+    #[serde(default)]
+    include: Vec<String>,
+    #[serde(default)]
+    exclude: Vec<String>,
+}
+
 /// POST body for search (same fields as GET params)
 #[derive(Debug, Deserialize, Default)]
 struct SearchBody {
@@ -159,6 +170,8 @@ struct SearchBody {
     q: Option<Vec<String>>,
     #[serde(default)]
     exclude_assets: bool,
+    /// Fields filter (STAC Fields Extension)
+    fields: Option<FieldsBody>,
 }
 
 /// Query parameters for asset pagination
@@ -352,6 +365,7 @@ struct ValidatedSearch {
     sensor: Option<String>,
     q: Option<Vec<String>>,
     exclude_assets: bool,
+    fields: FieldsFilter,
 }
 
 impl ValidatedSearch {
@@ -381,6 +395,12 @@ impl ValidatedSearch {
             }
         }
 
+        let fields = params
+            .fields
+            .as_deref()
+            .map(FieldsFilter::parse_get)
+            .unwrap_or_default();
+
         Ok(ValidatedSearch {
             bbox,
             datetime,
@@ -397,6 +417,7 @@ impl ValidatedSearch {
                     .collect::<Vec<_>>()
             }).filter(|v: &Vec<String>| !v.is_empty()),
             exclude_assets: params.exclude_assets,
+            fields,
         })
     }
 
@@ -422,6 +443,12 @@ impl ValidatedSearch {
             }
         }
 
+        let fields = body
+            .fields
+            .as_ref()
+            .map(FieldsFilter::from_body)
+            .unwrap_or_default();
+
         Ok(ValidatedSearch {
             bbox,
             datetime,
@@ -433,6 +460,7 @@ impl ValidatedSearch {
             sensor: body.sensor,
             q: body.q.filter(|v| !v.is_empty()),
             exclude_assets: body.exclude_assets,
+            fields,
         })
     }
 }
@@ -456,7 +484,134 @@ const CONFORMANCE_CLASSES: &[&str] = &[
     // Free-Text Search
     "https://api.stacspec.org/v1.0.0-rc.1/item-search#free-text",
     "https://api.stacspec.org/v1.0.0-rc.1/ogcapi-features#free-text",
+    // Fields Extension
+    "https://api.stacspec.org/v1.0.0/item-search#fields",
 ];
+
+// ============================================================================
+// Fields Extension (STAC Fields Extension)
+// ============================================================================
+
+/// Parsed fields filter for pruning item JSON responses
+#[derive(Debug, Clone, Default)]
+struct FieldsFilter {
+    include: Vec<String>,
+    exclude: Vec<String>,
+}
+
+/// Default top-level fields per STAC Fields Extension spec.
+/// Note: `properties` is NOT a default — it's only included when explicitly requested.
+const FIELDS_DEFAULTS: &[&str] = &[
+    "type",
+    "stac_version",
+    "id",
+    "geometry",
+    "bbox",
+    "links",
+    "assets",
+    "collection",
+];
+
+impl FieldsFilter {
+    fn is_empty(&self) -> bool {
+        self.include.is_empty() && self.exclude.is_empty()
+    }
+
+    /// Parse GET format: comma-separated, prefix `-` for exclude, `+` or bare for include
+    fn parse_get(s: &str) -> Self {
+        let mut include = Vec::new();
+        let mut exclude = Vec::new();
+        for field in s.split(',').map(|f| f.trim()).filter(|f| !f.is_empty()) {
+            if let Some(stripped) = field.strip_prefix('-') {
+                exclude.push(stripped.to_string());
+            } else {
+                let field = field.strip_prefix('+').unwrap_or(field);
+                include.push(field.to_string());
+            }
+        }
+        FieldsFilter { include, exclude }
+    }
+
+    /// Build from POST body
+    fn from_body(body: &FieldsBody) -> Self {
+        FieldsFilter {
+            include: body.include.clone(),
+            exclude: body.exclude.clone(),
+        }
+    }
+
+    /// Apply fields filter to a serialized item JSON value (in-place)
+    fn apply(&self, json: &mut serde_json::Value) {
+        if self.is_empty() {
+            return;
+        }
+
+        let obj = match json.as_object_mut() {
+            Some(o) => o,
+            None => return,
+        };
+
+        // When includes are specified, start from defaults + explicitly included fields
+        if !self.include.is_empty() {
+            let mut keep_top: std::collections::HashSet<&str> =
+                FIELDS_DEFAULTS.iter().copied().collect();
+
+            let mut prop_subfields: Vec<&str> = Vec::new();
+            let mut include_all_properties = false;
+
+            for field in &self.include {
+                if field == "properties" {
+                    include_all_properties = true;
+                } else if let Some(subfield) = field.strip_prefix("properties.") {
+                    prop_subfields.push(subfield);
+                } else {
+                    keep_top.insert(field.as_str());
+                }
+            }
+
+            // Remove top-level keys not in keep set (but preserve "properties" if sub-fields requested)
+            let has_prop_includes = include_all_properties || !prop_subfields.is_empty();
+            let keys_to_remove: Vec<String> = obj
+                .keys()
+                .filter(|k| {
+                    if *k == "properties" && has_prop_includes {
+                        return false;
+                    }
+                    !keep_top.contains(k.as_str())
+                })
+                .cloned()
+                .collect();
+            for key in keys_to_remove {
+                obj.remove(&key);
+            }
+
+            // Filter properties sub-fields (unless "properties" was included as a whole)
+            if !include_all_properties && !prop_subfields.is_empty() {
+                if let Some(props) = obj.get_mut("properties").and_then(|p| p.as_object_mut()) {
+                    let remove: Vec<String> = props
+                        .keys()
+                        .filter(|k| !prop_subfields.contains(&k.as_str()))
+                        .cloned()
+                        .collect();
+                    for key in remove {
+                        props.remove(&key);
+                    }
+                }
+            }
+        }
+
+        // Apply excludes
+        for field in &self.exclude {
+            if let Some(subfield) = field.strip_prefix("properties.") {
+                if let Some(props) = obj.get_mut("properties").and_then(|p| p.as_object_mut()) {
+                    props.remove(subfield);
+                }
+            } else {
+                obj.remove(field);
+            }
+        }
+    }
+}
 
 // ============================================================================
 // Helper Functions
@@ -481,13 +636,15 @@ fn strip_non_archive_assets(item: &StacItem) -> serde_json::Value {
     json
 }
 
-/// Convert item to JSON, optionally stripping assets
-fn item_to_json(item: &StacItem, exclude_assets: bool) -> serde_json::Value {
-    if exclude_assets {
+/// Convert item to JSON, optionally stripping assets and applying fields filter
+fn item_to_json(item: &StacItem, exclude_assets: bool, fields: &FieldsFilter) -> serde_json::Value {
+    let mut json = if exclude_assets {
         strip_non_archive_assets(item)
     } else {
         serde_json::to_value(item).unwrap_or_default()
-    }
+    };
+    fields.apply(&mut json);
+    json
 }
 
 /// Filter an item based on validated search parameters
@@ -955,7 +1112,7 @@ async fn get_collection_items(
         .into_iter()
         .skip(validated.offset)
         .take(validated.limit)
-        .map(|item| item_to_json(item, validated.exclude_assets))
+        .map(|item| item_to_json(item, validated.exclude_assets, &validated.fields))
         .collect();
 
     let mut links = vec![
@@ -1136,7 +1293,7 @@ fn perform_search(
         .into_iter()
         .skip(params.offset)
         .take(params.limit)
-        .map(|item| item_to_json(item, params.exclude_assets))
+        .map(|item| item_to_json(item, params.exclude_assets, &params.fields))
         .collect();
 
     let mut links = vec![
