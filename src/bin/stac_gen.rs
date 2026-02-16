@@ -457,59 +457,71 @@ fn classify_archive_action(
 /// Collection definition
 #[derive(Debug, Clone)]
 struct CollectionDef {
-    id: &'static str,
+    id: String,
     title: String,
     description: String,
 }
 
-/// Map product type codes to collection definitions
-/// Map product type letter codes to collection IDs (URL-safe slugs).
-/// Titles and descriptions are populated later from Excel data.
+/// Hardcoded ProductID letter → collection slug map.
+/// Multiple letters can map to the same collection (e.g. E/F/G/H → radar-velocity).
 fn get_collection_id_map() -> HashMap<&'static str, &'static str> {
     [
         ("A", "webcam-image"),
         ("B", "deformation-analysis"),
+        ("C", "deformation-analysis"),
         ("D", "orthophoto"),
-        ("E", "radar-displacement"),
-        ("F", "radar-amplitude"),
-        ("G", "radar-coherence"),
+        ("E", "radar-velocity"),
+        ("F", "radar-velocity"),
+        ("G", "radar-velocity"),
         ("H", "radar-velocity"),
-        ("I", "dsm"),
-        ("J", "dem"),
+        ("I", "digital-surface-model-dsm"),
+        ("J", "digital-terrain-model-dtm"),
         ("K", "point-cloud"),
         ("L", "3d-model"),
-        ("M", "gnss-data"),
+        ("M", "gps-data"),
         ("N", "thermal-image"),
         ("O", "hydrology"),
-        ("P", "lake-level"),
-        ("U", "radar-timeseries"),
+        ("P", "hydrology"),
+        ("U", "radar-interferograms"),
+        ("V", "radar-coherence"),
     ]
     .into_iter()
     .collect()
 }
 
-/// Build collection definitions from parsed items.
-/// Derives titles from Excel ProductType values.
+/// Extract collection name from product_type (part before first " - ").
+/// "Radar Velocity - DTM" → "Radar Velocity"
+/// "Orthophoto" → "Orthophoto"
+fn collection_name_from_product_type(product_type: &str) -> &str {
+    product_type.split(" - ").next().unwrap_or(product_type).trim()
+}
+
+/// Extract sub-type from product_type (part after first " - ").
+/// "Radar Velocity - DTM" → Some("DTM")
+/// "Orthophoto" → None
+fn product_subtype(product_type: &str) -> Option<&str> {
+    product_type.split_once(" - ").map(|(_, sub)| sub.trim())
+}
+
+/// Build collection definitions from parsed items using the hardcoded collection map.
 fn build_collections(items: &[ItemMetadata]) -> HashMap<String, CollectionDef> {
     let id_map = get_collection_id_map();
     let mut collections: HashMap<String, CollectionDef> = HashMap::new();
 
-    // Collect product_type names per product_id letter
     for item in items {
         if let Some(ref pid) = item.product_id {
-            if let Some(&coll_id) = id_map.get(pid.as_str()) {
-                let entry = collections.entry(pid.clone()).or_insert_with(|| {
+            if let Some(&coll_slug) = id_map.get(pid.as_str()) {
+                let entry = collections.entry(coll_slug.to_string()).or_insert_with(|| {
                     CollectionDef {
-                        id: coll_id,
+                        id: coll_slug.to_string(),
                         title: String::new(),
                         description: String::new(),
                     }
                 });
-                // Use the first non-empty product_type as the title
                 if entry.title.is_empty() {
                     if let Some(ref pt) = item.product_type {
                         if !pt.is_empty() {
-                            entry.title = pt.clone();
+                            entry.title = collection_name_from_product_type(pt).to_string();
                         }
                     }
                 }
@@ -517,12 +529,12 @@ fn build_collections(items: &[ItemMetadata]) -> HashMap<String, CollectionDef> {
         }
     }
 
-    // Ensure all mapped letters have entries (fallback for letters with no items)
-    for (&letter, &coll_id) in &id_map {
-        collections.entry(letter.to_string()).or_insert_with(|| {
+    // Ensure all mapped slugs have entries even if no items matched
+    for &coll_slug in id_map.values() {
+        collections.entry(coll_slug.to_string()).or_insert_with(|| {
             CollectionDef {
-                id: coll_id,
-                title: coll_id.replace('-', " "),
+                id: coll_slug.to_string(),
+                title: coll_slug.replace('-', " "),
                 description: String::new(),
             }
         });
@@ -936,7 +948,7 @@ fn extract_geotiff_geometry(path: &Path) -> (Option<ExtractedGeometry>, Option<S
     } else {
         // No valid CRS — fall back to LV95 if bounds match
         if looks_like_lv95(minx, miny, maxx, maxy) {
-            info!(
+            debug!(
                 "GeoTIFF {}: no CRS, assuming LV95 (EPSG:2056). Bounds: ({:.0}, {:.0}) - ({:.0}, {:.0})",
                 filename, minx, miny, maxx, maxy
             );
@@ -1250,8 +1262,8 @@ fn parse_xlsx(path: &PathBuf) -> Result<Vec<ItemMetadata>> {
         .worksheet_range(&sheet_name)
         .with_context(|| format!("Sheet '{}' not found", sheet_name))?;
 
-    let collection_ids = get_collection_id_map();
     let code_to_file = get_code_to_file();
+    let collection_ids = get_collection_id_map();
     let mut items = Vec::new();
 
     // Data starts at row 2 (1-indexed Excel), which is row 1 (0-indexed)
@@ -1310,10 +1322,12 @@ fn parse_xlsx(path: &PathBuf) -> Result<Vec<ItemMetadata>> {
             is_single_file: false,
         };
 
-        // Map product_id to collection
-        if let Some(ref pid) = product_id {
+        // Derive collection from ProductID via hardcoded map
+        if let Some(ref pid) = item.product_id {
             if let Some(&coll_id) = collection_ids.get(pid.as_str()) {
                 item.collection_id = Some(coll_id.to_string());
+            } else {
+                warn!("Item {} has ProductID '{}' not in collection map", code, pid);
             }
         }
 
@@ -1470,7 +1484,12 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str) -> s
         (serde_json::Value::Null, None, None)
     };
 
-    // Build title: "{code} - {product_type} - {dataset} ({bundle})"
+    // Build title: use sub-type (if any) instead of full product_type to avoid
+    // repeating the collection name. E.g. "06Ea01 - DTM - AIM ShiftedPhase (24h...)"
+    // instead of "06Ea01 - Radar Velocity - DTM - AIM ShiftedPhase (24h...)".
+    let subtype_str = item.product_type.as_deref()
+        .and_then(product_subtype)
+        .unwrap_or("");
     let dataset_str = item.dataset.as_deref()
         .filter(|s| !s.is_empty())
         .or(item.dataset_id.as_deref())
@@ -1482,7 +1501,7 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str) -> s
     let title = format!(
         "{} - {} - {}{}",
         item.code,
-        item.product_type.as_deref().unwrap_or(""),
+        subtype_str,
         dataset_str,
         bundle_suffix
     )
@@ -1942,10 +1961,9 @@ fn generate_catalog(
     let collection_data: Vec<_> = items_by_collection
         .par_iter()
         .map(|(coll_id, coll_items)| {
-            // Find collection definition
+            // Find collection definition (keyed by slug = coll_id)
             let def = collections_defs
-                .values()
-                .find(|d| d.id == coll_id)
+                .get(coll_id.as_str())
                 .expect("Unknown collection");
 
             // Create collection JSON
@@ -1964,6 +1982,28 @@ fn generate_catalog(
     for (coll_id, _, collection_json) in &collection_data {
         let coll_path = output_dir.join("collections").join(format!("{}.json", coll_id));
         fs::write(&coll_path, collection_json)?;
+    }
+
+    // Remove stale collection files from previous runs (e.g. after collection ID renames)
+    let valid_ids: std::collections::HashSet<&str> =
+        collection_data.iter().map(|(id, _, _)| id.as_str()).collect();
+    let collections_path = output_dir.join("collections");
+    if let Ok(entries) = fs::read_dir(&collections_path) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let ext = path.extension().and_then(|e| e.to_str());
+            if ext == Some("json") || ext == Some("ndjson") {
+                if let Some(name) = path.file_stem().and_then(|s| s.to_str()) {
+                    // For "foo_items.ndjson", check "foo"; for "foo.json", check "foo"
+                    let base_id = name.strip_suffix("_items").unwrap_or(name);
+                    if !valid_ids.contains(base_id) {
+                        if let Err(e) = fs::remove_file(&path) {
+                            eprintln!("Warning: failed to remove stale file {:?}: {}", path, e);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     coll_pb.finish_with_message(format!("Wrote {} collection files", stac_collections.len()));
@@ -2703,7 +2743,9 @@ fn main() -> Result<()> {
                         if let Some((path, size)) = archive_map.get(&item.code) {
                             item.archive_file = Some(path.file_name().unwrap_or_default().to_string_lossy().to_string());
                             item.archive_size = Some(*size);
-                            item.archive_is_zip64 = *size > 0xFFFFFFFF;
+                            // Detect ZIP64 from actual zip structure for .zip files
+                            item.archive_is_zip64 = path.extension().and_then(|e| e.to_str()) == Some("zip")
+                                && validate_and_detect_zip64(path).unwrap_or(false);
                             found += 1;
                         }
                     } else if let Some(ref archive_name) = item.archive_file {
@@ -2712,7 +2754,9 @@ fn main() -> Result<()> {
                         if archive_path.exists() {
                             if let Ok(metadata) = fs::metadata(&archive_path) {
                                 item.archive_size = Some(metadata.len());
-                                item.archive_is_zip64 = metadata.len() > 0xFFFFFFFF;
+                                // Detect ZIP64 from actual zip structure for .zip files
+                                item.archive_is_zip64 = archive_path.extension().and_then(|e| e.to_str()) == Some("zip")
+                                    && validate_and_detect_zip64(&archive_path).unwrap_or(false);
                                 found += 1;
                             }
                         } else if verbose {
@@ -2964,9 +3008,9 @@ fn extract_archive(archive_path: &Path, target_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Create a zip archive from a directory
-/// Result of creating an archive: (size_bytes, is_zip64)
-fn create_archive(source_dir: &Path, archive_path: &Path) -> Result<(u64, bool)> {
+/// Create a zip archive from a directory, returning the archive size in bytes.
+/// ZIP64 detection is handled separately by `validate_and_detect_zip64()`.
+fn create_archive(source_dir: &Path, archive_path: &Path) -> Result<u64> {
     use zip::write::SimpleFileOptions;
 
     let file = File::create(archive_path)?;
@@ -2974,9 +3018,6 @@ fn create_archive(source_dir: &Path, archive_path: &Path) -> Result<(u64, bool)>
     let base_options = SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Stored);
     let dir_options = base_options;
-
-    // Track whether any entry requires ZIP64 extensions
-    let mut needs_zip64 = false;
 
     // Walk the directory and add all files (follow symlinks for staged assets)
     for entry in WalkDir::new(source_dir).follow_links(true).into_iter().filter_map(|e| e.ok()) {
@@ -2986,11 +3027,8 @@ fn create_archive(source_dir: &Path, archive_path: &Path) -> Result<(u64, bool)>
 
         if path.is_file() && !is_junk_file(path) {
             let file_size = fs::metadata(path)?.len();
-            let large = file_size >= 0xFFFFFFFF;
-            if large {
-                needs_zip64 = true;
-            }
-            let options = base_options.large_file(large);
+            // large_file() is still needed for correct zip writing of >4GB entries
+            let options = base_options.large_file(file_size >= 0xFFFFFFFF);
             zip.start_file(name.to_string_lossy(), options)?;
             let mut f = File::open(path)?;
             std::io::copy(&mut f, &mut zip)?;
@@ -3001,15 +3039,45 @@ fn create_archive(source_dir: &Path, archive_path: &Path) -> Result<(u64, bool)>
     }
 
     zip.finish()?;
+    let size = fs::metadata(archive_path)?.len();
+    Ok(size)
+}
 
-    // Check final archive size — ZIP64 also needed if archive itself > 4GB
-    let metadata = fs::metadata(archive_path)?;
-    let size = metadata.len();
-    if size >= 0xFFFFFFFF {
-        needs_zip64 = true;
+/// Validate a zip archive's integrity and detect whether it uses ZIP64 extensions.
+///
+/// Opens the archive, reads every entry through the CRC32 reader (full data integrity check),
+/// and inspects the zip structure for ZIP64 markers:
+/// - EOCD64 record (zip64 comment present)
+/// - Per-entry ZIP64 extra fields (large_file flag)
+/// - Entry count >= ZIP64_ENTRY_THR (65535)
+///
+/// Returns `Ok(true)` if the archive uses ZIP64, `Ok(false)` otherwise, or `Err` if corrupt.
+fn validate_and_detect_zip64(archive_path: &Path) -> Result<bool> {
+    use zip::read::HasZipMetadata;
+
+    let file = File::open(archive_path)
+        .with_context(|| format!("Failed to open archive: {}", archive_path.display()))?;
+    let mut archive = zip::ZipArchive::new(file)
+        .with_context(|| format!("Failed to read zip structure: {}", archive_path.display()))?;
+
+    // Check archive-level ZIP64 indicators
+    let has_eocd64 = archive.zip64_comment().is_some();
+    let many_entries = archive.len() >= zip::ZIP64_ENTRY_THR;
+
+    // Validate every entry by reading through CRC32 and check per-entry ZIP64
+    let mut has_large_entry = false;
+    for i in 0..archive.len() {
+        let mut entry = archive.by_index(i)
+            .with_context(|| format!("Failed to read entry {} in {}", i, archive_path.display()))?;
+        if entry.get_metadata().large_file {
+            has_large_entry = true;
+        }
+        // Read through CRC32 reader — validates data integrity
+        std::io::copy(&mut entry, &mut std::io::sink())
+            .with_context(|| format!("CRC32 validation failed for entry {} in {}", entry.name(), archive_path.display()))?;
     }
 
-    Ok((size, needs_zip64))
+    Ok(has_eocd64 || many_entries || has_large_entry)
 }
 
 /// Count files and total size in a directory
@@ -3515,7 +3583,15 @@ fn stage_archives(
                         return ArchiveResult::DryRun;
                     }
                     match create_archive(&asset_dir, archive_path) {
-                        Ok((size, is_zip64)) => {
+                        Ok(size) => {
+                            // Validate archive integrity and detect ZIP64
+                            let is_zip64 = match validate_and_detect_zip64(archive_path) {
+                                Ok(z64) => z64,
+                                Err(e) => {
+                                    progress.inc(1);
+                                    return ArchiveResult::Error { code: code.clone(), error: format!("validate: {}", e) };
+                                }
+                            };
                             match hash_file(archive_path, HashAlgorithm::Sha256) {
                                 Ok(archive_hash) => {
                                     let sidecar_path = archives_dir.join(format!("{}.zip.sha256", code));

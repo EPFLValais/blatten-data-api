@@ -17,81 +17,15 @@
     },
     {
       "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/radar-velocity",
-      "type": "application/json",
-      "title": "Radar Velocity - ROI Zones"
-    },
-    {
-      "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/webcam-image",
-      "type": "application/json",
-      "title": "Webcam-Image"
-    },
-    {
-      "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/point-cloud",
-      "type": "application/json",
-      "title": "Point Cloud"
-    },
-    {
-      "rel": "child",
       "href": "https://blatten-data.epfl.ch/stac/collections/3d-model",
       "type": "application/json",
       "title": "3D-Model"
     },
     {
       "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/radar-coherence",
-      "type": "application/json",
-      "title": "Radar Velocity - ESRI"
-    },
-    {
-      "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/orthophoto",
-      "type": "application/json",
-      "title": "Orthophoto"
-    },
-    {
-      "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/dsm",
+      "href": "https://blatten-data.epfl.ch/stac/collections/digital-surface-model-dsm",
       "type": "application/json",
       "title": "Digital Surface Model DSM"
-    },
-    {
-      "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/lake-level",
-      "type": "application/json",
-      "title": "Hydrology - Lake"
-    },
-    {
-      "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/gnss-data",
-      "type": "application/json",
-      "title": "GPS-Data"
-    },
-    {
-      "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/deformation-analysis",
-      "type": "application/json",
-      "title": "Deformation Analysis - Image"
-    },
-    {
-      "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/hydrology",
-      "type": "application/json",
-      "title": "Hydrology - River"
-    },
-    {
-      "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/radar-displacement",
-      "type": "application/json",
-      "title": "Radar Velocity - DTM"
-    },
-    {
-      "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/radar-timeseries",
-      "type": "application/json",
-      "title": "Radar Interferograms"
     },
     {
       "rel": "child",
@@ -101,15 +35,63 @@
     },
     {
       "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/dem",
+      "href": "https://blatten-data.epfl.ch/stac/collections/hydrology",
+      "type": "application/json",
+      "title": "Hydrology"
+    },
+    {
+      "rel": "child",
+      "href": "https://blatten-data.epfl.ch/stac/collections/radar-coherence",
+      "type": "application/json",
+      "title": "Radar Coherence"
+    },
+    {
+      "rel": "child",
+      "href": "https://blatten-data.epfl.ch/stac/collections/radar-interferograms",
+      "type": "application/json",
+      "title": "Radar Interferograms"
+    },
+    {
+      "rel": "child",
+      "href": "https://blatten-data.epfl.ch/stac/collections/gps-data",
+      "type": "application/json",
+      "title": "GPS-Data"
+    },
+    {
+      "rel": "child",
+      "href": "https://blatten-data.epfl.ch/stac/collections/deformation-analysis",
+      "type": "application/json",
+      "title": "Deformation Analysis"
+    },
+    {
+      "rel": "child",
+      "href": "https://blatten-data.epfl.ch/stac/collections/point-cloud",
+      "type": "application/json",
+      "title": "Point Cloud"
+    },
+    {
+      "rel": "child",
+      "href": "https://blatten-data.epfl.ch/stac/collections/orthophoto",
+      "type": "application/json",
+      "title": "Orthophoto"
+    },
+    {
+      "rel": "child",
+      "href": "https://blatten-data.epfl.ch/stac/collections/digital-terrain-model-dtm",
       "type": "application/json",
       "title": "Digital Terrain Model DTM"
     },
     {
       "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/radar-amplitude",
+      "href": "https://blatten-data.epfl.ch/stac/collections/radar-velocity",
       "type": "application/json",
-      "title": "Radar Velocity - Map"
+      "title": "Radar Velocity"
+    },
+    {
+      "rel": "child",
+      "href": "https://blatten-data.epfl.ch/stac/collections/webcam-image",
+      "type": "application/json",
+      "title": "Webcam-Image"
     },
     {
       "rel": "describedby",

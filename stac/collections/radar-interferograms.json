@@ -1,11 +1,11 @@
 {
   "type": "Collection",
-  "id": "gnss-data",
+  "id": "radar-interferograms",
   "stac_version": "1.1.0",
   "stac_extensions": [
     "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
   ],
-  "title": "GPS-Data",
+  "title": "Radar Interferograms",
   "description": "",
   "license": "CC-BY-NC-SA-4.0",
   "keywords": [
@@ -14,7 +14,7 @@
     "Switzerland",
     "glacier collapse",
     "landslide",
-    "gps-data"
+    "radar interferograms"
   ],
   "providers": [
     {
@@ -38,17 +38,17 @@
     "spatial": {
       "bbox": [
         [
-          7.80480379672543,
-          46.39583767989785,
-          7.841415495592613,
-          46.4189868326746
+          7.8111182598599855,
+          46.42187522434867,
+          7.813118259859986,
+          46.42387522434866
         ]
       ]
     },
     "temporal": {
       "interval": [
         [
-          "2025-05-16T00:00:00Z",
+          "2025-05-19T00:00:00Z",
           "2025-06-30T23:59:59Z"
         ]
       ]
@@ -56,16 +56,16 @@
   },
   "summaries": {
     "processing_level": [
-      1
+      2
     ],
     "source": [
-      "DNAGE (Glaciorisk)"
+      "Geoprevent"
     ]
   },
   "links": [
     {
       "rel": "self",
-      "href": "https://blatten-data.epfl.ch/stac/collections/gnss-data",
+      "href": "https://blatten-data.epfl.ch/stac/collections/radar-interferograms",
       "type": "application/json"
     },
     {
@@ -80,7 +80,7 @@
     },
     {
       "rel": "items",
-      "href": "https://blatten-data.epfl.ch/stac/collections/gnss-data/items",
+      "href": "https://blatten-data.epfl.ch/stac/collections/radar-interferograms/items",
       "type": "application/geo+json"
     }
   ],

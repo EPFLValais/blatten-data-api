@@ -1,6 +1,6 @@
 {
   "type": "Collection",
-  "id": "dsm",
+  "id": "digital-surface-model-dsm",
   "stac_version": "1.1.0",
   "stac_extensions": [
     "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
@@ -65,7 +65,7 @@
   "links": [
     {
       "rel": "self",
-      "href": "https://blatten-data.epfl.ch/stac/collections/dsm",
+      "href": "https://blatten-data.epfl.ch/stac/collections/digital-surface-model-dsm",
       "type": "application/json"
     },
     {
@@ -80,7 +80,7 @@
     },
     {
       "rel": "items",
-      "href": "https://blatten-data.epfl.ch/stac/collections/dsm/items",
+      "href": "https://blatten-data.epfl.ch/stac/collections/digital-surface-model-dsm/items",
       "type": "application/geo+json"
     }
   ],
