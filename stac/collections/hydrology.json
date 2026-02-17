@@ -56,13 +56,13 @@
   },
   "summaries": {
     "processing_level": [
-      2,
-      3
+      3,
+      2
     ],
     "source": [
-      "DNAGE (HYDRO-VS)",
+      "DNAGE (Geoazimut)",
       "DNAGE (HYDRO OFEV)",
-      "DNAGE (Geoazimut)"
+      "DNAGE (HYDRO-VS)"
     ]
   },
   "links": [

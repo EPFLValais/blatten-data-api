@@ -23,9 +23,15 @@
     },
     {
       "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/digital-surface-model-dsm",
+      "href": "https://blatten-data.epfl.ch/stac/collections/radar-velocity",
       "type": "application/json",
-      "title": "Digital Surface Model DSM"
+      "title": "Radar Velocity"
+    },
+    {
+      "rel": "child",
+      "href": "https://blatten-data.epfl.ch/stac/collections/point-cloud",
+      "type": "application/json",
+      "title": "Point Cloud"
     },
     {
       "rel": "child",
@@ -41,33 +47,15 @@
     },
     {
       "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/radar-coherence",
+      "href": "https://blatten-data.epfl.ch/stac/collections/webcam-image",
       "type": "application/json",
-      "title": "Radar Coherence"
-    },
-    {
-      "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/radar-interferograms",
-      "type": "application/json",
-      "title": "Radar Interferograms"
-    },
-    {
-      "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/gps-data",
-      "type": "application/json",
-      "title": "GPS-Data"
+      "title": "Webcam-Image"
     },
     {
       "rel": "child",
       "href": "https://blatten-data.epfl.ch/stac/collections/deformation-analysis",
       "type": "application/json",
       "title": "Deformation Analysis"
-    },
-    {
-      "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/point-cloud",
-      "type": "application/json",
-      "title": "Point Cloud"
     },
     {
       "rel": "child",
@@ -83,15 +71,27 @@
     },
     {
       "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/radar-velocity",
+      "href": "https://blatten-data.epfl.ch/stac/collections/radar-coherence",
       "type": "application/json",
-      "title": "Radar Velocity"
+      "title": "Radar Coherence"
     },
     {
       "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/webcam-image",
+      "href": "https://blatten-data.epfl.ch/stac/collections/gps-data",
       "type": "application/json",
-      "title": "Webcam-Image"
+      "title": "GPS-Data"
+    },
+    {
+      "rel": "child",
+      "href": "https://blatten-data.epfl.ch/stac/collections/digital-surface-model-dsm",
+      "type": "application/json",
+      "title": "Digital Surface Model DSM"
+    },
+    {
+      "rel": "child",
+      "href": "https://blatten-data.epfl.ch/stac/collections/radar-interferograms",
+      "type": "application/json",
+      "title": "Radar Interferograms"
     },
     {
       "rel": "describedby",

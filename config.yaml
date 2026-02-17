@@ -1,0 +1,376 @@
+# stac-gen configuration — all domain-specific overrides in one place
+
+# ─── Root Catalog Metadata ───────────────────────────────────────────────────
+catalog:
+  id: birch-glacier-collapse
+  title: "Birch Glacier Collapse and Landslide Dataset"
+  description: >-
+    Dataset collected during the 2025 Birch glacier collapse and landslide at
+    Blatten, CH-VS. Licensed under Attribution-NonCommercial-ShareAlike 4.0
+    International (CC BY-NC-SA 4.0). By using this API you confirm that you
+    have read the Dataset Overview and Detailed Report. This data is provided
+    "as is" without warranty of any kind, express or implied.
+  license: CC-BY-NC-SA-4.0
+  keywords:
+    - Birch Glacier
+    - Blatten
+    - Switzerland
+    - glacier collapse
+    - landslide
+  default_bbox: [7.78, 46.38, 7.88, 46.44]
+  providers:
+    - name: Canton du Valais
+      roles: [licensor, host]
+      url: https://www.vs.ch/
+    - name: EPFL ALPOLE
+      roles: [processor, host]
+      url: https://www.epfl.ch/research/domains/alpole/
+  links:
+    - rel: describedby
+      href_suffix: /docs/dataset_overview.csv
+      type: text/csv
+      title: Dataset Overview
+    - rel: describedby
+      href_suffix: /docs/detailed_report.pdf
+      type: application/pdf
+      title: Detailed Report
+    - rel: license
+      href: https://creativecommons.org/licenses/by-nc-sa/4.0/
+      title: "Attribution-NonCommercial-ShareAlike 4.0 International"
+    - rel: about
+      href: https://blatten-data.epfl.ch/
+      type: text/html
+      title: Blatten Data website
+
+# ─── ProductID Letter → Collection Slug ──────────────────────────────────────
+collections:
+  A: webcam-image
+  B: deformation-analysis
+  C: deformation-analysis
+  D: orthophoto
+  E: radar-velocity
+  F: radar-velocity
+  G: radar-velocity
+  H: radar-velocity
+  I: digital-surface-model-dsm
+  J: digital-terrain-model-dtm
+  K: point-cloud
+  L: 3d-model
+  M: gps-data
+  N: thermal-image
+  O: hydrology
+  P: hydrology
+  U: radar-interferograms
+  V: radar-coherence
+
+# ─── CRS Overrides (files with broken spatial reference) ─────────────────────
+crs_overrides:
+  - filename: DTM_250711_GRID_20cm_LV95_NF02.tif
+    crs_epsg: 2056
+    reason: "File has ENGCRS['unnamed'] instead of EPSG:2056. Coordinates are valid LV95."
+
+# ─── File Exclusion Patterns (case-insensitive) ─────────────────────────────
+exclude_files:
+  exact: [desktop.ini, thumbs.db, .ds_store]
+  prefixes: [data_klnesthorn_sharepoint]
+
+# ─── Sensor Locations (LV95 / EPSG:2056) ────────────────────────────────────
+# Manual coordinates for sensors without extractable geometry.
+# stac-gen converts LV95 → WGS84 automatically via GDAL.
+# Sensors 13, 14, 15 (Terradata) have coords in GeoTIFF/LAZ — not listed here.
+sensors:
+  01-sensalpin-camera:
+    name: Sensalpin Camera
+    x: 2631439.74
+    y: 1139397.49
+    items: [01Aa00, 01Aa01, 01Aa02, 01Aa03, 01Ab00, 01Ab01, 01Ab02, 01Ab03, 01Ab04]
+
+  02-flexcam-birchbach:
+    name: FlexCam Birchgletscher
+    x: 2627304.17
+    y: 1141251.56
+    items:
+      - 02Aa00
+      - 02Aa01
+      - 02Aa02
+      - 02Aa03
+      - 02Aa04
+      - 02Ab00
+      - 02Ab01
+      - 02Ab02
+      - 02Ab03
+      - 02Ab04
+      - 02Ac00
+      - 02Ac01
+      - 02Ac02
+      - 02Ac03
+      - 02Ac04
+      - 02Ad00
+      - 02Ad01
+      - 02Ad02
+      - 02Ad03
+      - 02Ad04
+      - 02Ae00
+      - 02Ae01
+      - 02Ae02
+      - 02Ae03
+      - 02Ae04
+      - 02Af00
+      - 02Af01
+      - 02Af02
+      - 02Af03
+      - 02Af04
+      - 02Ag00
+      - 02Ag01
+      - 02Ag02
+      - 02Ag03
+      - 02Ag04
+      - 02Ah00
+      - 02Ah01
+      - 02Ah02
+      - 02Ah03
+      - 02Ah04
+      - 02Ai00
+      - 02Ai01
+      - 02Ai02
+      - 02Ai03
+      - 02Ai04
+      - 02Aj00
+      - 02Aj01
+      - 02Aj02
+      - 02Aj03
+      - 02Aj04
+
+  04-defox-birchgletscher:
+    name: DEFOX Birchgletscher
+    x: 2630836.94
+    y: 1139416.70
+    items:
+      - 04Aa00
+      - 04Aa01
+      - 04Aa02
+      - 04Aa03
+      - 04Aa04
+      - 04Ab00
+      - 04Ab01
+      - 04Ab02
+      - 04Ab03
+      - 04Ab04
+      - 04Ac00
+      - 04Ac01
+      - 04Ac02
+      - 04Ac03
+      - 04Ac04
+      - 04Ad00
+      - 04Ba00
+      - 04Ba01
+      - 04Ba02
+      - 04Bb00
+      - 04Ca00
+
+  06-radar-kleines-nesthorn:
+    name: Interferometric Radar Kleines Nesthorn
+    x: 2628710.88
+    y: 1141348.70
+    items:
+      - 06Aa00
+      - 06Aa01
+      - 06Aa02
+      - 06Aa03
+      - 06Aa04
+      - 06Ea01
+      - 06Ea02
+      - 06Ea03
+      - 06Ea04
+      - 06Eb01
+      - 06Eb02
+      - 06Ed01
+      - 06Fa01
+      - 06Fa02
+      - 06Fa03
+      - 06Fa04
+      - 06Fb01
+      - 06Fb02
+      - 06Fd01
+      - 06Ga00
+      - 06Ga01
+      - 06Ga02
+      - 06Ga03
+      - 06Ga04
+      - 06Gb01
+      - 06Gb02
+      - 06Gd01
+      - 06Ha00
+      - 06Ha01
+      - 06Ha02
+      - 06Hb01
+      - 06Hd01
+      - 06Ua01
+      - 06Ub01
+      - 06Uf00
+      - 06Uf01
+      - 06Uf02
+      - 06Uf03
+      - 06Vf01
+
+  07-webcam-geoazimut-lonza:
+    name: Webcam Geoazimut Lonza
+    x: 2627248
+    y: 1139892
+    items: [07Aa00, 07Aa01, 07Aa02]
+
+  08-webcam-lonza-guardaval:
+    name: Webcam Lonza - View from SW
+    x: 2628771
+    y: 1139605
+    items: [08Aa00, 08Aa01, 08Aa02]
+
+  09-webcam-blatten:
+    name: Webcam Blatten
+    x: 2629242
+    y: 1141252
+    items: [09Aa00, 09Aa01]
+
+  10-gnss-weissenried:
+    name: GNSS Weissenried
+    x: 2628228
+    y: 1140803
+    items: [10Ma00]
+
+  11-gnss-nesthorn:
+    name: GNSS Nesthorn
+    x: 2630901
+    y: 1138465
+    items: [11Ma00, 11Mb00, 11Mc00, 11Md00, 11Me00, 11Mf00, 11Mg00, 11Mh00]
+
+  17-lake-level-geoazimut:
+    name: Lake Level - Geoazimut
+    x: 2629394
+    y: 1141176
+    items: [17Pa00, 17Pb00]
+
+  18-river-discharge-upstream:
+    name: Lonza River Discharge - Upstream
+    x: 2630786
+    y: 1141861
+    items: [18Oa01, 18Oa02, 18Ob01, 18Ob02, 18Ob03]
+
+  19-river-discharge-blatten:
+    name: Lonza River Discharge - Blatten
+    x: 2629128
+    y: 1140919
+    items: [19Oa00, 19Ob00]
+
+  20-river-discharge-kippel:
+    name: Lonza River Discharge - Kippel
+    x: 2625879
+    y: 1138662
+    items: [20Oa00, 20Ob01, 20Ob02, 20Ob03]
+
+  21-river-discharge-gampel:
+    name: Lonza River Discharge - Gampel
+    x: 2623606
+    y: 1128859
+    items: [21Oa00, 21Ob00, 21Oc00]
+
+# ─── Folder Mappings (non-standard folder → item code) ──────────────────────
+# For providers whose folder names don't follow the standard code pattern.
+# "folders" is always an array (one or more paths relative to FINAL_Data).
+folder_mappings:
+  07Aa00:
+    folders: ["DNAGE/07Aa00_Webcam Geoazimut_Lonza"]
+    pattern: "**/*.jpg"
+  07Aa01:
+    folders: ["DNAGE/07Aa00_Webcam Geoazimut_Lonza"]
+    pattern: "**/*.jpg"
+    bundle_subset: true
+  07Aa02:
+    folders: ["DNAGE/07Aa00_Webcam Geoazimut_Lonza"]
+    pattern: "**/*.jpg"
+    bundle_subset: true
+  08Aa00:
+    folders: ["DNAGE/08Aa01_Webcam_Lonza_1h", "DNAGE/08Aa02_Webcam_Lonza_30min"]
+    pattern: "**/*.jpg"
+  08Aa01:
+    folders: ["DNAGE/08Aa01_Webcam_Lonza_1h"]
+    pattern: "**/*.jpg"
+  08Aa02:
+    folders: ["DNAGE/08Aa02_Webcam_Lonza_30min"]
+    pattern: "**/*.jpg"
+  09Aa00:
+    folders: ["DNAGE/09Aa00_Webcam_Blatten"]
+    pattern: "**/*.jpg"
+  09Aa01:
+    folders: ["DNAGE/09Aa00_Webcam_Blatten"]
+    pattern: "**/*.jpg"
+    bundle_subset: true
+  10Ma00:
+    folders: ["DNAGE/10M_11M_GNSS"]
+    file: "10Ma00 - GNSS Weissenried.csv"
+  11Ma00:
+    folders: ["DNAGE/10M_11M_GNSS"]
+    file: "11Ma00 - GNSS Blatten - Kleines Nesthorn.csv"
+  17Pa00:
+    folders: ["DNAGE/17_LakeLevel_Geoazimut"]
+    file: 17_LakeLevel_Geoazimut.csv
+    collection_id: hydrology
+  17Pb00:
+    folders: ["DNAGE/17_LakeLevel_Geoazimut"]
+    file: 17_LakeLevel_Geoazimut.csv
+    collection_id: hydrology
+  18Oa01:
+    folders: ["DNAGE/18_LonzaRiverDischarge_upstream"]
+    file: "18_LonzaRiverDischarge _upstream.csv"
+    collection_id: hydrology
+  18Oa02:
+    folders: ["DNAGE/18_LonzaRiverDischarge_upstream"]
+    file: "18_LonzaRiverDischarge _upstream.csv"
+    collection_id: hydrology
+  18Ob01:
+    folders: ["DNAGE/18_LonzaRiverDischarge_upstream"]
+    file: "18_LonzaRiverDischarge _upstream.csv"
+    collection_id: hydrology
+  18Ob02:
+    folders: ["DNAGE/18_LonzaRiverDischarge_upstream"]
+    file: "18_LonzaRiverDischarge _upstream.csv"
+    collection_id: hydrology
+  18Ob03:
+    folders: ["DNAGE/18_LonzaRiverDischarge_upstream"]
+    file: "18_LonzaRiverDischarge _upstream.csv"
+    collection_id: hydrology
+  19Oa00:
+    folders: ["DNAGE/19_LonzaRiverDischarge_Blatten"]
+    file: 19_LonzaRiverDischarge_Blatten.csv
+    collection_id: hydrology
+  19Ob00:
+    folders: ["DNAGE/19_LonzaRiverDischarge_Blatten"]
+    file: 19_LonzaRiverDischarge_Blatten.csv
+    collection_id: hydrology
+  20Oa00:
+    folders: ["DNAGE/20_LonzaRiverDischarge_Kippel"]
+    file: 20_LonzaRiverDischarge_Kippel.csv
+    collection_id: hydrology
+  20Ob01:
+    folders: ["DNAGE/20_LonzaRiverDischarge_Kippel"]
+    file: 20_LonzaRiverDischarge_Kippel.csv
+    collection_id: hydrology
+  20Ob02:
+    folders: ["DNAGE/20_LonzaRiverDischarge_Kippel"]
+    file: 20_LonzaRiverDischarge_Kippel.csv
+    collection_id: hydrology
+  20Ob03:
+    folders: ["DNAGE/20_LonzaRiverDischarge_Kippel"]
+    file: 20_LonzaRiverDischarge_Kippel.csv
+    collection_id: hydrology
+  21Oa00:
+    folders: ["DNAGE/21_LonzaRiverDischarge_Gampel"]
+    file: "21_LonzaRiverDischarge _Gampel.csv"
+    collection_id: hydrology
+  21Ob00:
+    folders: ["DNAGE/21_LonzaRiverDischarge_Gampel"]
+    file: "21_LonzaRiverDischarge _Gampel.csv"
+    collection_id: hydrology
+  21Oc00:
+    folders: ["DNAGE/21_LonzaRiverDischarge_Gampel"]
+    file: "21_LonzaRiverDischarge _Gampel.csv"
+    collection_id: hydrology
