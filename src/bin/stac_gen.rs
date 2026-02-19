@@ -16,7 +16,7 @@ use gdal::Dataset;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
@@ -445,9 +445,9 @@ struct DataManifest {
     /// Total size in bytes
     total_size: u64,
     /// Files keyed by asset_path
-    files: HashMap<String, FileManifestEntry>,
+    files: BTreeMap<String, FileManifestEntry>,
     /// Archives created (code -> archive manifest entry)
-    archives: HashMap<String, ArchiveManifestEntry>,
+    archives: BTreeMap<String, ArchiveManifestEntry>,
 }
 
 impl DataManifest {
@@ -458,8 +458,8 @@ impl DataManifest {
             hash_algorithm: algorithm,
             total_files: 0,
             total_size: 0,
-            files: HashMap::new(),
-            archives: HashMap::new(),
+            files: BTreeMap::new(),
+            archives: BTreeMap::new(),
         }
     }
 
@@ -506,7 +506,7 @@ struct GeometryCache {
     /// Hash of CRS overrides — cache invalidated when overrides change
     crs_overrides_hash: String,
     /// Keyed by absolute file path
-    entries: HashMap<String, CachedFileGeometry>,
+    entries: BTreeMap<String, CachedFileGeometry>,
 }
 
 impl GeometryCache {
@@ -515,7 +515,7 @@ impl GeometryCache {
             version: GEOMETRY_CACHE_VERSION,
             generated_at: Utc::now().to_rfc3339(),
             crs_overrides_hash,
-            entries: HashMap::new(),
+            entries: BTreeMap::new(),
         }
     }
 
@@ -1778,19 +1778,21 @@ fn create_stac_collection(
     };
 
     // Build summaries
-    let processing_levels: Vec<i32> = items
+    let mut processing_levels: Vec<i32> = items
         .iter()
         .filter_map(|i| i.processing_level)
         .collect::<std::collections::HashSet<_>>()
         .into_iter()
         .collect();
+    processing_levels.sort_unstable();
 
-    let sources: Vec<String> = items
+    let mut sources: Vec<String> = items
         .iter()
         .filter_map(|i| i.source.clone())
         .collect::<std::collections::HashSet<_>>()
         .into_iter()
         .collect();
+    sources.sort_unstable();
 
     // Build providers from config
     let providers: Vec<serde_json::Value> = catalog_config.providers.iter().map(|p| {
@@ -1965,6 +1967,10 @@ fn generate_catalog(
         })
         .collect();
 
+    // Sort by collection ID for deterministic output
+    let mut collection_data = collection_data;
+    collection_data.sort_by(|a, b| a.0.cmp(&b.0));
+
     // Extract collections for later use
     let stac_collections: Vec<_> = collection_data.iter().map(|(_, c, _)| c.clone()).collect();
 
@@ -1998,8 +2004,13 @@ fn generate_catalog(
 
     coll_pb.finish_with_message(format!("Wrote {} collection files", stac_collections.len()));
 
-    // Collect all STAC items for the all_items file
-    let all_items: Vec<serde_json::Value> = items_with_stac.into_iter().map(|(_, stac)| stac).collect();
+    // Collect all STAC items for the all_items file, sorted by ID for deterministic output
+    let mut all_items: Vec<serde_json::Value> = items_with_stac.into_iter().map(|(_, stac)| stac).collect();
+    all_items.sort_by(|a, b| {
+        let a_id = a["id"].as_str().unwrap_or("");
+        let b_id = b["id"].as_str().unwrap_or("");
+        a_id.cmp(b_id)
+    });
 
     // Build links for root catalog
     let mut catalog_links: Vec<serde_json::Value> = vec![
@@ -2121,7 +2132,7 @@ fn generate_catalog(
     let info_count = issues.iter().filter(|i| i.severity == "info").count();
 
     // Group items by collection for per-collection stats
-    let mut collection_stats: HashMap<String, serde_json::Value> = HashMap::new();
+    let mut collection_stats: BTreeMap<String, serde_json::Value> = BTreeMap::new();
     for item in &all_items {
         let coll_id = item.get("collection").and_then(|c| c.as_str()).unwrap_or("unknown");
         let num_assets = item.get("assets").and_then(|a| a.as_object()).map(|a| a.len()).unwrap_or(0);
@@ -2563,7 +2574,7 @@ fn main() -> Result<()> {
 
             // Load geometry cache for incremental file-level extraction
             let crs_hash = hash_crs_overrides(&config.crs_overrides);
-            let geometry_cache: Option<HashMap<String, CachedFileGeometry>> = if full_rebuild {
+            let geometry_cache: Option<BTreeMap<String, CachedFileGeometry>> = if full_rebuild {
                 info!("Geometry cache: skipped (full rebuild)");
                 None
             } else {
@@ -2783,7 +2794,7 @@ fn main() -> Result<()> {
 
             // Group results by item code and collect cache entries
             let mut files_by_code: HashMap<String, Vec<FileInfo>> = HashMap::new();
-            let mut new_cache_entries: HashMap<String, CachedFileGeometry> = HashMap::with_capacity(file_results.len());
+            let mut new_cache_entries: BTreeMap<String, CachedFileGeometry> = BTreeMap::new();
             for (code, file_info, (cache_key, cached_entry)) in file_results {
                 files_by_code.entry(code).or_default().push(file_info);
                 new_cache_entries.insert(cache_key, cached_entry);
@@ -2829,6 +2840,7 @@ fn main() -> Result<()> {
                     }
 
                     item.files = file_infos;
+                    item.files.sort_by(|a, b| a.path.cmp(&b.path));
                 }
             }
 
