@@ -48,10 +48,10 @@ collections:
   B: deformation-analysis
   C: deformation-analysis
   D: orthophoto
-  E: radar-velocity
-  F: radar-velocity
-  G: radar-velocity
-  H: radar-velocity
+  E: radar
+  F: radar
+  G: radar
+  H: radar
   I: digital-surface-model-dsm
   J: digital-terrain-model-dtm
   K: point-cloud
@@ -60,8 +60,18 @@ collections:
   N: thermal-image
   O: hydrology
   P: hydrology
-  U: radar-interferograms
-  V: radar-coherence
+  U: radar
+  V: radar
+
+# ─── Collection Title Overrides ───────────────────────────────────────────────
+# Override auto-derived titles (from Excel product_type) for specific collections.
+collection_titles:
+  webcam-image: Webcam Image
+  3d-model: 3D Model
+  gps-data: GNSS Data
+  digital-surface-model-dsm: Digital Surface Model
+  digital-terrain-model-dtm: Digital Terrain Model
+  radar: Radar
 
 # ─── CRS Overrides (files with broken spatial reference) ─────────────────────
 crs_overrides:

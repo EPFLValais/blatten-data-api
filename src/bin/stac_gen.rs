@@ -41,6 +41,8 @@ struct GenConfig {
     sensors: HashMap<String, SensorConfig>,
     #[serde(default)]
     folder_mappings: HashMap<String, FolderMapping>,
+    #[serde(default)]
+    collection_titles: HashMap<String, String>,
 }
 
 /// Typed folder mapping entry — maps an item code to one or more data folders
@@ -604,7 +606,11 @@ fn product_subtype(product_type: &str) -> Option<&str> {
 }
 
 /// Build collection definitions from parsed items using the config collection map.
-fn build_collections(items: &[ItemMetadata], collection_map: &HashMap<String, String>) -> HashMap<String, CollectionDef> {
+fn build_collections(
+    items: &[ItemMetadata],
+    collection_map: &HashMap<String, String>,
+    title_overrides: &HashMap<String, String>,
+) -> HashMap<String, CollectionDef> {
     let mut collections: HashMap<String, CollectionDef> = HashMap::new();
 
     for item in items {
@@ -637,6 +643,13 @@ fn build_collections(items: &[ItemMetadata], collection_map: &HashMap<String, St
                 description: String::new(),
             }
         });
+    }
+
+    // Apply explicit title overrides from config
+    for (slug, title) in title_overrides {
+        if let Some(entry) = collections.get_mut(slug) {
+            entry.title = title.clone();
+        }
     }
 
     collections
@@ -1870,7 +1883,7 @@ fn generate_catalog(
     fs::create_dir_all(output_dir)?;
     fs::create_dir_all(output_dir.join("collections"))?;
 
-    let collections_defs = build_collections(items, &config.collections);
+    let collections_defs = build_collections(items, &config.collections, &config.collection_titles);
     let mut issues = Vec::new();
 
     // Group items by collection
