@@ -258,6 +258,10 @@ struct Cli {
     /// Input archives directory containing provider .zip/.7z files to incorporate
     #[arg(long)]
     input_archives: Option<PathBuf>,
+
+    /// Skip CRC32 validation of zip archives (faster, still detects ZIP64)
+    #[arg(long)]
+    skip_zip_validation: bool,
 }
 
 /// Auto-discover a single .xlsx file in the current directory.
@@ -2220,7 +2224,7 @@ fn main() -> Result<()> {
         xlsx: _, output, base_url, s3_base_url, data, config: config_path,
         threads, verbose, validate,
         organised_dir, full_rebuild,
-        dry_run, yes, materialize, input_archives,
+        dry_run, yes, materialize, input_archives, skip_zip_validation,
     } = cli;
 
     {
@@ -2488,6 +2492,7 @@ fn main() -> Result<()> {
                             dry_run,
                             &stage_arch_pb,
                             &config.exclude_files,
+                            skip_zip_validation,
                         )?;
                     }
 
@@ -2913,22 +2918,50 @@ fn main() -> Result<()> {
                     }
                 }
 
-                // Map archives to items
-                let mut found = 0;
-                for item in &mut items {
-                    if item.archive_file.is_none() {
-                        if let Some((path, size)) = archive_map.get(&item.code) {
-                            item.archive_file = Some(path.file_name().unwrap_or_default().to_string_lossy().to_string());
-                            item.archive_size = Some(*size);
-                            // Detect ZIP64 from actual zip structure for .zip files
-                            item.archive_is_zip64 = path.extension().and_then(|e| e.to_str()) == Some("zip")
-                                && validate_and_detect_zip64(path).unwrap_or(false);
-                            found += 1;
-                        }
-                    }
+                // Map archives to items (parallel ZIP64 detection + optional CRC validation)
+                let work: Vec<(usize, PathBuf, u64)> = items.iter().enumerate()
+                    .filter(|(_, item)| item.archive_file.is_none())
+                    .filter_map(|(idx, item)| {
+                        archive_map.get(&item.code).map(|(path, size)| (idx, path.clone(), *size))
+                    })
+                    .collect();
+
+                let arch_pb = multi_progress.add(ProgressBar::new(work.len() as u64));
+                arch_pb.set_style(ProgressStyle::default_bar()
+                    .template("{spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} {msg}")
+                    .expect("Invalid bar template")
+                    .progress_chars("#>-"));
+                arch_pb.set_message("Scanning archives...");
+
+                let results: Vec<(usize, String, u64, bool)> = work.par_iter()
+                    .map(|(idx, path, size)| {
+                        let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                        let is_zip = path.extension().and_then(|e| e.to_str()) == Some("zip");
+                        let is_zip64 = if is_zip {
+                            let z64 = detect_zip64(path).unwrap_or(false);
+                            if !skip_zip_validation {
+                                if let Err(e) = validate_zip_crc(path) {
+                                    warn!("CRC validation failed for {}: {}", filename, e);
+                                }
+                            }
+                            z64
+                        } else {
+                            false
+                        };
+                        arch_pb.inc(1);
+                        (*idx, filename, *size, is_zip64)
+                    })
+                    .collect();
+
+                arch_pb.finish_with_message(format!("Scanned {} archives", results.len()));
+
+                for (idx, filename, size, is_zip64) in &results {
+                    items[*idx].archive_file = Some(filename.clone());
+                    items[*idx].archive_size = Some(*size);
+                    items[*idx].archive_is_zip64 = *is_zip64;
                 }
 
-                info!("  Archives/files: {} mapped from directory", found);
+                info!("  Archives/files: {} mapped from directory", results.len());
             }
 
             // Populate file hashes and archive hashes from manifest into items
@@ -3172,7 +3205,7 @@ fn extract_archive(archive_path: &Path, target_dir: &Path, exclude: &ExcludeFile
 }
 
 /// Create a zip archive from a directory, returning the archive size in bytes.
-/// ZIP64 detection is handled separately by `validate_and_detect_zip64()`.
+/// ZIP64 detection is handled separately by `detect_zip64()`.
 fn create_archive(source_dir: &Path, archive_path: &Path, exclude: &ExcludeFiles) -> Result<u64> {
     use zip::write::SimpleFileOptions;
 
@@ -3215,7 +3248,8 @@ fn create_archive(source_dir: &Path, archive_path: &Path, exclude: &ExcludeFiles
 /// - Entry count >= ZIP64_ENTRY_THR (65535)
 ///
 /// Returns `Ok(true)` if the archive uses ZIP64, `Ok(false)` otherwise, or `Err` if corrupt.
-fn validate_and_detect_zip64(archive_path: &Path) -> Result<bool> {
+/// Cheap ZIP64 detection: reads only the central directory, not file data.
+fn detect_zip64(archive_path: &Path) -> Result<bool> {
     use zip::read::HasZipMetadata;
 
     let file = File::open(archive_path)
@@ -3227,20 +3261,36 @@ fn validate_and_detect_zip64(archive_path: &Path) -> Result<bool> {
     let has_eocd64 = archive.zip64_comment().is_some();
     let many_entries = archive.len() >= zip::ZIP64_ENTRY_THR;
 
-    // Validate every entry by reading through CRC32 and check per-entry ZIP64
+    // Check per-entry ZIP64 metadata (no data read needed)
     let mut has_large_entry = false;
     for i in 0..archive.len() {
-        let mut entry = archive.by_index(i)
+        let entry = archive.by_index_raw(i)
             .with_context(|| format!("Failed to read entry {} in {}", i, archive_path.display()))?;
         if entry.get_metadata().large_file {
             has_large_entry = true;
+            break;
         }
+    }
+
+    Ok(has_eocd64 || many_entries || has_large_entry)
+}
+
+/// Expensive CRC32 validation: reads every byte of every entry.
+fn validate_zip_crc(archive_path: &Path) -> Result<()> {
+    let file = File::open(archive_path)
+        .with_context(|| format!("Failed to open archive: {}", archive_path.display()))?;
+    let mut archive = zip::ZipArchive::new(file)
+        .with_context(|| format!("Failed to read zip structure: {}", archive_path.display()))?;
+
+    for i in 0..archive.len() {
+        let mut entry = archive.by_index(i)
+            .with_context(|| format!("Failed to read entry {} in {}", i, archive_path.display()))?;
         // Read through CRC32 reader — validates data integrity
         std::io::copy(&mut entry, &mut std::io::sink())
             .with_context(|| format!("CRC32 validation failed for entry {} in {}", entry.name(), archive_path.display()))?;
     }
 
-    Ok(has_eocd64 || many_entries || has_large_entry)
+    Ok(())
 }
 
 /// Count files and total size in a directory
@@ -3766,6 +3816,7 @@ fn stage_archives(
     dry_run: bool,
     progress: &ProgressBar,
     exclude: &ExcludeFiles,
+    skip_zip_validation: bool,
 ) -> Result<StageArchivesStats> {
     if !dry_run {
         fs::create_dir_all(archives_dir)?;
@@ -3821,14 +3872,20 @@ fn stage_archives(
                     }
                     match create_archive(&asset_dir, archive_path, exclude) {
                         Ok(size) => {
-                            // Validate archive integrity and detect ZIP64
-                            let is_zip64 = match validate_and_detect_zip64(archive_path) {
+                            // Detect ZIP64 (cheap) and optionally validate CRC (expensive)
+                            let is_zip64 = match detect_zip64(archive_path) {
                                 Ok(z64) => z64,
                                 Err(e) => {
                                     progress.inc(1);
-                                    return ArchiveResult::Error { code: code.clone(), error: format!("validate: {}", e) };
+                                    return ArchiveResult::Error { code: code.clone(), error: format!("zip64 detect: {}", e) };
                                 }
                             };
+                            if !skip_zip_validation {
+                                if let Err(e) = validate_zip_crc(archive_path) {
+                                    progress.inc(1);
+                                    return ArchiveResult::Error { code: code.clone(), error: format!("crc validate: {}", e) };
+                                }
+                            }
                             match hash_file(archive_path, HashAlgorithm::Sha256) {
                                 Ok(archive_hash) => {
                                     let sidecar_path = archives_dir.join(format!("{}.zip.sha256", code));

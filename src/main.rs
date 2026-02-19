@@ -14,6 +14,7 @@ use axum::{
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::{env, net::SocketAddr, path::PathBuf, sync::Arc};
+use strsim::levenshtein;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -144,6 +145,39 @@ where
     }
 
     deserializer.deserialize_any(QVisitor)
+}
+
+/// Parse q string into OR-groups of AND-words.
+/// Commas separate OR groups; whitespace separates AND words within each group.
+fn parse_q_terms(raw: &str) -> Vec<Vec<String>> {
+    raw.split(',')
+        .map(|group| {
+            group
+                .split_whitespace()
+                .map(|w| w.to_lowercase())
+                .collect::<Vec<_>>()
+        })
+        .filter(|group| !group.is_empty())
+        .collect()
+}
+
+/// Check if a query word matches any word in the searchable text.
+/// First tries substring match (fast path). Falls back to edit-distance
+/// with conservative thresholds to catch typos without false positives.
+fn fuzzy_word_match(query_word: &str, searchable: &str) -> bool {
+    // Fast path: substring match
+    if searchable.contains(query_word) {
+        return true;
+    }
+    // Skip fuzzy for very short words (too many false positives)
+    if query_word.len() < 4 {
+        return false;
+    }
+    let max_dist = if query_word.len() >= 7 { 2 } else { 1 };
+    // Check edit distance against individual words in the searchable text
+    searchable.split_whitespace().any(|word| {
+        levenshtein(query_word, word) <= max_dist
+    })
 }
 
 /// POST body fields filter (STAC Fields Extension)
@@ -363,7 +397,7 @@ struct ValidatedSearch {
     source: Option<String>,
     processing_level: Option<i32>,
     sensor: Option<String>,
-    q: Option<Vec<String>>,
+    q: Option<Vec<Vec<String>>>,
     exclude_assets: bool,
     fields: FieldsFilter,
 }
@@ -410,12 +444,7 @@ impl ValidatedSearch {
             source: params.source,
             processing_level: params.processing_level,
             sensor: params.sensor,
-            q: params.q.map(|q| {
-                q.split(',')
-                    .map(|s| s.trim().to_string())
-                    .filter(|s| !s.is_empty())
-                    .collect::<Vec<_>>()
-            }).filter(|v: &Vec<String>| !v.is_empty()),
+            q: params.q.map(|q| parse_q_terms(&q)).filter(|v| !v.is_empty()),
             exclude_assets: params.exclude_assets,
             fields,
         })
@@ -458,7 +487,12 @@ impl ValidatedSearch {
             source: body.source,
             processing_level: body.processing_level,
             sensor: body.sensor,
-            q: body.q.filter(|v| !v.is_empty()),
+            q: body.q.map(|terms| {
+                terms.iter()
+                    .map(|term| term.split_whitespace().map(|w| w.to_lowercase()).collect::<Vec<_>>())
+                    .filter(|group| !group.is_empty())
+                    .collect::<Vec<Vec<String>>>()
+            }).filter(|v| !v.is_empty()),
             exclude_assets: body.exclude_assets,
             fields,
         })
@@ -699,43 +733,45 @@ fn filter_item(item: &StacItem, params: &ValidatedSearch) -> bool {
     }
 
     // Free-text search (STAC Free-Text Search Extension)
-    // Multiple terms use OR semantics: match if ANY term matches ANY field
-    if let Some(ref terms) = params.q {
-        let term_matches = |query: &str| -> bool {
-            let check_str = |field: &str| -> bool {
-                item.get_property(field)
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_lowercase().contains(query))
-                    .unwrap_or(false)
-            };
-
-            let id_matches = item.id.to_lowercase().contains(query);
-            let prop_matches = check_str("title")
-                || check_str("description")
-                || check_str("blatten:sensor")
-                || check_str("blatten:source")
-                || check_str("blatten:code")
-                || check_str("blatten:format")
-                || check_str("blatten:dataset")
-                || check_str("blatten:product_type")
-                || check_str("blatten:bundle");
-
-            if id_matches || prop_matches {
-                return true;
+    // Commas = OR across groups, spaces = AND within each group
+    // Substring matching first, edit-distance fallback for typos
+    if let Some(ref groups) = params.q {
+        // Collect all searchable text into one lowercased string
+        let mut searchable = String::new();
+        searchable.push_str(&item.id.to_lowercase());
+        searchable.push(' ');
+        for field in &[
+            "title",
+            "description",
+            "blatten:sensor",
+            "blatten:source",
+            "blatten:code",
+            "blatten:format",
+            "blatten:dataset",
+            "blatten:product_type",
+            "blatten:bundle",
+        ] {
+            if let Some(val) = item.get_property(field).and_then(|v| v.as_str()) {
+                searchable.push_str(&val.to_lowercase());
+                searchable.push(' ');
             }
+        }
+        for (key, asset) in &item.assets {
+            searchable.push_str(&key.to_lowercase());
+            searchable.push(' ');
+            if let Some(ref title) = asset.title {
+                searchable.push_str(&title.to_lowercase());
+                searchable.push(' ');
+            }
+            searchable.push_str(&asset.href.to_lowercase());
+            searchable.push(' ');
+        }
 
-            // Search asset keys, titles, and hrefs
-            item.assets
-                .iter()
-                .any(|(key, asset)| {
-                    key.to_lowercase().contains(query)
-                        || asset.title.as_ref().map(|t| t.to_lowercase().contains(query)).unwrap_or(false)
-                        || asset.href.to_lowercase().contains(query)
-                })
-        };
-
-        let any_term_matches = terms.iter().any(|term| term_matches(&term.to_lowercase()));
-        if !any_term_matches {
+        // OR across groups, AND within each group
+        let matches = groups
+            .iter()
+            .any(|words| words.iter().all(|w| fuzzy_word_match(w, &searchable)));
+        if !matches {
             return false;
         }
     }
