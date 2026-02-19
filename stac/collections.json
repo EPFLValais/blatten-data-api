@@ -7,7 +7,7 @@
       "stac_extensions": [
         "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
       ],
-      "title": "3D-Model",
+      "title": "3D Model",
       "description": "",
       "license": "CC-BY-NC-SA-4.0",
       "keywords": [
@@ -16,7 +16,7 @@
         "Switzerland",
         "glacier collapse",
         "landslide",
-        "3d-model"
+        "3d model"
       ],
       "providers": [
         {
@@ -40,10 +40,10 @@
         "spatial": {
           "bbox": [
             [
-              7.78,
-              46.38,
-              7.88,
-              46.44
+              7.756332983994717,
+              46.389532770158524,
+              7.8488034973746466,
+              46.42584749484456
             ]
           ]
         },
@@ -57,9 +57,7 @@
         }
       },
       "summaries": {
-        "processing_level": [
-          4
-        ],
+        "processing_level": [],
         "source": [
           "Terradata"
         ]
@@ -138,17 +136,14 @@
         "temporal": {
           "interval": [
             [
-              "2025-05-28T00:00:00Z",
+              "2025-05-27T00:00:00Z",
               "2025-06-30T23:59:59Z"
             ]
           ]
         }
       },
       "summaries": {
-        "processing_level": [
-          3,
-          4
-        ],
+        "processing_level": [],
         "source": [
           "Geoprevent"
         ]
@@ -184,7 +179,7 @@
       "stac_extensions": [
         "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
       ],
-      "title": "Digital Surface Model DSM",
+      "title": "Digital Surface Model",
       "description": "",
       "license": "CC-BY-NC-SA-4.0",
       "keywords": [
@@ -193,7 +188,7 @@
         "Switzerland",
         "glacier collapse",
         "landslide",
-        "digital surface model dsm"
+        "digital surface model"
       ],
       "providers": [
         {
@@ -234,9 +229,7 @@
         }
       },
       "summaries": {
-        "processing_level": [
-          3
-        ],
+        "processing_level": [],
         "source": [
           "Terradata"
         ]
@@ -272,7 +265,7 @@
       "stac_extensions": [
         "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
       ],
-      "title": "Digital Terrain Model DTM",
+      "title": "Digital Terrain Model",
       "description": "",
       "license": "CC-BY-NC-SA-4.0",
       "keywords": [
@@ -281,7 +274,7 @@
         "Switzerland",
         "glacier collapse",
         "landslide",
-        "digital terrain model dtm"
+        "digital terrain model"
       ],
       "providers": [
         {
@@ -322,9 +315,7 @@
         }
       },
       "summaries": {
-        "processing_level": [
-          4
-        ],
+        "processing_level": [],
         "source": [
           "Terradata"
         ]
@@ -360,7 +351,7 @@
       "stac_extensions": [
         "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
       ],
-      "title": "GPS-Data",
+      "title": "GNSS Data",
       "description": "",
       "license": "CC-BY-NC-SA-4.0",
       "keywords": [
@@ -369,7 +360,7 @@
         "Switzerland",
         "glacier collapse",
         "landslide",
-        "gps-data"
+        "gnss data"
       ],
       "providers": [
         {
@@ -410,9 +401,7 @@
         }
       },
       "summaries": {
-        "processing_level": [
-          1
-        ],
+        "processing_level": [],
         "source": [
           "DNAGE (Glaciorisk)"
         ]
@@ -498,10 +487,7 @@
         }
       },
       "summaries": {
-        "processing_level": [
-          2,
-          3
-        ],
+        "processing_level": [],
         "source": [
           "DNAGE (Geoazimut)",
           "DNAGE (HYDRO OFEV)",
@@ -589,9 +575,7 @@
         }
       },
       "summaries": {
-        "processing_level": [
-          3
-        ],
+        "processing_level": [],
         "source": [
           "Terradata"
         ]
@@ -677,9 +661,7 @@
         }
       },
       "summaries": {
-        "processing_level": [
-          3
-        ],
+        "processing_level": [],
         "source": [
           "Terradata"
         ]
@@ -710,12 +692,12 @@
     },
     {
       "type": "Collection",
-      "id": "radar-coherence",
+      "id": "radar",
       "stac_version": "1.1.0",
       "stac_extensions": [
         "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
       ],
-      "title": "Radar Coherence",
+      "title": "Radar",
       "description": "",
       "license": "CC-BY-NC-SA-4.0",
       "keywords": [
@@ -724,183 +706,7 @@
         "Switzerland",
         "glacier collapse",
         "landslide",
-        "radar coherence"
-      ],
-      "providers": [
-        {
-          "name": "Canton du Valais",
-          "roles": [
-            "licensor",
-            "host"
-          ],
-          "url": "https://www.vs.ch/"
-        },
-        {
-          "name": "EPFL ALPOLE",
-          "roles": [
-            "processor",
-            "host"
-          ],
-          "url": "https://www.epfl.ch/research/domains/alpole/"
-        }
-      ],
-      "extent": {
-        "spatial": {
-          "bbox": [
-            [
-              7.8111182598599855,
-              46.42187522434867,
-              7.813118259859986,
-              46.42387522434866
-            ]
-          ]
-        },
-        "temporal": {
-          "interval": [
-            [
-              "2025-05-19T00:00:00Z",
-              "2025-06-30T23:59:59Z"
-            ]
-          ]
-        }
-      },
-      "summaries": {
-        "processing_level": [
-          2
-        ],
-        "source": [
-          "Geoprevent"
-        ]
-      },
-      "links": [
-        {
-          "rel": "self",
-          "href": "https://blatten-data.epfl.ch/stac/collections/radar-coherence",
-          "type": "application/json"
-        },
-        {
-          "rel": "root",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
-          "type": "application/json"
-        },
-        {
-          "rel": "parent",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
-          "type": "application/json"
-        },
-        {
-          "rel": "items",
-          "href": "https://blatten-data.epfl.ch/stac/collections/radar-coherence/items",
-          "type": "application/geo+json"
-        }
-      ],
-      "assets": {}
-    },
-    {
-      "type": "Collection",
-      "id": "radar-interferograms",
-      "stac_version": "1.1.0",
-      "stac_extensions": [
-        "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
-      ],
-      "title": "Radar Interferograms",
-      "description": "",
-      "license": "CC-BY-NC-SA-4.0",
-      "keywords": [
-        "Birch Glacier",
-        "Blatten",
-        "Switzerland",
-        "glacier collapse",
-        "landslide",
-        "radar interferograms"
-      ],
-      "providers": [
-        {
-          "name": "Canton du Valais",
-          "roles": [
-            "licensor",
-            "host"
-          ],
-          "url": "https://www.vs.ch/"
-        },
-        {
-          "name": "EPFL ALPOLE",
-          "roles": [
-            "processor",
-            "host"
-          ],
-          "url": "https://www.epfl.ch/research/domains/alpole/"
-        }
-      ],
-      "extent": {
-        "spatial": {
-          "bbox": [
-            [
-              7.8111182598599855,
-              46.42187522434867,
-              7.813118259859986,
-              46.42387522434866
-            ]
-          ]
-        },
-        "temporal": {
-          "interval": [
-            [
-              "2025-05-19T00:00:00Z",
-              "2025-06-30T23:59:59Z"
-            ]
-          ]
-        }
-      },
-      "summaries": {
-        "processing_level": [
-          2
-        ],
-        "source": [
-          "Geoprevent"
-        ]
-      },
-      "links": [
-        {
-          "rel": "self",
-          "href": "https://blatten-data.epfl.ch/stac/collections/radar-interferograms",
-          "type": "application/json"
-        },
-        {
-          "rel": "root",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
-          "type": "application/json"
-        },
-        {
-          "rel": "parent",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
-          "type": "application/json"
-        },
-        {
-          "rel": "items",
-          "href": "https://blatten-data.epfl.ch/stac/collections/radar-interferograms/items",
-          "type": "application/geo+json"
-        }
-      ],
-      "assets": {}
-    },
-    {
-      "type": "Collection",
-      "id": "radar-velocity",
-      "stac_version": "1.1.0",
-      "stac_extensions": [
-        "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
-      ],
-      "title": "Radar Velocity",
-      "description": "",
-      "license": "CC-BY-NC-SA-4.0",
-      "keywords": [
-        "Birch Glacier",
-        "Blatten",
-        "Switzerland",
-        "glacier collapse",
-        "landslide",
-        "radar velocity"
+        "radar"
       ],
       "providers": [
         {
@@ -941,10 +747,7 @@
         }
       },
       "summaries": {
-        "processing_level": [
-          3,
-          4
-        ],
+        "processing_level": [],
         "source": [
           "Geoprevent"
         ]
@@ -952,7 +755,7 @@
       "links": [
         {
           "rel": "self",
-          "href": "https://blatten-data.epfl.ch/stac/collections/radar-velocity",
+          "href": "https://blatten-data.epfl.ch/stac/collections/radar",
           "type": "application/json"
         },
         {
@@ -967,7 +770,7 @@
         },
         {
           "rel": "items",
-          "href": "https://blatten-data.epfl.ch/stac/collections/radar-velocity/items",
+          "href": "https://blatten-data.epfl.ch/stac/collections/radar/items",
           "type": "application/geo+json"
         }
       ],
@@ -1030,9 +833,7 @@
         }
       },
       "summaries": {
-        "processing_level": [
-          2
-        ],
+        "processing_level": [],
         "source": [
           "Terradata"
         ]
@@ -1068,7 +869,7 @@
       "stac_extensions": [
         "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
       ],
-      "title": "Webcam-Image",
+      "title": "Webcam Image",
       "description": "",
       "license": "CC-BY-NC-SA-4.0",
       "keywords": [
@@ -1077,7 +878,7 @@
         "Switzerland",
         "glacier collapse",
         "landslide",
-        "webcam-image"
+        "webcam image"
       ],
       "providers": [
         {
@@ -1118,10 +919,7 @@
         }
       },
       "summaries": {
-        "processing_level": [
-          2,
-          4
-        ],
+        "processing_level": [],
         "source": [
           "DNAGE (Geoazimut)",
           "DNAGE (Guardaval)",

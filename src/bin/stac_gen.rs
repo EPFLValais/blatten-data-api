@@ -1,14 +1,14 @@
 //! STAC Catalog Generator
 //!
-//! Generates STAC 1.1.0 catalog from XLSX metadata file with geometry extraction.
+//! Generates STAC 1.1.0 catalog from CSV metadata file with geometry extraction.
 //!
 //! Usage:
-//!     stac-gen generate --xlsx metadata.xlsx --output stac/
-//!     stac-gen generate --xlsx metadata.xlsx --output stac/ --data-dir ./data/
+//!     stac-gen -i metadata.csv --output stac/
+//!     stac-gen -i metadata.csv --output stac/ --data-dir ./data/
 //!     stac-gen validate --catalog-dir stac/
 
 use anyhow::{Context, Result};
-use calamine::{open_workbook, Data, Reader, Xlsx};
+use csv::ReaderBuilder;
 use chrono::{NaiveDate, Utc};
 use clap::Parser;
 use gdal::spatial_ref::{CoordTransform, SpatialRef};
@@ -43,6 +43,8 @@ struct GenConfig {
     folder_mappings: HashMap<String, FolderMapping>,
     #[serde(default)]
     collection_titles: HashMap<String, String>,
+    #[serde(default)]
+    geometry_overrides: HashMap<String, GeometryOverride>,
 }
 
 /// Typed folder mapping entry — maps an item code to one or more data folders
@@ -98,6 +100,12 @@ struct CrsOverride {
     reason: String,
 }
 
+/// Inherit geometry from another item (e.g. 3D models from same flight as orthophotos)
+#[derive(Debug, Deserialize)]
+struct GeometryOverride {
+    from_item: String,
+}
+
 #[derive(Debug, Deserialize, Default)]
 struct ExcludeFiles {
     #[serde(default)]
@@ -124,6 +132,27 @@ fn load_config(path: &Path) -> Result<GenConfig> {
         .with_context(|| format!("Failed to read config file: {:?}", path))?;
     serde_yaml::from_str(&content)
         .with_context(|| format!("Failed to parse config YAML: {:?}", path))
+}
+
+/// Scan a directory tree for StationFactsheet PDFs and build sensor_number → path mapping.
+/// Matches filenames like `StationFactsheet_07_WebcamGeoazimutLonza_A50039.pdf`.
+fn discover_factsheets(dir: &Path) -> HashMap<String, PathBuf> {
+    let mut map = HashMap::new();
+    for entry in WalkDir::new(dir).into_iter().filter_map(|e| e.ok()) {
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        let fname = entry.file_name().to_string_lossy();
+        if fname.starts_with("StationFactsheet_") && fname.ends_with(".pdf") {
+            if let Some(nn) = fname
+                .strip_prefix("StationFactsheet_")
+                .and_then(|s| s.split('_').next())
+            {
+                map.insert(nn.to_string(), entry.path().to_path_buf());
+            }
+        }
+    }
+    map
 }
 
 const STAC_VERSION: &str = "1.1.0";
@@ -180,17 +209,17 @@ When --data and --organised-dir are provided, runs the full staging pipeline:
 
 Expected working directory layout:
   ./config.yaml          Configuration (sensors, collections, overrides)
-  ./*.xlsx               Excel metadata (auto-discovered if -x not given)
+  ./*.csv               CSV metadata (auto-discovered if -i not given)
   ./input/               FINAL_Data directory (symlink OK)
   ./output/              Staging root (assets/ and archives/)
   ./stac/                Generated STAC catalog")]
 #[command(after_long_help = "\
 EXAMPLES:
-  # Full pipeline with all defaults
-  stac-gen --materialize --validate -y
+  # Full pipeline with all defaults (stages + materializes + validates)
+  stac-gen --validate -y
 
-  # Quick metadata-only regeneration
-  stac-gen
+  # Keep symlinks (skip materialization)
+  stac-gen --no-materialize -y
 
   # Override specific paths
   stac-gen -d /mnt/data/FINAL_Data --validate
@@ -198,10 +227,10 @@ EXAMPLES:
 ENVIRONMENT:
   RUST_LOG=debug  Enable debug logging")]
 struct Cli {
-    /// Input XLSX file. If not specified, auto-discovers a single .xlsx file
-    /// in the current directory.
-    #[arg(short, long)]
-    xlsx: Option<PathBuf>,
+    /// Input metadata file (CSV, semicolon-delimited). If not specified,
+    /// auto-discovers a single .csv file in the current directory.
+    #[arg(short = 'i', long, alias = "xlsx", short_alias = 'x')]
+    input: Option<PathBuf>,
 
     /// Output directory for STAC files
     #[arg(short, long, default_value = "stac")]
@@ -228,10 +257,6 @@ struct Cli {
     #[arg(long, default_value_t = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4))]
     threads: usize,
 
-    /// Verbose output
-    #[arg(short, long)]
-    verbose: bool,
-
     /// Run validation after generation (exits with code 1 if errors found)
     #[arg(long)]
     validate: bool,
@@ -240,48 +265,60 @@ struct Cli {
     #[arg(long, default_value = "output")]
     organised_dir: Option<PathBuf>,
 
-    /// Force full rebuild (ignore existing manifest)
-    #[arg(long)]
-    full_rebuild: bool,
-
-    /// Dry run - show what would be done without making changes
-    #[arg(long)]
-    dry_run: bool,
-
     /// Skip confirmation prompt (for automated/CI use)
     #[arg(short = 'y', long)]
     yes: bool,
 
-    /// Run full pipeline then materialize: convert symlinks to real copies,
-    /// remove stale files not in the current dataset. Idempotent — safe to re-run.
+    /// Skip materialization (keep symlinks instead of converting to real copies).
+    /// By default, the pipeline materializes symlinks after staging.
     #[arg(long)]
-    materialize: bool,
+    no_materialize: bool,
 
-    /// Input archives directory containing provider .zip/.7z files to incorporate
-    #[arg(long)]
-    input_archives: Option<PathBuf>,
-
-    /// Skip CRC32 validation of zip archives (faster, still detects ZIP64)
+    /// Skip CRC32 integrity checking of zip archives (faster). Content validation
+    /// (file presence + size comparison) always runs regardless of this flag.
     #[arg(long)]
     skip_zip_validation: bool,
+
+    /// Directory containing StationFactsheet PDFs to inject into data products.
+    /// PDFs matching StationFactsheet_<NN>_*.pdf are copied into each item's assets dir.
+    #[arg(long, default_value = "Documentation")]
+    factsheets_dir: PathBuf,
 }
 
-/// Auto-discover a single .xlsx file in the current directory.
-/// Returns an error if zero or more than one .xlsx files are found.
-fn discover_xlsx() -> Result<PathBuf> {
-    let xlsx_files: Vec<PathBuf> = fs::read_dir(".")?
+/// Auto-discover a metadata file in the current directory.
+/// Prefers .csv files; falls back to .xlsx if no CSV found.
+/// Returns an error if zero or more than one candidate files are found.
+fn discover_input() -> Result<PathBuf> {
+    let all_files: Vec<PathBuf> = fs::read_dir(".")?
         .filter_map(|e| e.ok())
         .filter(|e| e.path().is_file())
         .map(|e| e.path())
+        .collect();
+
+    // Prefer CSV files
+    let csv_files: Vec<&PathBuf> = all_files.iter()
+        .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("csv"))
+        .collect();
+
+    if csv_files.len() == 1 {
+        return Ok(csv_files[0].clone());
+    }
+    if csv_files.len() > 1 {
+        let names: Vec<String> = csv_files.iter().map(|p| p.display().to_string()).collect();
+        anyhow::bail!("Found {} .csv files in current directory: {}. Provide the correct one with -i.", csv_files.len(), names.join(", "));
+    }
+
+    // Fall back to XLSX
+    let xlsx_files: Vec<&PathBuf> = all_files.iter()
         .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("xlsx"))
         .collect();
 
     match xlsx_files.len() {
-        0 => anyhow::bail!("No .xlsx file found in current directory. Provide one with -x or place a .xlsx file here."),
-        1 => Ok(xlsx_files.into_iter().next().unwrap()),
+        0 => anyhow::bail!("No .csv or .xlsx file found in current directory. Provide one with -i or place a .csv file here."),
+        1 => Ok(xlsx_files[0].clone()),
         n => {
             let names: Vec<String> = xlsx_files.iter().map(|p| p.display().to_string()).collect();
-            anyhow::bail!("Found {} .xlsx files in current directory: {}. Provide the correct one with -x.", n, names.join(", "));
+            anyhow::bail!("Found {} .xlsx files in current directory: {}. Provide the correct one with -i.", n, names.join(", "));
         }
     }
 }
@@ -596,13 +633,6 @@ struct CollectionDef {
 /// "Orthophoto" → "Orthophoto"
 fn collection_name_from_product_type(product_type: &str) -> &str {
     product_type.split(" - ").next().unwrap_or(product_type).trim()
-}
-
-/// Extract sub-type from product_type (part after first " - ").
-/// "Radar Velocity - DTM" → Some("DTM")
-/// "Orthophoto" → None
-fn product_subtype(product_type: &str) -> Option<&str> {
-    product_type.split_once(" - ").map(|(_, sub)| sub.trim())
 }
 
 /// Build collection definitions from parsed items using the config collection map.
@@ -1198,136 +1228,103 @@ struct ValidationIssue {
 }
 
 // =============================================================================
-// XLSX Parsing
+// CSV Parsing
 // =============================================================================
 
-/// Extract string from cell
-fn cell_string(cell: &Data) -> Option<String> {
-    match cell {
-        Data::String(s) => {
-            let s = s.trim();
-            if s.is_empty() || s == "NaN" {
-                None
-            } else {
-                Some(s.to_string())
-            }
-        }
-        Data::Float(f) => Some(f.to_string()),
-        Data::Int(i) => Some(i.to_string()),
-        Data::Bool(b) => Some(b.to_string()),
-        Data::DateTime(d) => {
-            // calamine ExcelDateTime - convert to f64 serial and then to ISO
-            let serial = d.as_f64();
-            if let Some(date) = excel_date_to_iso(serial) {
-                Some(date)
-            } else {
-                None
-            }
-        }
-        Data::DateTimeIso(s) => Some(s.clone()),
-        Data::Error(_) | Data::Empty => None,
-        _ => None,
+/// Parse European date string (DD.MM.YYYY) to ISO date (YYYY-MM-DD)
+fn parse_european_date(s: &str) -> Option<String> {
+    let s = s.trim();
+    if s.is_empty() {
+        return None;
+    }
+    NaiveDate::parse_from_str(s, "%d.%m.%Y")
+        .ok()
+        .map(|d| d.format("%Y-%m-%d").to_string())
+}
+
+/// Extract a non-empty trimmed string from a CSV field, returning None for empty/NaN
+fn csv_field(s: &str) -> Option<String> {
+    let s = s.trim();
+    if s.is_empty() || s == "NaN" {
+        None
+    } else {
+        Some(s.to_string())
     }
 }
 
-/// Extract int from cell
-fn cell_int(cell: &Data) -> Option<i32> {
-    match cell {
-        Data::Int(i) => Some(*i as i32),
-        Data::Float(f) => Some(*f as i32),
-        Data::String(s) => s.trim().parse().ok(),
-        _ => None,
+/// Parse the semicolon-delimited CSV metadata file (17 columns).
+///
+/// Column layout (0-indexed):
+///  0: Code, 1: Product ID, 2: Sensor ID, 3: Dataset ID, 4: Bundle ID,
+///  5: Sensor, 6: ProductType, 7: Dataset, 8: Bundle, 9: Description,
+/// 10: Format, 11: Additional information, 12: Phase,
+/// 13: Date first (provided), 14: Date last (provided), 15: Frequency,
+/// 16: Source / Operator
+fn parse_csv(path: &Path, collection_map: &HashMap<String, String>) -> Result<Vec<ItemMetadata>> {
+    // Read raw bytes and convert to UTF-8 (handles Latin-1/ISO-8859-1 encoded files)
+    let raw = fs::read(path)
+        .with_context(|| format!("Failed to read CSV: {:?}", path))?;
+    let text = if std::str::from_utf8(&raw).is_ok() {
+        String::from_utf8(raw).unwrap()
+    } else {
+        // Assume ISO-8859-1: every byte maps to a Unicode code point
+        raw.iter().map(|&b| b as char).collect()
+    };
+
+    let mut rdr = ReaderBuilder::new()
+        .delimiter(b';')
+        .has_headers(true)
+        .flexible(true)
+        .from_reader(text.as_bytes());
+
+    // Validate headers
+    let headers = rdr.headers()
+        .with_context(|| "Failed to read CSV headers")?
+        .clone();
+    if headers.get(0).map(|h| h.trim()) != Some("Code") {
+        anyhow::bail!(
+            "Unexpected CSV header: expected first column 'Code', got '{}'",
+            headers.get(0).unwrap_or("(empty)")
+        );
     }
-}
-
-/// Extract bool from cell (checks for 'x', 'true', 'yes', '1')
-fn cell_bool(cell: &Data) -> bool {
-    match cell {
-        Data::Bool(b) => *b,
-        Data::String(s) => {
-            let s = s.trim().to_lowercase();
-            s == "x" || s == "true" || s == "yes" || s == "1"
-        }
-        Data::Int(i) => *i != 0,
-        Data::Float(f) => *f != 0.0,
-        _ => false,
-    }
-}
-
-/// Convert Excel date serial number to ISO date string
-fn excel_date_to_iso(serial: f64) -> Option<String> {
-    // Excel date: days since 1899-12-30
-    let days = serial as i64;
-    let base = NaiveDate::from_ymd_opt(1899, 12, 30)?;
-    let date = base.checked_add_signed(chrono::Duration::days(days))?;
-    Some(date.format("%Y-%m-%d").to_string())
-}
-
-/// Parse the Data sheet from XLSX (prefers Data > Test_Data > All_Data > first sheet)
-fn parse_xlsx(path: &PathBuf, collection_map: &HashMap<String, String>) -> Result<Vec<ItemMetadata>> {
-    let mut workbook: Xlsx<_> = open_workbook(path)
-        .with_context(|| format!("Failed to open XLSX: {:?}", path))?;
-
-    // Get sheet names and find preferred sheet (like Python: Data > Test_Data > All_Data > first)
-    let sheet_names = workbook.sheet_names().to_vec();
-    let preferred_sheets = ["Data", "Test_Data", "All_Data"];
-    let sheet_name = preferred_sheets
-        .iter()
-        .find(|&name| sheet_names.contains(&name.to_string()))
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| sheet_names.first().cloned().unwrap_or_default());
-
-    info!("Using sheet: {} (available: {:?})", sheet_name, sheet_names);
-
-    let range = workbook
-        .worksheet_range(&sheet_name)
-        .with_context(|| format!("Sheet '{}' not found", sheet_name))?;
 
     let mut items = Vec::new();
 
-    // Data starts at row 2 (1-indexed Excel), which is row 1 (0-indexed)
-    // Column layout (0-indexed) based on actual Excel structure:
-    // 0: Code, 1: ProductID, 2: SensorID, 3: DatasetID, 4: BundleID, 5: Sensor,
-    // 6: ProductType, 7: Dataset, 8: Bundle, 9: Description, 10: Format,
-    // 11: AdditionalInfo, 12: ProcessingLevel, 13: Phase, 14: DateFirst, 15: DateLast,
-    // 16: Frequency, 17: Source, 18: OnSharePoint, 19: InternalCommentary
-    for (row_idx, row) in range.rows().enumerate() {
-        if row_idx < 1 {
-            continue; // Skip header row
-        }
+    for (row_idx, result) in rdr.records().enumerate() {
+        let record = result
+            .with_context(|| format!("Failed to read CSV row {}", row_idx + 2))?;
 
-        // Column 0 is the code
-        let code = match row.get(0).and_then(cell_string) {
-            Some(c) if !c.is_empty() => c,
-            _ => continue,
+        let code = match csv_field(record.get(0).unwrap_or("")) {
+            Some(c) => c,
+            None => continue,
         };
 
-        let product_id = row.get(1).and_then(cell_string);
+        let product_id = csv_field(record.get(1).unwrap_or(""));
 
         let mut item = ItemMetadata {
             code: code.clone(),
             product_id: product_id.clone(),
-            sensor_id: row.get(2).and_then(cell_string),
-            dataset_id: row.get(3).and_then(cell_string),
-            bundle_id: row.get(4).and_then(cell_string),
-            sensor: row.get(5).and_then(cell_string).map(|s| strip_field_prefix(&s)),
-            product_type: row.get(6).and_then(cell_string).map(|s| strip_field_prefix(&s)),
-            dataset: row.get(7).and_then(cell_string).map(|s| strip_field_prefix(&s)),
-            bundle: row.get(8).and_then(cell_string).map(|s| strip_field_prefix(&s)),
-            description: row.get(9).and_then(cell_string),
-            format: row.get(10).and_then(cell_string),
-            technical_info: row.get(11).and_then(cell_string),
-            processing_level: row.get(12).and_then(cell_int),
-            phase: row.get(13).and_then(cell_string),
-            date_first: row.get(14).and_then(cell_string),
-            date_last: row.get(15).and_then(cell_string),
-            continued: row.get(18).map(cell_bool).unwrap_or(false),  // OnSharePoint column
-            frequency: row.get(16).and_then(cell_string),
-            location: None,  // Not in current Excel layout
-            source: row.get(17).and_then(cell_string),
-            additional_remarks: None,  // Not in current Excel layout
-            storage_mb: None,  // Not in current Excel layout
-            internal_commentary: row.get(19).and_then(cell_string),
+            sensor_id: csv_field(record.get(2).unwrap_or("")),
+            dataset_id: csv_field(record.get(3).unwrap_or("")),
+            bundle_id: csv_field(record.get(4).unwrap_or("")),
+            sensor: csv_field(record.get(5).unwrap_or("")).map(|s| strip_field_prefix(&s)),
+            product_type: csv_field(record.get(6).unwrap_or("")).map(|s| strip_field_prefix(&s)),
+            dataset: csv_field(record.get(7).unwrap_or("")).map(|s| strip_field_prefix(&s)),
+            bundle: csv_field(record.get(8).unwrap_or("")).map(|s| strip_field_prefix(&s)),
+            description: csv_field(record.get(9).unwrap_or("")),
+            format: csv_field(record.get(10).unwrap_or("")),
+            technical_info: csv_field(record.get(11).unwrap_or("")),
+            processing_level: None,  // Not in CSV
+            phase: csv_field(record.get(12).unwrap_or("")),
+            date_first: record.get(13).and_then(parse_european_date),
+            date_last: record.get(14).and_then(parse_european_date),
+            continued: false,  // Not in CSV
+            frequency: csv_field(record.get(15).unwrap_or("")),
+            location: None,
+            source: csv_field(record.get(16).unwrap_or("")),
+            additional_remarks: None,
+            storage_mb: None,
+            internal_commentary: None,  // Not in CSV
             collection_id: None,
             geometry: None,
             bbox: None,
@@ -1478,7 +1475,7 @@ fn extract_datetime_from_filename(filename: &str) -> Option<String> {
 /// This creates STAC 1.1.0 compliant items with:
 /// - Item-level geometry in WGS84 (combined extent of all files)
 /// - Per-asset geometry using Projection Extension (LV95 when available)
-fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str) -> serde_json::Value {
+fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str, collection_titles: &HashMap<String, String>) -> serde_json::Value {
     let collection_id = item.collection_id.as_deref().unwrap_or("unknown");
 
     // Build datetime fields
@@ -1498,12 +1495,29 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str) -> s
         (serde_json::Value::Null, None, None)
     };
 
-    // Build title: use sub-type (if any) instead of full product_type to avoid
-    // repeating the collection name. E.g. "06Ea01 - DTM - AIM ShiftedPhase (24h...)"
-    // instead of "06Ea01 - Radar Velocity - DTM - AIM ShiftedPhase (24h...)".
-    let subtype_str = item.product_type.as_deref()
-        .and_then(product_subtype)
-        .unwrap_or("");
+    // Build title: strip the collection title from the product type prefix to avoid
+    // redundancy, but keep any qualifier that distinguishes items within a merged
+    // collection. E.g. in collection "Radar":
+    //   "Radar Velocity - DTM" → "Velocity - DTM"
+    //   "Radar Interferograms" → "Interferograms"
+    // But in collection "Orthophoto":
+    //   "Orthophoto" → "" (identical, stripped entirely)
+    let coll_title = collection_titles.get(collection_id).map(|s| s.as_str()).unwrap_or("");
+    let subtype_str = item.product_type.as_deref().map(|pt| {
+        // Strip the collection title prefix (case-insensitive) from the product type
+        let trimmed = pt.strip_prefix(coll_title)
+            .or_else(|| {
+                // Also try stripping the collection-level name (pre-override)
+                let coll_name = collection_name_from_product_type(pt);
+                if coll_name.eq_ignore_ascii_case(coll_title) {
+                    Some(&pt[coll_name.len()..])
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(pt);
+        trimmed.trim_start_matches(" - ").trim()
+    }).unwrap_or("");
     let dataset_str = item.dataset.as_deref()
         .filter(|s| !s.is_empty())
         .or(item.dataset_id.as_deref())
@@ -1908,11 +1922,16 @@ fn generate_catalog(
     item_pb.set_style(bar_style.clone());
     item_pb.set_message("Creating STAC items...");
 
+    // Build collection title lookup for item title construction
+    let coll_title_map: HashMap<String, String> = collections_defs.iter()
+        .map(|(id, def)| (id.clone(), def.title.clone()))
+        .collect();
+
     // Pre-create all STAC items in parallel (needed for both per-collection and all_items files)
     let results: Vec<_> = items
         .par_iter()
         .map(|item| {
-            let stac_item = create_stac_item(item, base_url, s3_base_url);
+            let stac_item = create_stac_item(item, base_url, s3_base_url, &coll_title_map);
 
             // Count assets for stats
             let asset_count = stac_item
@@ -2226,19 +2245,21 @@ fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
-    // Resolve XLSX path: use provided or auto-discover
-    let xlsx = match cli.xlsx {
+    // Resolve input path: use provided or auto-discover
+    let input_file = match cli.input {
         Some(path) => path,
-        None => discover_xlsx()?,
+        None => discover_input()?,
     };
 
     // Destructure CLI for convenience
     let Cli {
-        xlsx: _, output, base_url, s3_base_url, data, config: config_path,
-        threads, verbose, validate,
-        organised_dir, full_rebuild,
-        dry_run, yes, materialize, input_archives, skip_zip_validation,
+        input: _, output, base_url, s3_base_url, data, config: config_path,
+        threads, validate,
+        organised_dir,
+        yes, no_materialize, skip_zip_validation,
+        factsheets_dir,
     } = cli;
+    let materialize = !no_materialize;
 
     {
             // Load config
@@ -2266,9 +2287,9 @@ fn main() -> Result<()> {
             // Check data directory exists if specified
             let data = data.filter(|p| p.exists());
 
-            // Step 1: Parse XLSX (quick operation, use simple info log instead of spinner)
-            let mut items = parse_xlsx(&xlsx, &config.collections)?;
-            info!("  Parsed {} items from XLSX", items.len());
+            // Step 1: Parse metadata (quick operation, use simple info log instead of spinner)
+            let mut items = parse_csv(&input_file, &config.collections)?;
+            info!("  Parsed {} items from {}", items.len(), input_file.display());
 
             // Step 2: Scan folders if data provided (quick operation, use simple info log)
             let scanned_folders: HashMap<String, ScannedFolder> = if let Some(ref data_path) = data {
@@ -2279,8 +2300,8 @@ fn main() -> Result<()> {
                 HashMap::new()
             };
 
-            // Collect xlsx codes for staging/validation
-            let xlsx_codes: Vec<String> = items.iter().map(|i| i.code.clone()).collect();
+            // Collect item codes for staging/validation
+            let item_codes: Vec<String> = items.iter().map(|i| i.code.clone()).collect();
 
             // Always use SHA-256 for hashing
             let algorithm = HashAlgorithm::Sha256;
@@ -2289,7 +2310,7 @@ fn main() -> Result<()> {
             {
                 info!("");
                 info!("=== Summary ===");
-                info!("  XLSX:   {} ({} items)", xlsx.display(), items.len());
+                info!("  Input:  {} ({} items)", input_file.display(), items.len());
                 if let Some(ref d) = data {
                     info!("  Data:   {} ({} folders matched)", d.display(), scanned_folders.len());
                 } else {
@@ -2355,6 +2376,25 @@ fn main() -> Result<()> {
                                 total_size as f64 / 1_073_741_824.0);
                         }
 
+                        // Build extra_expected for factsheets so preview doesn't count them as "removed"
+                        let factsheet_extra: HashMap<String, u64> = if factsheets_dir.is_dir() {
+                            let fm = discover_factsheets(&factsheets_dir);
+                            let mut extra = HashMap::new();
+                            for item in &items {
+                                if let Some(ref sid) = item.sensor_id {
+                                    if let Some(src) = fm.get(sid.as_str()) {
+                                        let fname = src.file_name().unwrap().to_string_lossy();
+                                        let asset_path = format!("assets/{}/{}", item.code, fname);
+                                        let size = fs::metadata(src).map(|m| m.len()).unwrap_or(0);
+                                        extra.insert(asset_path, size);
+                                    }
+                                }
+                            }
+                            extra
+                        } else {
+                            HashMap::new()
+                        };
+
                         // Check manifest
                         let cache_dir = output.join(".stac-cache");
                         let manifest_path = cache_dir.join("manifest.json");
@@ -2363,7 +2403,7 @@ fn main() -> Result<()> {
                                 info!("    manifest  {} files, {} archives tracked",
                                     m.total_files, m.archives.len());
                                 let (new, removed, modified, unchanged) =
-                                    preview_staging_changes(&scanned_folders, &m);
+                                    preview_staging_changes(&scanned_folders, &m, &factsheet_extra);
                                 info!("");
                                 info!("  Changes (vs manifest):");
                                 info!("    {} new, {} removed, {} modified, {} unchanged",
@@ -2377,15 +2417,55 @@ fn main() -> Result<()> {
 
                 if materialize {
                     info!("  Mode:   materialize (symlinks → real copies)");
-                } else if dry_run {
-                    info!("  Mode:   dry run");
-                } else if full_rebuild {
-                    info!("  Mode:   full rebuild");
+                } else {
+                    info!("  Mode:   symlinks only (--no-materialize)");
+                }
+
+                // Factsheet discovery and sensor matching
+                if factsheets_dir.is_dir() {
+                    let factsheet_map = discover_factsheets(&factsheets_dir);
+                    if !factsheet_map.is_empty() {
+                        // Collect unique sensor IDs from items
+                        let sensor_ids: BTreeMap<String, usize> = items.iter()
+                            .filter_map(|i| i.sensor_id.as_ref())
+                            .fold(BTreeMap::new(), |mut acc, sid| {
+                                *acc.entry(sid.clone()).or_insert(0) += 1;
+                                acc
+                            });
+
+                        info!("");
+                        info!("  Factsheets: {} found in {}", factsheet_map.len(), factsheets_dir.display());
+                        let mut matched = 0;
+                        let mut missing = Vec::new();
+                        for (sid, item_count) in &sensor_ids {
+                            if let Some(path) = factsheet_map.get(sid.as_str()) {
+                                let fname = path.file_name().unwrap().to_string_lossy();
+                                info!("    sensor {:>2} → {} ({} items)", sid, fname, item_count);
+                                matched += 1;
+                            } else {
+                                missing.push((sid.clone(), *item_count));
+                            }
+                        }
+                        if !missing.is_empty() {
+                            info!("    Missing factsheets for {} sensors:", missing.len());
+                            for (sid, count) in &missing {
+                                // Try to find the sensor name from config
+                                let sensor_name = config.sensors.values()
+                                    .find(|s| s.items.iter().any(|c| c.starts_with(&format!("{:0>2}", sid))))
+                                    .map(|s| s.name.as_str())
+                                    .unwrap_or("unknown");
+                                info!("      sensor {:>2} ({}, {} items) — no PDF", sid, sensor_name, count);
+                            }
+                        }
+                        info!("    {} of {} sensors matched", matched, sensor_ids.len());
+                    }
+                } else {
+                    debug!("  Factsheets: directory {:?} not found (use --factsheets-dir)", factsheets_dir);
                 }
 
                 info!("");
 
-                if !yes && !dry_run {
+                if !yes {
                     use std::io::Write;
                     print!("Proceed? [y/N] ");
                     std::io::stdout().flush()?;
@@ -2404,19 +2484,13 @@ fn main() -> Result<()> {
 
             // Stage assets if --assets-dir is set and data is provided
             if let Some(ref assets_path) = assets_dir {
-                if data.is_some() || input_archives.is_some() {
+                if data.is_some() {
                     info!("");
                     info!("=== Staging Pipeline (link mode: {}) ===", link_mode_parsed);
                     info!("  Hash algorithm: {}", algorithm);
-                    if dry_run {
-                        info!("  Mode: DRY RUN");
-                    }
 
                     // Load existing manifest for incremental hashing
-                    let existing_manifest = if full_rebuild {
-                        info!("  Mode: FULL REBUILD (ignoring existing manifest)");
-                        None
-                    } else {
+                    let existing_manifest = {
                         let cache_dir = output.join(".stac-cache");
                         let manifest_path = cache_dir.join("manifest.json");
                         // Also check old location for migration
@@ -2459,36 +2533,61 @@ fn main() -> Result<()> {
                     let stage_assets_pb = multi_progress.add(ProgressBar::new(0));
                     stage_assets_pb.set_style(pb_style.clone());
 
-                    let stage_stats = Some(stage_assets(
+                    let mut stage_stats = Some(stage_assets(
                         &scanned_folders,
-                        &xlsx_codes,
+                        &item_codes,
                         assets_path,
                         link_mode_parsed,
-                        input_archives.as_deref(),
                         folder_map,
-                        dry_run,
                         &stage_assets_pb,
                         &config.exclude_files,
                     )?);
+
+                    // Step 1b: Inject factsheet PDFs into staged asset directories
+                    if factsheets_dir.is_dir() {
+                        let factsheet_map = discover_factsheets(&factsheets_dir);
+                        if !factsheet_map.is_empty() {
+                            let mut injected = 0;
+                            for item in &items {
+                                if let Some(ref sensor_id) = item.sensor_id {
+                                    if let Some(src_path) = factsheet_map.get(sensor_id.as_str()) {
+                                        let target_dir = assets_path.join(&item.code);
+                                        if target_dir.exists() {
+                                            let filename = src_path.file_name().unwrap();
+                                            let target = target_dir.join(filename);
+                                            // Always register so materializer doesn't delete pre-existing factsheets
+                                            if let Some(ref mut stats) = stage_stats {
+                                                stats.expected_files.insert(target.clone());
+                                            }
+                                            if !target.exists() {
+                                                link_or_copy(src_path, &target, link_mode_parsed)?;
+                                                injected += 1;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            info!("  Discovered {} factsheets for {} sensors", factsheet_map.len(), factsheet_map.len());
+                            if injected > 0 {
+                                info!("  Injected {} factsheet files into asset directories", injected);
+                            }
+                        }
+                    } else {
+                        debug!("  Factsheets directory not found: {:?}", factsheets_dir);
+                    }
 
                     // Step 2: Hash all staged assets in parallel
                     let hash_pb = multi_progress.add(ProgressBar::new(0));
                     hash_pb.set_style(pb_style.clone());
 
-                    let mut manifest = if dry_run {
-                        let m = DataManifest::new(algorithm);
-                        hash_pb.finish_with_message("Hashing: skipped (dry run)");
-                        m
-                    } else {
-                        hash_staged_assets(
-                            assets_path,
-                            algorithm,
-                            existing_manifest.as_ref(),
-                            &scanned_folders,
-                            &hash_pb,
-                            &config.exclude_files,
-                        )?
-                    };
+                    let mut manifest = hash_staged_assets(
+                        assets_path,
+                        algorithm,
+                        existing_manifest.as_ref(),
+                        &scanned_folders,
+                        &hash_pb,
+                        &config.exclude_files,
+                    )?;
 
                     // Step 3: Stage archives (always real copies, with fingerprinting)
                     if let Some(ref arch_path) = archives_dir {
@@ -2497,12 +2596,11 @@ fn main() -> Result<()> {
 
                         stage_archives(
                             &scanned_folders,
-                            &xlsx_codes,
+                            &item_codes,
                             assets_path,
                             arch_path,
                             &mut manifest,
                             existing_manifest.as_ref(),
-                            dry_run,
                             &stage_arch_pb,
                             &config.exclude_files,
                             skip_zip_validation,
@@ -2510,7 +2608,7 @@ fn main() -> Result<()> {
                     }
 
                     // Save manifest
-                    if !dry_run {
+                    {
                         let cache_dir = output.join(".stac-cache");
                         fs::create_dir_all(&cache_dir)?;
                         let manifest_path = cache_dir.join("manifest.json");
@@ -2525,7 +2623,7 @@ fn main() -> Result<()> {
                     }
 
                     // Step 4 (optional): Materialize symlinks and clean stale files
-                    if materialize && !dry_run {
+                    if materialize {
                         info!("");
                         info!("=== Materializing ===");
 
@@ -2566,12 +2664,12 @@ fn main() -> Result<()> {
                         }
 
                         // Materialize remaining symlinks/hardlinks in assets/
-                        let (mat_assets, real_assets) = materialize_links(assets_path, false)?;
+                        let (mat_assets, real_assets) = materialize_links(assets_path)?;
                         info!("  Assets: {} materialized, {} already real", mat_assets, real_assets);
 
                         // Materialize archives too
                         if let Some(ref arch_path) = archives_dir {
-                            let (mat_arch, real_arch) = materialize_links(arch_path, false)?;
+                            let (mat_arch, real_arch) = materialize_links(arch_path)?;
                             info!("  Archives: {} materialized, {} already real", mat_arch, real_arch);
                         }
                     }
@@ -2592,10 +2690,7 @@ fn main() -> Result<()> {
 
             // Load geometry cache for incremental file-level extraction
             let crs_hash = hash_crs_overrides(&config.crs_overrides);
-            let geometry_cache: Option<BTreeMap<String, CachedFileGeometry>> = if full_rebuild {
-                info!("Geometry cache: skipped (full rebuild)");
-                None
-            } else {
+            let geometry_cache: Option<BTreeMap<String, CachedFileGeometry>> = {
                 let cache_dir = output.join(".stac-cache");
                 let cache_path = cache_dir.join("geometry_cache.json");
                 match GeometryCache::load(&cache_path) {
@@ -2677,27 +2772,14 @@ fn main() -> Result<()> {
                                 if let Some(ref reason) = override_reason {
                                     applied_overrides.push((code.clone(), source.clone(), reason.clone()));
                                 }
-                                if verbose {
-                                    if let Some(ref reason) = override_reason {
-                                        debug!("[{}] Extracted from {} [OVERRIDE: {}]", code, source, reason);
-                                    } else {
-                                        debug!("[{}] Extracted from {}", code, source);
-                                    }
-                                }
                             }
-                            ExtractionResult::Manual { bbox, geometry, sensor_name, lon, lat } => {
+                            ExtractionResult::Manual { bbox, geometry, .. } => {
                                 item.bbox = Some(bbox);
                                 item.geometry = Some(geometry);
                                 manual += 1;
-                                if verbose {
-                                    debug!("[{}] Manual: {} at [{:.4}, {:.4}]", code, sensor_name, lon, lat);
-                                }
                             }
-                            ExtractionResult::NoGeometry { reason } => {
+                            ExtractionResult::NoGeometry { .. } => {
                                 no_geometry += 1;
-                                if verbose {
-                                    debug!("[{}] No geometry: {}", code, reason);
-                                }
                             }
                             ExtractionResult::Failed { error } => {
                                 failed += 1;
@@ -2819,7 +2901,7 @@ fn main() -> Result<()> {
             }
 
             // Save geometry cache
-            if !dry_run {
+            {
                 let cache_dir = output.join(".stac-cache");
                 fs::create_dir_all(&cache_dir)?;
                 let mut new_cache = GeometryCache::new(crs_hash);
@@ -2874,18 +2956,47 @@ fn main() -> Result<()> {
                                 item.bbox = Some(bbox);
                                 item.geometry = Some(geometry);
                                 sensor_fallback_count += 1;
-                                if verbose {
-                                    debug!("[{}] Sensor fallback: {} at [{:.4}, {:.4}]",
-                                        item.code,
-                                        sensor.name.as_deref().unwrap_or(&item.code),
-                                        lon, lat);
-                                }
                             }
                         }
                     }
                 }
                 if sensor_fallback_count > 0 {
                     info!("  Applied {} sensor locations (fallback for items with non-geospatial files)", sensor_fallback_count);
+                }
+            }
+
+            // Step 3b: Apply geometry overrides (inherit geometry from sibling items)
+            if !config.geometry_overrides.is_empty() {
+                // Collect source geometries first
+                let source_geometries: HashMap<String, (Vec<f64>, serde_json::Value)> = items
+                    .iter()
+                    .filter_map(|item| {
+                        if let (Some(bbox), Some(geom)) = (&item.bbox, &item.geometry) {
+                            Some((item.code.clone(), (bbox.clone(), geom.clone())))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                let mut override_count = 0;
+                for item in &mut items {
+                    if item.geometry.is_some() {
+                        continue;
+                    }
+                    if let Some(ov) = config.geometry_overrides.get(&item.code) {
+                        if let Some((bbox, geom)) = source_geometries.get(&ov.from_item) {
+                            item.bbox = Some(bbox.clone());
+                            item.geometry = Some(geom.clone());
+                            override_count += 1;
+                            debug!("  Geometry override: {} ← {}", item.code, ov.from_item);
+                        } else {
+                            warn!("  Geometry override for {} references {}, which has no geometry", item.code, ov.from_item);
+                        }
+                    }
+                }
+                if override_count > 0 {
+                    info!("  Applied {} geometry overrides", override_count);
                 }
             }
 
@@ -3153,70 +3264,6 @@ fn main() -> Result<()> {
 // Archive Operations
 // =============================================================================
 
-/// Extract a zip archive to a target directory
-fn extract_archive(archive_path: &Path, target_dir: &Path, exclude: &ExcludeFiles) -> Result<()> {
-    let ext = archive_path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
-
-    fs::create_dir_all(target_dir)?;
-
-    if ext == "7z" {
-        // Use 7z command-line tool for .7z files
-        let status = std::process::Command::new("7z")
-            .args(["x", "-y", &format!("-o{}", target_dir.display())])
-            .arg(archive_path)
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::piped())
-            .status()
-            .with_context(|| "Failed to run 7z. Is p7zip-full installed?")?;
-        if !status.success() {
-            anyhow::bail!("7z extraction failed for {:?} (exit code {:?})", archive_path, status.code());
-        }
-    } else {
-        // .zip extraction
-        let file = File::open(archive_path)?;
-        let mut archive = zip::ZipArchive::new(file)?;
-        let total = archive.len();
-
-        for i in 0..total {
-            let mut file = archive.by_index(i)?;
-            let outpath = match file.enclosed_name() {
-                Some(path) => target_dir.join(path),
-                None => continue,
-            };
-
-            if file.name().ends_with('/') {
-                fs::create_dir_all(&outpath)?;
-            } else {
-                if let Some(p) = outpath.parent() {
-                    if !p.exists() {
-                        fs::create_dir_all(p)?;
-                    }
-                }
-                let mut outfile = File::create(&outpath)?;
-                std::io::copy(&mut file, &mut outfile)?;
-            }
-
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                if let Some(mode) = file.unix_mode() {
-                    fs::set_permissions(&outpath, fs::Permissions::from_mode(mode))?;
-                }
-            }
-
-            if i % 500 == 0 && i > 0 {
-                info!("    ... {}/{} files extracted", i, total);
-            }
-        }
-    }
-
-    // Count what was extracted
-    let (file_count, total_size) = count_folder_contents(target_dir, exclude);
-    info!("    Extracted {} files ({})", file_count, format_size(total_size));
-
-    Ok(())
-}
-
 /// Create a zip archive from a directory, returning the archive size in bytes.
 /// ZIP64 detection is handled separately by `detect_zip64()`.
 fn create_archive(source_dir: &Path, archive_path: &Path, exclude: &ExcludeFiles) -> Result<u64> {
@@ -3306,19 +3353,80 @@ fn validate_zip_crc(archive_path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Count files and total size in a directory
-fn count_folder_contents(dir: &Path, exclude: &ExcludeFiles) -> (usize, u64) {
-    let mut count = 0;
-    let mut size = 0u64;
+/// Validate that a zip archive's file list matches the assets directory exactly.
+/// Compares both file presence AND file sizes (uncompressed).
+/// Returns Ok(()) if all files match, or an error describing mismatches.
+fn validate_zip_contents(archive_path: &Path, assets_dir: &Path, code: &str, exclude: &ExcludeFiles) -> Result<()> {
+    let code_dir = assets_dir.join(code);
+    if !code_dir.exists() {
+        anyhow::bail!("Assets directory does not exist: {}", code_dir.display());
+    }
 
-    for entry in WalkDir::new(dir).into_iter().filter_map(|e| e.ok()) {
-        if entry.file_type().is_file() && !is_junk_file(entry.path(), exclude) {
-            count += 1;
-            size += entry.metadata().map(|m| m.len()).unwrap_or(0);
+    // Collect files on disk with sizes (same walk logic as create_archive)
+    let mut disk_files: HashMap<String, u64> = HashMap::new();
+    for entry in WalkDir::new(&code_dir).follow_links(true).into_iter().filter_map(|e| e.ok()) {
+        let path = entry.path();
+        if !path.is_file() { continue; }
+        if is_junk_file(path, exclude) { continue; }
+        if let Ok(rel) = path.strip_prefix(&code_dir) {
+            let size = fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+            disk_files.insert(rel.to_string_lossy().to_string(), size);
         }
     }
 
-    (count, size)
+    // Collect files in zip with uncompressed sizes
+    let file = File::open(archive_path)
+        .with_context(|| format!("Failed to open archive: {}", archive_path.display()))?;
+    let mut archive = zip::ZipArchive::new(file)
+        .with_context(|| format!("Failed to read zip: {}", archive_path.display()))?;
+    let mut zip_files: HashMap<String, u64> = HashMap::new();
+    for i in 0..archive.len() {
+        let entry = archive.by_index_raw(i)
+            .with_context(|| format!("Failed to read entry {} in {}", i, archive_path.display()))?;
+        let name = entry.name().to_string();
+        if !name.ends_with('/') {
+            zip_files.insert(name, entry.size());
+        }
+    }
+
+    // Compare: presence and sizes
+    let mut in_disk_not_zip: Vec<&String> = Vec::new();
+    let mut in_zip_not_disk: Vec<&String> = Vec::new();
+    let mut size_mismatches: Vec<(String, u64, u64)> = Vec::new();
+
+    for name in disk_files.keys() {
+        if !zip_files.contains_key(name) {
+            in_disk_not_zip.push(name);
+        }
+    }
+    for name in zip_files.keys() {
+        if !disk_files.contains_key(name) {
+            in_zip_not_disk.push(name);
+        }
+    }
+    // Check sizes for files present in both
+    for (name, disk_size) in &disk_files {
+        if let Some(&zip_size) = zip_files.get(name) {
+            if *disk_size != zip_size {
+                size_mismatches.push((name.clone(), *disk_size, zip_size));
+            }
+        }
+    }
+
+    in_disk_not_zip.sort();
+    in_zip_not_disk.sort();
+    size_mismatches.sort_by(|a, b| a.0.cmp(&b.0));
+
+    if !in_disk_not_zip.is_empty() || !in_zip_not_disk.is_empty() || !size_mismatches.is_empty() {
+        let mut msg = format!("Zip content mismatch for {}:", code);
+        for f in &in_disk_not_zip { msg += &format!("\n  in assets/ but NOT in zip: {}", f); }
+        for f in &in_zip_not_disk { msg += &format!("\n  in zip but NOT in assets/: {}", f); }
+        for (f, disk_sz, zip_sz) in &size_mismatches {
+            msg += &format!("\n  size mismatch: {} (disk: {} vs zip: {})", f, format_size(*disk_sz), format_size(*zip_sz));
+        }
+        anyhow::bail!(msg);
+    }
+    Ok(())
 }
 
 /// Format bytes as human-readable size
@@ -3460,10 +3568,13 @@ struct StageAssetsStats {
 }
 
 /// Compare scanned folders against existing manifest to preview what will change.
+/// `extra_expected` includes additional files (e.g. factsheets) that will be injected
+/// after staging, so they shouldn't count as "removed".
 /// Returns (new, removed, modified, unchanged) file counts.
 fn preview_staging_changes(
     scanned: &HashMap<String, ScannedFolder>,
     manifest: &DataManifest,
+    extra_expected: &HashMap<String, u64>,
 ) -> (usize, usize, usize, usize) {
     // Build expected: asset_path -> source file size
     let mut expected: HashMap<String, u64> = HashMap::new();
@@ -3480,6 +3591,9 @@ fn preview_staging_changes(
             expected.insert(asset_path, size);
         }
     }
+
+    // Merge extra expected files (factsheets etc.) so they don't appear as "removed"
+    expected.extend(extra_expected.iter().map(|(k, &v)| (k.clone(), v)));
 
     let mut new = 0usize;
     let mut modified = 0usize;
@@ -3501,17 +3615,14 @@ fn preview_staging_changes(
 }
 
 /// Stage assets from scanned FINAL_Data folders into `assets/<code>/` using the chosen link mode.
-/// For codes missing from scanned folders but present in `input_archives`, extracts the archive.
 fn stage_assets(
     scanned: &HashMap<String, ScannedFolder>,
-    xlsx_codes: &[String],
+    _item_codes: &[String],
     assets_dir: &Path,
     link_mode: LinkMode,
-    input_archives: Option<&Path>,
-    folder_mappings: &HashMap<String, FolderMapping>,
-    dry_run: bool,
+    _folder_mappings: &HashMap<String, FolderMapping>,
     progress: &ProgressBar,
-    exclude: &ExcludeFiles,
+    _exclude: &ExcludeFiles,
 ) -> Result<StageAssetsStats> {
     let mut stats = StageAssetsStats {
         staged: 0, extracted: 0, skipped: 0, preserved: 0,
@@ -3537,9 +3648,7 @@ fn stage_assets(
             let target = code_dir.join(&rel_path);
             stats.expected_files.insert(target.clone());
 
-            if dry_run {
-                stats.staged += 1;
-            } else if let Ok(meta) = target.symlink_metadata() {
+            if let Ok(meta) = target.symlink_metadata() {
                 // Target exists — check if it's a real file (materialized) or a symlink
                 if meta.file_type().is_symlink() {
                     // Symlink: recreate it (source path may have changed)
@@ -3559,79 +3668,6 @@ fn stage_assets(
         }
     }
 
-    // Extract archives for codes in xlsx but missing from scanned folders
-    if let Some(archives_input) = input_archives {
-        if !archives_input.exists() {
-            warn!("  Input archives path does not exist: {}", archives_input.display());
-        }
-        let scanned_codes: std::collections::HashSet<&String> = scanned.keys().collect();
-        let missing_codes: Vec<&String> = xlsx_codes.iter()
-            .filter(|c| !scanned_codes.contains(c))
-            .collect();
-
-        if !missing_codes.is_empty() {
-            info!("  Checking {} missing codes against input archives...", missing_codes.len());
-
-            // Build a map of code -> archive path from input_archives dir
-            let mut input_archive_map: HashMap<String, PathBuf> = HashMap::new();
-            for entry in WalkDir::new(archives_input)
-                .min_depth(1)
-                .max_depth(1)
-                .into_iter()
-                .filter_map(|e| e.ok())
-            {
-                if !entry.file_type().is_file() { continue; }
-                let ext = entry.path().extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
-                if ext != "zip" && ext != "7z" { continue; }
-                let fname = entry.file_name().to_string_lossy().to_string();
-                if let Some(code) = extract_code_from_folder(&fname, folder_mappings) {
-                    input_archive_map.insert(code, entry.path().to_path_buf());
-                }
-            }
-
-            // Log input archives and their resolved codes
-            info!("  Input archives ({}):", input_archive_map.len());
-            for (code, path) in &input_archive_map {
-                let fname = path.file_name().unwrap_or_default().to_string_lossy();
-                let status = if missing_codes.iter().any(|c| c.as_str() == code.as_str()) {
-                    "MISSING — will extract"
-                } else {
-                    "has FINAL_Data — skip"
-                };
-                info!("    {} -> {} ({})", fname, code, status);
-            }
-
-            // Log missing codes without archives
-            let unmatched_missing: Vec<&&String> = missing_codes.iter()
-                .filter(|c| !input_archive_map.contains_key(c.as_str()))
-                .collect();
-            if !unmatched_missing.is_empty() {
-                info!("  Missing codes without input archives ({}):", unmatched_missing.len());
-                info!("    {}", unmatched_missing.iter().map(|c| c.as_str()).collect::<Vec<_>>().join(", "));
-            }
-
-            for code in missing_codes {
-                let code_dir = assets_dir.join(code);
-                // For extracted archives, skip if already extracted (extraction is expensive)
-                if code_dir.exists() {
-                    info!("    {} — skipped (already extracted)", code);
-                    stats.skipped += 1;
-                    continue;
-                }
-                if let Some(archive_path) = input_archive_map.get(code.as_str()) {
-                    if dry_run {
-                        info!("  WOULD EXTRACT: {} -> assets/{}/", archive_path.display(), code);
-                        stats.extracted += 1;
-                    } else {
-                        info!("  Extracting: {} -> assets/{}/", archive_path.display(), code);
-                        extract_archive(archive_path, &code_dir, exclude)?;
-                        stats.extracted += 1;
-                    }
-                }
-            }
-        }
-    }
-
     progress.finish_with_message(format!(
         "Assets: {} staged, {} preserved, {} extracted, {} skipped",
         stats.staged, stats.preserved, stats.extracted, stats.skipped
@@ -3645,10 +3681,10 @@ fn stage_assets(
         info!("  Materialization: {:.1}% materialized ({} files), {:.1}% new symlinks ({} files)",
             pct_materialized, stats.preserved, pct_symlinks, stats.staged);
         if stats.staged > 0 {
-            warn!("  Staging directory is partially materialized — run --materialize before upload");
+            warn!("  Staging directory is partially materialized — re-run without --no-materialize before upload");
         }
     } else if total > 0 {
-        info!("  Staging directory is non-materialized ({} symlinks) — run --materialize before upload", stats.staged);
+        info!("  Staging directory is non-materialized ({} symlinks) — re-run without --no-materialize before upload", stats.staged);
     }
 
     Ok(stats)
@@ -3808,8 +3844,6 @@ enum ArchiveResult {
     Unchanged { code: String, entry: ArchiveManifestEntry },
     /// Created — has new hash and entry
     Processed { code: String, entry: ArchiveManifestEntry },
-    /// Dry run placeholder
-    DryRun,
     /// Skipped (no assets, no source)
     Skipped,
     /// Error during processing
@@ -3821,23 +3855,20 @@ enum ArchiveResult {
 /// Archive creation and hashing runs in parallel. Records archive hashes into the manifest.
 fn stage_archives(
     scanned: &HashMap<String, ScannedFolder>,
-    xlsx_codes: &[String],
+    item_codes: &[String],
     assets_dir: &Path,
     archives_dir: &Path,
     manifest: &mut DataManifest,
     existing_manifest: Option<&DataManifest>,
-    dry_run: bool,
     progress: &ProgressBar,
     exclude: &ExcludeFiles,
     skip_zip_validation: bool,
 ) -> Result<StageArchivesStats> {
-    if !dry_run {
-        fs::create_dir_all(archives_dir)?;
-    }
+    fs::create_dir_all(archives_dir)?;
 
     // Collect all codes that need archives
     let all_codes: Vec<String> = {
-        let set: std::collections::HashSet<String> = xlsx_codes.iter().cloned()
+        let set: std::collections::HashSet<String> = item_codes.iter().cloned()
             .chain(scanned.keys().cloned())
             .collect();
         let mut v: Vec<String> = set.into_iter().collect();
@@ -3872,61 +3903,70 @@ fn stage_archives(
             }
 
             let action = classify_archive_action(code, archive_path, fingerprint, existing_manifest);
-            match action {
-                ArchiveAction::Unchanged => {
+
+            // For unchanged archives, validate content is still in sync (cheap metadata check).
+            // If valid, carry forward the existing manifest entry and skip rebuild.
+            if matches!(action, ArchiveAction::Unchanged) {
+                if let Err(e) = validate_zip_contents(archive_path, assets_dir, code, exclude) {
+                    warn!("{} content mismatch — rebuilding: {}", code, e);
+                    let _ = fs::remove_file(archive_path);
+                    // Fall through to rebuild below
+                } else {
                     let existing_entry = existing_manifest.unwrap().archives.get(code).unwrap();
                     progress.inc(1);
-                    ArchiveResult::Unchanged { code: code.clone(), entry: existing_entry.clone() }
+                    return ArchiveResult::Unchanged { code: code.clone(), entry: existing_entry.clone() };
                 }
-                _ => {
-                    if dry_run {
+            }
+
+            // Rebuild: create/adopt/rebuild, or stale-unchanged that failed validation above
+            match create_archive(&asset_dir, archive_path, exclude) {
+                Ok(size) => {
+                    // Detect ZIP64 (cheap) and optionally validate CRC (expensive)
+                    let is_zip64 = match detect_zip64(archive_path) {
+                        Ok(z64) => z64,
+                        Err(e) => {
+                            progress.inc(1);
+                            return ArchiveResult::Error { code: code.clone(), error: format!("zip64 detect: {}", e) };
+                        }
+                    };
+                    // Content validation is cheap (metadata only) — always run it
+                    if let Err(e) = validate_zip_contents(archive_path, assets_dir, code, exclude) {
                         progress.inc(1);
-                        return ArchiveResult::DryRun;
+                        return ArchiveResult::Error { code: code.clone(), error: format!("content validate: {}", e) };
                     }
-                    match create_archive(&asset_dir, archive_path, exclude) {
-                        Ok(size) => {
-                            // Detect ZIP64 (cheap) and optionally validate CRC (expensive)
-                            let is_zip64 = match detect_zip64(archive_path) {
-                                Ok(z64) => z64,
-                                Err(e) => {
-                                    progress.inc(1);
-                                    return ArchiveResult::Error { code: code.clone(), error: format!("zip64 detect: {}", e) };
-                                }
-                            };
-                            if !skip_zip_validation {
-                                if let Err(e) = validate_zip_crc(archive_path) {
-                                    progress.inc(1);
-                                    return ArchiveResult::Error { code: code.clone(), error: format!("crc validate: {}", e) };
-                                }
-                            }
-                            match hash_file(archive_path, HashAlgorithm::Sha256) {
-                                Ok(archive_hash) => {
-                                    let sidecar_path = archives_dir.join(format!("{}.zip.sha256", code));
-                                    let _ = fs::write(&sidecar_path, format!("{}  {}.zip\n", archive_hash, code));
-                                    progress.inc(1);
-                                    ArchiveResult::Processed {
-                                        code: code.clone(),
-                                        entry: ArchiveManifestEntry {
-                                            path: archive_path.to_string_lossy().to_string(),
-                                            size,
-                                            hash: archive_hash,
-                                            content_fingerprint: fingerprint.clone(),
-                                            file_count: *file_count,
-                                            is_zip64,
-                                        },
-                                    }
-                                }
-                                Err(e) => {
-                                    progress.inc(1);
-                                    ArchiveResult::Error { code: code.clone(), error: format!("hash: {}", e) }
-                                }
+                    // CRC32 validation is expensive (reads every byte) — skip with --skip-zip-validation
+                    if !skip_zip_validation {
+                        if let Err(e) = validate_zip_crc(archive_path) {
+                            progress.inc(1);
+                            return ArchiveResult::Error { code: code.clone(), error: format!("crc validate: {}", e) };
+                        }
+                    }
+                    match hash_file(archive_path, HashAlgorithm::Sha256) {
+                        Ok(archive_hash) => {
+                            let sidecar_path = archives_dir.join(format!("{}.zip.sha256", code));
+                            let _ = fs::write(&sidecar_path, format!("{}  {}.zip\n", archive_hash, code));
+                            progress.inc(1);
+                            ArchiveResult::Processed {
+                                code: code.clone(),
+                                entry: ArchiveManifestEntry {
+                                    path: archive_path.to_string_lossy().to_string(),
+                                    size,
+                                    hash: archive_hash,
+                                    content_fingerprint: fingerprint.clone(),
+                                    file_count: *file_count,
+                                    is_zip64,
+                                },
                             }
                         }
                         Err(e) => {
                             progress.inc(1);
-                            ArchiveResult::Error { code: code.clone(), error: format!("create: {}", e) }
+                            ArchiveResult::Error { code: code.clone(), error: format!("hash: {}", e) }
                         }
                     }
+                }
+                Err(e) => {
+                    progress.inc(1);
+                    ArchiveResult::Error { code: code.clone(), error: format!("create: {}", e) }
                 }
             }
         })
@@ -3942,9 +3982,6 @@ fn stage_archives(
             }
             ArchiveResult::Processed { code, entry } => {
                 manifest.archives.insert(code, entry);
-                stats.created += 1;
-            }
-            ArchiveResult::DryRun => {
                 stats.created += 1;
             }
             ArchiveResult::Skipped => {}
@@ -3964,7 +4001,7 @@ fn stage_archives(
 /// Materialize staged links (symlinks/hardlinks) into real file copies.
 /// Walks the given directory and replaces symlinks with real copies,
 /// and hardlinks (nlink > 1) with independent copies.
-fn materialize_links(dir: &Path, dry_run: bool) -> Result<(usize, usize)> {
+fn materialize_links(dir: &Path) -> Result<(usize, usize)> {
     use std::os::unix::fs::MetadataExt;
 
     let mut materialized = 0usize;
@@ -3981,23 +4018,15 @@ fn materialize_links(dir: &Path, dry_run: bool) -> Result<(usize, usize)> {
         if symlink_meta.file_type().is_symlink() {
             // Resolve symlink target
             let real_path = fs::canonicalize(path)?;
-            if dry_run {
-                info!("  WOULD MATERIALIZE (symlink): {} -> {}", path.display(), real_path.display());
-            } else {
-                fs::remove_file(path)?;
-                fs::copy(&real_path, path)?;
-            }
+            fs::remove_file(path)?;
+            fs::copy(&real_path, path)?;
             materialized += 1;
         } else if symlink_meta.nlink() > 1 {
             // Hardlink — copy in place via tmp
-            if dry_run {
-                info!("  WOULD MATERIALIZE (hardlink): {}", path.display());
-            } else {
-                let tmp = path.with_extension("__materialize_tmp");
-                fs::copy(path, &tmp)?;
-                fs::remove_file(path)?;
-                fs::rename(&tmp, path)?;
-            }
+            let tmp = path.with_extension("__materialize_tmp");
+            fs::copy(path, &tmp)?;
+            fs::remove_file(path)?;
+            fs::rename(&tmp, path)?;
             materialized += 1;
         } else {
             already_real += 1;

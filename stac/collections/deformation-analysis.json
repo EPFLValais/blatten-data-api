@@ -48,17 +48,14 @@
     "temporal": {
       "interval": [
         [
-          "2025-05-28T00:00:00Z",
+          "2025-05-27T00:00:00Z",
           "2025-06-30T23:59:59Z"
         ]
       ]
     }
   },
   "summaries": {
-    "processing_level": [
-      3,
-      4
-    ],
+    "processing_level": [],
     "source": [
       "Geoprevent"
     ]

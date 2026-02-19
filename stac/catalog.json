@@ -19,7 +19,7 @@
       "rel": "child",
       "href": "https://blatten-data.epfl.ch/stac/collections/3d-model",
       "type": "application/json",
-      "title": "3D-Model"
+      "title": "3D Model"
     },
     {
       "rel": "child",
@@ -31,19 +31,19 @@
       "rel": "child",
       "href": "https://blatten-data.epfl.ch/stac/collections/digital-surface-model-dsm",
       "type": "application/json",
-      "title": "Digital Surface Model DSM"
+      "title": "Digital Surface Model"
     },
     {
       "rel": "child",
       "href": "https://blatten-data.epfl.ch/stac/collections/digital-terrain-model-dtm",
       "type": "application/json",
-      "title": "Digital Terrain Model DTM"
+      "title": "Digital Terrain Model"
     },
     {
       "rel": "child",
       "href": "https://blatten-data.epfl.ch/stac/collections/gps-data",
       "type": "application/json",
-      "title": "GPS-Data"
+      "title": "GNSS Data"
     },
     {
       "rel": "child",
@@ -65,21 +65,9 @@
     },
     {
       "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/radar-coherence",
+      "href": "https://blatten-data.epfl.ch/stac/collections/radar",
       "type": "application/json",
-      "title": "Radar Coherence"
-    },
-    {
-      "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/radar-interferograms",
-      "type": "application/json",
-      "title": "Radar Interferograms"
-    },
-    {
-      "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/radar-velocity",
-      "type": "application/json",
-      "title": "Radar Velocity"
+      "title": "Radar"
     },
     {
       "rel": "child",
@@ -91,7 +79,7 @@
       "rel": "child",
       "href": "https://blatten-data.epfl.ch/stac/collections/webcam-image",
       "type": "application/json",
-      "title": "Webcam-Image"
+      "title": "Webcam Image"
     },
     {
       "rel": "describedby",

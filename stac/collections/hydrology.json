@@ -55,10 +55,7 @@
     }
   },
   "summaries": {
-    "processing_level": [
-      2,
-      3
-    ],
+    "processing_level": [],
     "source": [
       "DNAGE (Geoazimut)",
       "DNAGE (HYDRO OFEV)",

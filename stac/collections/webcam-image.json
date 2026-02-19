@@ -5,7 +5,7 @@
   "stac_extensions": [
     "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
   ],
-  "title": "Webcam-Image",
+  "title": "Webcam Image",
   "description": "",
   "license": "CC-BY-NC-SA-4.0",
   "keywords": [
@@ -14,7 +14,7 @@
     "Switzerland",
     "glacier collapse",
     "landslide",
-    "webcam-image"
+    "webcam image"
   ],
   "providers": [
     {
@@ -55,10 +55,7 @@
     }
   },
   "summaries": {
-    "processing_level": [
-      2,
-      4
-    ],
+    "processing_level": [],
     "source": [
       "DNAGE (Geoazimut)",
       "DNAGE (Guardaval)",

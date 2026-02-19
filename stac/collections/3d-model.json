@@ -5,7 +5,7 @@
   "stac_extensions": [
     "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
   ],
-  "title": "3D-Model",
+  "title": "3D Model",
   "description": "",
   "license": "CC-BY-NC-SA-4.0",
   "keywords": [
@@ -14,7 +14,7 @@
     "Switzerland",
     "glacier collapse",
     "landslide",
-    "3d-model"
+    "3d model"
   ],
   "providers": [
     {
@@ -38,10 +38,10 @@
     "spatial": {
       "bbox": [
         [
-          7.78,
-          46.38,
-          7.88,
-          46.44
+          7.756332983994717,
+          46.389532770158524,
+          7.8488034973746466,
+          46.42584749484456
         ]
       ]
     },
@@ -55,9 +55,7 @@
     }
   },
   "summaries": {
-    "processing_level": [
-      4
-    ],
+    "processing_level": [],
     "source": [
       "Terradata"
     ]

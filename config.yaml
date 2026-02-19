@@ -84,6 +84,16 @@ exclude_files:
   exact: [desktop.ini, thumbs.db, .ds_store]
   prefixes: [data_klnesthorn_sharepoint]
 
+# ─── Geometry Overrides (inherit bbox/geometry from a sibling item) ────────
+# For items without extractable CRS that share spatial extent with another item.
+geometry_overrides:
+  14La01:
+    from_item: 14Da01  # Same Helimap flight: 2025-05-23
+  14La02:
+    from_item: 14Da02  # Same Helimap flight: 2025-05-29
+  14La03:
+    from_item: 14Da03  # Same Helimap flight: 2025-06-10
+
 # ─── Sensor Locations (LV95 / EPSG:2056) ────────────────────────────────────
 # Manual coordinates for sensors without extractable geometry.
 # stac-gen converts LV95 → WGS84 automatically via GDAL.
@@ -227,7 +237,7 @@ sensors:
     name: Webcam Geoazimut Lonza
     x: 2627248
     y: 1139892
-    items: [07Aa00, 07Aa01, 07Aa02]
+    items: [07Aa00]
 
   08-webcam-lonza-guardaval:
     name: Webcam Lonza - View from SW
@@ -239,7 +249,7 @@ sensors:
     name: Webcam Blatten
     x: 2629242
     y: 1141252
-    items: [09Aa00, 09Aa01]
+    items: [09Aa00]
 
   10-gnss-weissenried:
     name: GNSS Weissenried
@@ -290,14 +300,6 @@ folder_mappings:
   07Aa00:
     folders: ["DNAGE/07Aa00_Webcam Geoazimut_Lonza"]
     pattern: "**/*.jpg"
-  07Aa01:
-    folders: ["DNAGE/07Aa00_Webcam Geoazimut_Lonza"]
-    pattern: "**/*.jpg"
-    bundle_subset: true
-  07Aa02:
-    folders: ["DNAGE/07Aa00_Webcam Geoazimut_Lonza"]
-    pattern: "**/*.jpg"
-    bundle_subset: true
   08Aa00:
     folders: ["DNAGE/08Aa01_Webcam_Lonza_1h", "DNAGE/08Aa02_Webcam_Lonza_30min"]
     pattern: "**/*.jpg"
@@ -310,10 +312,6 @@ folder_mappings:
   09Aa00:
     folders: ["DNAGE/09Aa00_Webcam_Blatten"]
     pattern: "**/*.jpg"
-  09Aa01:
-    folders: ["DNAGE/09Aa00_Webcam_Blatten"]
-    pattern: "**/*.jpg"
-    bundle_subset: true
   10Ma00:
     folders: ["DNAGE/10M_11M_GNSS"]
     file: "10Ma00 - GNSS Weissenried.csv"
