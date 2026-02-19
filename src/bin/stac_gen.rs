@@ -2334,6 +2334,12 @@ fn main() -> Result<()> {
                             if let Ok(m) = DataManifest::load(&manifest_path) {
                                 info!("    manifest  {} files, {} archives tracked",
                                     m.total_files, m.archives.len());
+                                let (new, removed, modified, unchanged) =
+                                    preview_staging_changes(&scanned_folders, &m);
+                                info!("");
+                                info!("  Changes (vs manifest):");
+                                info!("    {} new, {} removed, {} modified, {} unchanged",
+                                    new, removed, modified, unchanged);
                             }
                         }
                     } else {
@@ -2773,6 +2779,7 @@ fn main() -> Result<()> {
                 "Extracted geometry from {} files ({} cached, {} computed)",
                 file_results.len(), hits, computed
             ));
+            info!("File geometry: {} total, {} cached, {} computed", file_results.len(), hits, computed);
 
             // Group results by item code and collect cache entries
             let mut files_by_code: HashMap<String, Vec<FileInfo>> = HashMap::new();
@@ -3375,6 +3382,47 @@ struct StageAssetsStats {
     preserved: usize,
     /// All expected target paths (for stale file cleanup)
     expected_files: HashSet<PathBuf>,
+}
+
+/// Compare scanned folders against existing manifest to preview what will change.
+/// Returns (new, removed, modified, unchanged) file counts.
+fn preview_staging_changes(
+    scanned: &HashMap<String, ScannedFolder>,
+    manifest: &DataManifest,
+) -> (usize, usize, usize, usize) {
+    // Build expected: asset_path -> source file size
+    let mut expected: HashMap<String, u64> = HashMap::new();
+    for (code, folder) in scanned {
+        for source in &folder.files {
+            let rel_path = match source.strip_prefix(&folder.path) {
+                Ok(p) => p.to_path_buf(),
+                Err(_) => source.file_name()
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| source.clone()),
+            };
+            let asset_path = format!("assets/{}/{}", code, rel_path.to_string_lossy());
+            let size = fs::metadata(source).map(|m| m.len()).unwrap_or(0);
+            expected.insert(asset_path, size);
+        }
+    }
+
+    let mut new = 0usize;
+    let mut modified = 0usize;
+    let mut unchanged = 0usize;
+
+    for (asset_path, &source_size) in &expected {
+        match manifest.files.get(asset_path) {
+            None => new += 1,
+            Some(entry) if entry.size != source_size => modified += 1,
+            Some(_) => unchanged += 1,
+        }
+    }
+
+    let removed = manifest.files.keys()
+        .filter(|k| !expected.contains_key(k.as_str()))
+        .count();
+
+    (new, removed, modified, unchanged)
 }
 
 /// Stage assets from scanned FINAL_Data folders into `assets/<code>/` using the chosen link mode.
