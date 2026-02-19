@@ -1671,11 +1671,16 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str, coll
         let href = format!("{}/assets/{}/{}", s3_base_url, item.code, rel_path_from_folder);
         let mime_type = get_mime_type(&file_info.path);
 
+        let roles = if filename.starts_with("StationFactsheet_") {
+            vec!["metadata"]
+        } else {
+            vec!["data"]
+        };
         let mut asset = serde_json::json!({
             "href": href,
             "type": mime_type,
             "title": filename,
-            "roles": ["data"]
+            "roles": roles
         });
 
         // Add file size
@@ -1765,6 +1770,7 @@ fn get_mime_type(path: &Path) -> &'static str {
         "zip" => "application/zip",
         "csv" => "text/csv",
         "json" => "application/json",
+        "pdf" => "application/pdf",
         "obj" => "model/obj",
         "ply" => "application/ply",
         _ => "application/octet-stream",
@@ -2482,6 +2488,9 @@ fn main() -> Result<()> {
             #[allow(unused_assignments)]
             let mut data_manifest: Option<DataManifest> = None;
 
+            // Factsheet paths by item code — populated during factsheet injection
+            let mut factsheet_by_code: HashMap<String, PathBuf> = HashMap::new();
+
             // Stage assets if --assets-dir is set and data is provided
             if let Some(ref assets_path) = assets_dir {
                 if data.is_some() {
@@ -2563,6 +2572,7 @@ fn main() -> Result<()> {
                                                 link_or_copy(src_path, &target, link_mode_parsed)?;
                                                 injected += 1;
                                             }
+                                            factsheet_by_code.insert(item.code.clone(), target);
                                         }
                                     }
                                 }
@@ -2942,6 +2952,20 @@ fn main() -> Result<()> {
                     item.files = file_infos;
                     item.files.sort_by(|a, b| a.path.cmp(&b.path));
                 }
+
+                // Append factsheet PDF if one was injected for this item
+                if let Some(factsheet_path) = factsheet_by_code.get(&item.code) {
+                    let size = fs::metadata(factsheet_path).map(|m| m.len()).unwrap_or(0);
+                    item.files.push(FileInfo {
+                        path: factsheet_path.clone(),
+                        size,
+                        bbox: None,
+                        geometry: None,
+                        bbox_lv95: None,
+                        geometry_lv95: None,
+                        hash: None,
+                    });
+                }
             }
 
             // Step 3a-fallback: Apply sensor_locations.json to items still missing geometry
@@ -3096,7 +3120,12 @@ fn main() -> Result<()> {
                         let rel = if let Some(ref folder) = item.folder_path {
                             file_info.path.strip_prefix(folder)
                                 .map(|p| p.to_string_lossy().to_string())
-                                .unwrap_or_default()
+                                .unwrap_or_else(|_| {
+                                    // Fallback to filename (e.g., injected factsheets not under folder_path)
+                                    file_info.path.file_name()
+                                        .map(|n| n.to_string_lossy().to_string())
+                                        .unwrap_or_default()
+                                })
                         } else {
                             file_info.path.file_name()
                                 .map(|n| n.to_string_lossy().to_string())
