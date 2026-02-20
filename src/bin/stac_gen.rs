@@ -45,6 +45,8 @@ struct GenConfig {
     collection_titles: HashMap<String, String>,
     #[serde(default)]
     geometry_overrides: HashMap<String, GeometryOverride>,
+    #[serde(default)]
+    product_type_strip: HashMap<String, Vec<String>>,
 }
 
 /// Typed folder mapping entry — maps an item code to one or more data folders
@@ -633,6 +635,20 @@ struct CollectionDef {
 /// "Orthophoto" → "Orthophoto"
 fn collection_name_from_product_type(product_type: &str) -> &str {
     product_type.split(" - ").next().unwrap_or(product_type).trim()
+}
+
+/// Try to strip a prefix from product_type, normalizing hyphens to spaces for
+/// comparison. Returns the remainder (from the original string) if the
+/// normalized prefix matches the normalized start of product_type.
+/// Safe because hyphens and spaces are both single-byte ASCII.
+fn strip_prefix_normalized<'a>(product_type: &'a str, prefix: &str) -> Option<&'a str> {
+    let pt_norm = product_type.replace('-', " ");
+    let prefix_norm = prefix.replace('-', " ");
+    if pt_norm.to_lowercase().starts_with(&prefix_norm.to_lowercase()) {
+        Some(&product_type[prefix.len()..])
+    } else {
+        None
+    }
 }
 
 /// Build collection definitions from parsed items using the config collection map.
@@ -1475,7 +1491,7 @@ fn extract_datetime_from_filename(filename: &str) -> Option<String> {
 /// This creates STAC 1.1.0 compliant items with:
 /// - Item-level geometry in WGS84 (combined extent of all files)
 /// - Per-asset geometry using Projection Extension (LV95 when available)
-fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str, collection_titles: &HashMap<String, String>) -> serde_json::Value {
+fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str, collection_titles: &HashMap<String, String>, product_type_strip: &HashMap<String, Vec<String>>) -> serde_json::Value {
     let collection_id = item.collection_id.as_deref().unwrap_or("unknown");
 
     // Build datetime fields
@@ -1504,19 +1520,41 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str, coll
     //   "Orthophoto" → "" (identical, stripped entirely)
     let coll_title = collection_titles.get(collection_id).map(|s| s.as_str()).unwrap_or("");
     let subtype_str = item.product_type.as_deref().map(|pt| {
-        // Strip the collection title prefix (case-insensitive) from the product type
-        let trimmed = pt.strip_prefix(coll_title)
-            .or_else(|| {
-                // Also try stripping the collection-level name (pre-override)
-                let coll_name = collection_name_from_product_type(pt);
-                if coll_name.eq_ignore_ascii_case(coll_title) {
-                    Some(&pt[coll_name.len()..])
-                } else {
-                    None
+        // Collect candidate prefixes to strip — longest match wins.
+        // Candidates: collection title, auto-derived collection name, config overrides.
+        let mut best: Option<&str> = None;
+        let mut best_len: usize = 0;
+
+        // 1. Try the collection title (with hyphen normalization)
+        if let Some(remainder) = strip_prefix_normalized(pt, coll_title) {
+            if coll_title.len() > best_len {
+                best = Some(remainder);
+                best_len = coll_title.len();
+            }
+        }
+
+        // 2. Try the auto-derived collection name from product_type
+        let coll_name = collection_name_from_product_type(pt);
+        if let Some(remainder) = strip_prefix_normalized(pt, coll_name) {
+            if coll_name.len() > best_len {
+                best = Some(remainder);
+                best_len = coll_name.len();
+            }
+        }
+
+        // 3. Try configured product_type_strip entries for this collection
+        if let Some(strips) = product_type_strip.get(collection_id) {
+            for prefix in strips {
+                if let Some(remainder) = strip_prefix_normalized(pt, prefix) {
+                    if prefix.len() > best_len {
+                        best = Some(remainder);
+                        best_len = prefix.len();
+                    }
                 }
-            })
-            .unwrap_or(pt);
-        trimmed.trim_start_matches(" - ").trim()
+            }
+        }
+
+        best.unwrap_or(pt).trim_start_matches(" - ").trim()
     }).unwrap_or("");
     let dataset_str = item.dataset.as_deref()
         .filter(|s| !s.is_empty())
@@ -1937,7 +1975,7 @@ fn generate_catalog(
     let results: Vec<_> = items
         .par_iter()
         .map(|item| {
-            let stac_item = create_stac_item(item, base_url, s3_base_url, &coll_title_map);
+            let stac_item = create_stac_item(item, base_url, s3_base_url, &coll_title_map, &config.product_type_strip);
 
             // Count assets for stats
             let asset_count = stac_item
@@ -3191,6 +3229,31 @@ fn main() -> Result<()> {
                 }
             }
 
+            // Parent/child consistency: detect when a child has more files than its parent
+            {
+                let mut prefix_groups: HashMap<String, Vec<&ItemMetadata>> = HashMap::new();
+                for item in &items {
+                    if item.code.len() >= 6 {
+                        let prefix = &item.code[..4];
+                        prefix_groups.entry(prefix.to_string()).or_default().push(item);
+                    }
+                }
+                for (_prefix, group) in &prefix_groups {
+                    let parent = group.iter().find(|i| i.code.ends_with("00"));
+                    if let Some(parent) = parent {
+                        for child in group.iter().filter(|i| !i.code.ends_with("00")) {
+                            if child.file_count > parent.file_count && parent.file_count > 0 {
+                                let msg = format!(
+                                    "Child {} has {} files but parent {} has only {} — possible data contamination",
+                                    child.code, child.file_count, parent.code, parent.file_count
+                                );
+                                item_issues.entry(child.code.clone()).or_default().push(msg);
+                            }
+                        }
+                    }
+                }
+            }
+
             // Add validation issues from generate_catalog (skip ones we already track)
             for issue in &issues {
                 // Skip issues we already track in the quality report above
@@ -4246,6 +4309,20 @@ fn scan_folder_with_nested(
             if let Some(nested_code) = extract_nested_code(&dir_name) {
                 // Only create new entry if it's different from parent
                 if nested_code != parent_code {
+                    // Warn if nested code's group prefix doesn't match parent's
+                    // (e.g., "04Aa01" inside "04Ab00" → naming bug in source data)
+                    if parent_code.len() >= 4 && nested_code.len() >= 4 {
+                        let parent_prefix = &parent_code[..4];
+                        let nested_prefix = &nested_code[..4];
+                        if nested_prefix != parent_prefix {
+                            warn!(
+                                "Naming collision: folder {:?} inside parent {} has code prefix '{}' \
+                                 (expected '{}'). This likely means the folder was misnamed by the provider.",
+                                dir_name, parent_code, nested_prefix, parent_prefix
+                            );
+                        }
+                    }
+
                     // Track as nested code in parent
                     if let Some(parent) = results.get_mut(parent_code) {
                         if !parent.nested_codes.contains(&nested_code) {

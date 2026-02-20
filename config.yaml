@@ -73,6 +73,14 @@ collection_titles:
   digital-terrain-model-dtm: Digital Terrain Model
   radar: Radar
 
+# ─── Product Type Strip (extra prefixes to remove from item titles) ───────────
+# For collections where hyphen normalization alone isn't enough.
+# Entries are tried alongside the collection title; longest match wins.
+product_type_strip:
+  gps-data: ["GPS-Data"]
+  digital-surface-model-dsm: ["Digital Surface Model DSM"]
+  digital-terrain-model-dtm: ["Digital Terrain Model DTM"]
+
 # ─── CRS Overrides (files with broken spatial reference) ─────────────────────
 crs_overrides:
   - filename: DTM_250711_GRID_20cm_LV95_NF02.tif
