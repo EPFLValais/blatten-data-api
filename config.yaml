@@ -109,14 +109,18 @@ geometry_overrides:
 sensors:
   01-sensalpin-camera:
     name: Sensalpin Camera
-    x: 2631439.74
-    y: 1139397.49
+    # Coordinates match StationFactsheet_01_SensalpinCamera.pdf
+    x: 2631425
+    y: 1139390
+    elevation_m: 3150
     items: [01Aa00, 01Aa01, 01Aa02, 01Aa03, 01Ab00, 01Ab01, 01Ab02, 01Ab03, 01Ab04]
 
   02-flexcam-birchbach:
     name: FlexCam Birchgletscher
+    # Coordinates match StationFactsheet_02_FlexCamBirchgletscher.pdf
     x: 2627304.17
     y: 1141251.56
+    elevation_m: 2102
     items:
       - 02Aa00
       - 02Aa01
@@ -171,8 +175,10 @@ sensors:
 
   04-defox-birchgletscher:
     name: DEFOX Birchgletscher
-    x: 2630836.94
-    y: 1139416.70
+    # Coordinates match StationFactsheet_04_DEFOXBirchgletscher.pdf
+    x: 2630838
+    y: 1139383
+    elevation_m: 2700
     items:
       - 04Aa00
       - 04Aa01
@@ -198,8 +204,10 @@ sensors:
 
   06-radar-kleines-nesthorn:
     name: Interferometric Radar Kleines Nesthorn
+    # Coordinates match StationFactsheet_06_InterferometricRadarKleinesNesthorn.pdf
     x: 2628710.88
     y: 1141348.70
+    elevation_m: 1795
     items:
       - 06Aa00
       - 06Aa01
@@ -243,62 +251,82 @@ sensors:
 
   07-webcam-geoazimut-lonza:
     name: Webcam Geoazimut Lonza
-    x: 2627248
-    y: 1139892
+    # Coordinates match StationFactsheet_07_WebcamGeoazimutLonza_A50039.pdf
+    x: 2627252
+    y: 1139893
+    elevation_m: 1531
     items: [07Aa00]
 
   08-webcam-lonza-guardaval:
     name: Webcam Lonza - View from SW
+    # Coordinates match StationFactsheet_08_WebcamLonzaSW_A50039.pdf
     x: 2628771
     y: 1139605
+    elevation_m: 1859
     items: [08Aa00, 08Aa01, 08Aa02]
 
   09-webcam-blatten:
     name: Webcam Blatten
+    # Coordinates match StationFactsheet_09_WebcamBlatten_A50039.pdf
     x: 2629242
     y: 1141252
+    elevation_m: 1595
     items: [09Aa00]
 
   10-gnss-weissenried:
     name: GNSS Weissenried
+    # Coordinates match StationFactsheet_10_GNSS_Weissenried_A50039.pdf
     x: 2628228
     y: 1140803
+    elevation_m: 1707
     items: [10Ma00]
 
   11-gnss-nesthorn:
     name: GNSS Nesthorn
+    # Coordinates match StationFactsheet_11_GNSS_Nesthorn_A50039.pdf
     x: 2630901
     y: 1138465
+    elevation_m: 3322
     items: [11Ma00, 11Mb00, 11Mc00, 11Md00, 11Me00, 11Mf00, 11Mg00, 11Mh00]
 
   17-lake-level-geoazimut:
     name: Lake Level - Geoazimut
-    x: 2629394
-    y: 1141176
+    # Coordinates match StationFactsheet_17_LakeLevel_Geoazimut_A50039.pdf
+    x: 2629433
+    y: 1141135
+    elevation_m: 1543
     items: [17Pa00, 17Pb00]
 
   18-river-discharge-upstream:
     name: Lonza River Discharge - Upstream
+    # Coordinates match StationFactsheet_18_LonzaRiverDischarge_upstream_A50039.pdf
     x: 2630786
     y: 1141861
+    elevation_m: 1604
     items: [18Oa01, 18Oa02, 18Ob01, 18Ob02, 18Ob03]
 
   19-river-discharge-blatten:
     name: Lonza River Discharge - Blatten
+    # Coordinates match StationFactsheet_19_LonzaRiverDischarge_Blatten_A50039.pdf
     x: 2629128
     y: 1140919
+    elevation_m: 1523
     items: [19Oa00, 19Ob00]
 
   20-river-discharge-kippel:
     name: Lonza River Discharge - Kippel
+    # Coordinates match StationFactsheet_20_LonzaRiverDischarge_Kippel_A50039.pdf
     x: 2625879
     y: 1138662
+    elevation_m: 1344
     items: [20Oa00, 20Ob01, 20Ob02, 20Ob03]
 
   21-river-discharge-gampel:
     name: Lonza River Discharge - Gampel
+    # Coordinates match StationFactsheet_21_LonzaRiverDischarge_Gampel_A50039.pdf
     x: 2623606
     y: 1128859
+    elevation_m: 635
     items: [21Oa00, 21Ob00, 21Oc00]
 
 # ─── Folder Mappings (non-standard folder → item code) ──────────────────────

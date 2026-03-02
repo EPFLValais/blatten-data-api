@@ -1330,14 +1330,14 @@ fn parse_csv(path: &Path, collection_map: &HashMap<String, String>) -> Result<Ve
             description: csv_field(record.get(9).unwrap_or("")),
             format: csv_field(record.get(10).unwrap_or("")),
             technical_info: csv_field(record.get(11).unwrap_or("")),
-            processing_level: None,  // Not in CSV
-            phase: csv_field(record.get(12).unwrap_or("")),
-            date_first: record.get(13).and_then(parse_european_date),
-            date_last: record.get(14).and_then(parse_european_date),
+            processing_level: record.get(12).and_then(|s| s.trim().parse::<i32>().ok()),
+            phase: csv_field(record.get(13).unwrap_or("")),
+            date_first: record.get(14).and_then(parse_european_date),
+            date_last: record.get(15).and_then(parse_european_date),
             continued: false,  // Not in CSV
-            frequency: csv_field(record.get(15).unwrap_or("")),
+            frequency: csv_field(record.get(16).unwrap_or("")),
             location: None,
-            source: csv_field(record.get(16).unwrap_or("")),
+            source: csv_field(record.get(17).unwrap_or("")),
             additional_remarks: None,
             storage_mb: None,
             internal_commentary: None,  // Not in CSV

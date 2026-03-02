@@ -55,7 +55,9 @@
     }
   },
   "summaries": {
-    "processing_level": [],
+    "processing_level": [
+      2
+    ],
     "source": [
       "Terradata"
     ]

@@ -55,7 +55,11 @@
     }
   },
   "summaries": {
-    "processing_level": [],
+    "processing_level": [
+      2,
+      3,
+      4
+    ],
     "source": [
       "Geoprevent"
     ]

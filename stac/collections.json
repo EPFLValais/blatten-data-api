@@ -57,7 +57,9 @@
         }
       },
       "summaries": {
-        "processing_level": [],
+        "processing_level": [
+          4
+        ],
         "source": [
           "Terradata"
         ]
@@ -126,10 +128,10 @@
         "spatial": {
           "bbox": [
             [
-              7.838645748296098,
-              46.404401649518064,
-              7.840645748296098,
-              46.40640164951806
+              7.838657295957665,
+              46.40409845220055,
+              7.840657295957666,
+              46.406098452200546
             ]
           ]
         },
@@ -143,7 +145,10 @@
         }
       },
       "summaries": {
-        "processing_level": [],
+        "processing_level": [
+          3,
+          4
+        ],
         "source": [
           "Geoprevent"
         ]
@@ -229,7 +234,9 @@
         }
       },
       "summaries": {
-        "processing_level": [],
+        "processing_level": [
+          3
+        ],
         "source": [
           "Terradata"
         ]
@@ -315,7 +322,9 @@
         }
       },
       "summaries": {
-        "processing_level": [],
+        "processing_level": [
+          4
+        ],
         "source": [
           "Terradata"
         ]
@@ -401,7 +410,9 @@
         }
       },
       "summaries": {
-        "processing_level": [],
+        "processing_level": [
+          1
+        ],
         "source": [
           "DNAGE (Glaciorisk)"
         ]
@@ -487,7 +498,10 @@
         }
       },
       "summaries": {
-        "processing_level": [],
+        "processing_level": [
+          2,
+          3
+        ],
         "source": [
           "DNAGE (Geoazimut)",
           "DNAGE (HYDRO OFEV)",
@@ -575,7 +589,9 @@
         }
       },
       "summaries": {
-        "processing_level": [],
+        "processing_level": [
+          3
+        ],
         "source": [
           "Terradata"
         ]
@@ -661,7 +677,9 @@
         }
       },
       "summaries": {
-        "processing_level": [],
+        "processing_level": [
+          3
+        ],
         "source": [
           "Terradata"
         ]
@@ -747,7 +765,11 @@
         }
       },
       "summaries": {
-        "processing_level": [],
+        "processing_level": [
+          2,
+          3,
+          4
+        ],
         "source": [
           "Geoprevent"
         ]
@@ -833,7 +855,9 @@
         }
       },
       "summaries": {
-        "processing_level": [],
+        "processing_level": [
+          2
+        ],
         "source": [
           "Terradata"
         ]
@@ -902,9 +926,9 @@
         "spatial": {
           "bbox": [
             [
-              7.792003677760034,
+              7.7920557559258645,
               46.399851221486394,
-              7.848483125190064,
+              7.8482909437061155,
               46.42387522434866
             ]
           ]
@@ -919,7 +943,10 @@
         }
       },
       "summaries": {
-        "processing_level": [],
+        "processing_level": [
+          2,
+          4
+        ],
         "source": [
           "DNAGE (Geoazimut)",
           "DNAGE (Guardaval)",
