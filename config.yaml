@@ -2,21 +2,22 @@
 
 # ─── Root Catalog Metadata ───────────────────────────────────────────────────
 catalog:
-  id: birch-glacier-collapse
-  title: "Birch Glacier Collapse and Landslide Dataset"
+  id: nesthorn-birchgletscher-process-cascade
+  title: "Nesthorn – Birchgletscher Process Cascade"
   description: >-
-    Dataset collected during the 2025 Birch glacier collapse and landslide at
+    Data collected during the Nesthorn – Birchgletscher process cascade at
     Blatten, CH-VS. Licensed under Attribution-NonCommercial-ShareAlike 4.0
     International (CC BY-NC-SA 4.0). By using this API you confirm that you
     have read the Dataset Overview and Detailed Report. This data is provided
     "as is" without warranty of any kind, express or implied.
   license: CC-BY-NC-SA-4.0
   keywords:
-    - Birch Glacier
+    - Nesthorn
+    - Birchgletscher
     - Blatten
     - Switzerland
-    - glacier collapse
-    - landslide
+    - process cascade
+    - glacier
   default_bbox: [7.78, 46.38, 7.88, 46.44]
   providers:
     - name: Canton du Valais

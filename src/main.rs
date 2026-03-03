@@ -972,10 +972,10 @@ async fn shutdown_signal() {
 async fn landing_page(State(state): State<AppState>) -> impl IntoResponse {
     let landing = serde_json::json!({
         "type": "Catalog",
-        "id": "birch-glacier-collapse",
+        "id": "nesthorn-birchgletscher-process-cascade",
         "stac_version": STAC_VERSION,
-        "title": "Birch Glacier Collapse and Landslide Dataset",
-        "description": "STAC API for the dataset collected during the 2025 Birch glacier collapse and landslide at Blatten, CH-VS. Licensed under Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0). By using this API you confirm that you have read the Dataset Overview and Detailed Report. This data is provided \"as is\" without warranty of any kind, express or implied.",
+        "title": "Nesthorn – Birchgletscher Process Cascade",
+        "description": "STAC API for the data collected during the Nesthorn – Birchgletscher process cascade at Blatten, CH-VS. Licensed under Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0). By using this API you confirm that you have read the Dataset Overview and Detailed Report. This data is provided \"as is\" without warranty of any kind, express or implied.",
         "conformsTo": CONFORMANCE_CLASSES,
         "links": [
             {
