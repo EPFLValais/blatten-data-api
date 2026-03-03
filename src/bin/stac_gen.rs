@@ -361,6 +361,12 @@ struct FileInfo {
     /// SHA-256 hash (hex, no multihash prefix) — populated from manifest
     #[serde(default)]
     hash: Option<String>,
+    /// Minimum elevation in meters (from LAZ/LAS Z bounds)
+    #[serde(default)]
+    z_min: Option<f64>,
+    /// Maximum elevation in meters (from LAZ/LAS Z bounds)
+    #[serde(default)]
+    z_max: Option<f64>,
 }
 
 /// Scanned folder information
@@ -542,6 +548,10 @@ struct CachedFileGeometry {
     geometry: Option<serde_json::Value>,
     bbox_lv95: Option<Vec<f64>>,
     geometry_lv95: Option<serde_json::Value>,
+    #[serde(default)]
+    z_min: Option<f64>,
+    #[serde(default)]
+    z_max: Option<f64>,
 }
 
 /// Geometry cache for incremental runs — avoids re-running GDAL on unchanged files
@@ -800,6 +810,10 @@ struct ExtractedGeometry {
     bbox_lv95: Option<Vec<f64>>,
     /// LV95 geometry as GeoJSON for Projection Extension
     geometry_lv95: Option<serde_json::Value>,
+    /// Minimum elevation in meters (from LAZ/LAS Z bounds or sensor config)
+    z_min: Option<f64>,
+    /// Maximum elevation in meters (from LAZ/LAS Z bounds or sensor config)
+    z_max: Option<f64>,
 }
 
 /// Transform coordinates from a source EPSG to WGS84 using GDAL
@@ -929,6 +943,8 @@ fn extract_geotiff_geometry(path: &Path, crs_overrides: &[CrsOverride]) -> (Opti
                             source,
                             bbox_lv95,
                             geometry_lv95,
+                            z_min: None,
+                            z_max: None,
                         }),
                         Some(ovr.reason.to_string()),
                     );
@@ -1059,6 +1075,8 @@ fn extract_geotiff_geometry(path: &Path, crs_overrides: &[CrsOverride]) -> (Opti
         source,
         bbox_lv95,
         geometry_lv95,
+        z_min: None,
+        z_max: None,
     }), None)
 }
 
@@ -1075,6 +1093,8 @@ fn extract_las_geometry(path: &Path) -> Option<ExtractedGeometry> {
     let miny = bounds.min.y;
     let maxx = bounds.max.x;
     let maxy = bounds.max.y;
+    let minz = bounds.min.z;
+    let maxz = bounds.max.z;
 
     // Try to get CRS from VLRs
     let crs_string = header.vlrs().iter().find_map(|vlr| {
@@ -1115,18 +1135,36 @@ fn extract_las_geometry(path: &Path) -> Option<ExtractedGeometry> {
         (None, None)
     };
 
+    // Sanity-check Z bounds (Swiss elevations: ~193m to ~4634m; use generous range)
+    let (z_min_val, z_max_val) = if minz > -100.0 && maxz < 10_000.0 && minz <= maxz {
+        (Some(minz), Some(maxz))
+    } else {
+        (None, None)
+    };
+
     Some(ExtractedGeometry {
         bbox: bbox_wgs84,
         geometry: geometry_wgs84,
         source: format!("LAZ/LAS: {} (EPSG:{})", path.file_name()?.to_string_lossy(), epsg),
         bbox_lv95,
         geometry_lv95,
+        z_min: z_min_val,
+        z_max: z_max_val,
     })
 }
 
-/// Convert bbox to GeoJSON Polygon
+/// Extract the 2D horizontal bounds (west, south, east, north) from either
+/// a 4-element [w,s,e,n] or 6-element [w,s,min_elev,e,n,max_elev] bbox.
+fn bbox_horizontal(bbox: &[f64]) -> (f64, f64, f64, f64) {
+    match bbox.len() {
+        6 => (bbox[0], bbox[1], bbox[3], bbox[4]),
+        _ => (bbox[0], bbox[1], bbox[2], bbox[3]),
+    }
+}
+
+/// Convert bbox to GeoJSON Polygon (always 2D; handles both 4 and 6-element bboxes)
 fn bbox_to_polygon(bbox: &[f64]) -> serde_json::Value {
-    let (west, south, east, north) = (bbox[0], bbox[1], bbox[2], bbox[3]);
+    let (west, south, east, north) = bbox_horizontal(bbox);
     serde_json::json!({
         "type": "Polygon",
         "coordinates": [[
@@ -1142,10 +1180,10 @@ fn bbox_to_polygon(bbox: &[f64]) -> serde_json::Value {
 /// Validate that bbox coordinates are in valid WGS84 range for Switzerland area
 /// Returns true if coordinates look reasonable (roughly Europe/Switzerland)
 fn is_valid_wgs84_bbox(bbox: &[f64]) -> bool {
-    if bbox.len() != 4 {
+    if bbox.len() != 4 && bbox.len() != 6 {
         return false;
     }
-    let (west, south, east, north) = (bbox[0], bbox[1], bbox[2], bbox[3]);
+    let (west, south, east, north) = bbox_horizontal(bbox);
 
     // Check valid WGS84 ranges
     let valid_lon = west >= -180.0 && west <= 180.0 && east >= -180.0 && east <= 180.0;
@@ -1172,7 +1210,11 @@ fn looks_like_lv95(minx: f64, miny: f64, maxx: f64, maxy: f64) -> bool {
 /// Create a point geometry with a small buffer for bbox
 fn point_to_geometry(lon: f64, lat: f64, elevation: Option<f64>) -> (Vec<f64>, serde_json::Value) {
     let buffer = 0.001; // ~100m buffer
-    let bbox = vec![lon - buffer, lat - buffer, lon + buffer, lat + buffer];
+    let bbox = if let Some(elev) = elevation {
+        vec![lon - buffer, lat - buffer, elev, lon + buffer, lat + buffer, elev]
+    } else {
+        vec![lon - buffer, lat - buffer, lon + buffer, lat + buffer]
+    };
     let coords: serde_json::Value = if let Some(elev) = elevation {
         serde_json::json!([lon, lat, elev])
     } else {
@@ -1948,11 +1990,12 @@ fn create_stac_collection(
     // Compute spatial extent using config default_bbox as fallback
     let bboxes: Vec<&Vec<f64>> = items.iter().filter_map(|i| i.bbox.as_ref()).collect();
     let spatial_bbox: serde_json::Value = if !bboxes.is_empty() {
+        let horiz: Vec<_> = bboxes.iter().map(|b| bbox_horizontal(b)).collect();
         serde_json::json!([[
-            bboxes.iter().map(|b| b[0]).fold(f64::INFINITY, f64::min),
-            bboxes.iter().map(|b| b[1]).fold(f64::INFINITY, f64::min),
-            bboxes.iter().map(|b| b[2]).fold(f64::NEG_INFINITY, f64::max),
-            bboxes.iter().map(|b| b[3]).fold(f64::NEG_INFINITY, f64::max),
+            horiz.iter().map(|h| h.0).fold(f64::INFINITY, f64::min),
+            horiz.iter().map(|h| h.1).fold(f64::INFINITY, f64::min),
+            horiz.iter().map(|h| h.2).fold(f64::NEG_INFINITY, f64::max),
+            horiz.iter().map(|h| h.3).fold(f64::NEG_INFINITY, f64::max),
         ]])
     } else {
         serde_json::json!([catalog_config.default_bbox])
@@ -3031,24 +3074,24 @@ fn main() -> Result<()> {
                     let cache_key = file_path.to_string_lossy().to_string();
 
                     // Check geometry cache: hit if file size unchanged
-                    let (bbox, geometry, bbox_lv95, geometry_lv95) = if let Some(cached) =
+                    let (bbox, geometry, bbox_lv95, geometry_lv95, z_min, z_max) = if let Some(cached) =
                         cache_ref.and_then(|c| c.get(&cache_key)).filter(|c| c.size == size)
                     {
                         cache_hits.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                        (cached.bbox.clone(), cached.geometry.clone(), cached.bbox_lv95.clone(), cached.geometry_lv95.clone())
+                        (cached.bbox.clone(), cached.geometry.clone(), cached.bbox_lv95.clone(), cached.geometry_lv95.clone(), cached.z_min, cached.z_max)
                     } else {
                         let ext = file_path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
                         // Extract geometry for geospatial files (both WGS84 and LV95)
                         if ext == "tif" || ext == "tiff" || ext == "asc" {
                             let (geo, _override_reason) = extract_geotiff_geometry(file_path, &config.crs_overrides);
-                            geo.map(|g| (Some(g.bbox), Some(g.geometry), g.bbox_lv95, g.geometry_lv95))
-                                .unwrap_or((None, None, None, None))
+                            geo.map(|g| (Some(g.bbox), Some(g.geometry), g.bbox_lv95, g.geometry_lv95, g.z_min, g.z_max))
+                                .unwrap_or((None, None, None, None, None, None))
                         } else if ext == "laz" || ext == "las" {
                             extract_las_geometry(file_path)
-                                .map(|g| (Some(g.bbox), Some(g.geometry), g.bbox_lv95, g.geometry_lv95))
-                                .unwrap_or((None, None, None, None))
+                                .map(|g| (Some(g.bbox), Some(g.geometry), g.bbox_lv95, g.geometry_lv95, g.z_min, g.z_max))
+                                .unwrap_or((None, None, None, None, None, None))
                         } else {
-                            (None, None, None, None)
+                            (None, None, None, None, None, None)
                         }
                     };
 
@@ -3064,6 +3107,8 @@ fn main() -> Result<()> {
                         geometry: geometry.clone(),
                         bbox_lv95: bbox_lv95.clone(),
                         geometry_lv95: geometry_lv95.clone(),
+                        z_min,
+                        z_max,
                     };
 
                     (code.clone(), FileInfo {
@@ -3074,6 +3119,8 @@ fn main() -> Result<()> {
                         bbox_lv95,
                         geometry_lv95,
                         hash: None,
+                        z_min,
+                        z_max,
                     }, (cache_key, cached_entry))
                 })
                 .collect();
@@ -3124,14 +3171,24 @@ fn main() -> Result<()> {
 
                     // Compute combined dataset bbox from all file bboxes
                     if !file_bboxes.is_empty() {
-                        let combined_bbox = vec![
-                            file_bboxes.iter().map(|b| b[0]).fold(f64::INFINITY, f64::min),
-                            file_bboxes.iter().map(|b| b[1]).fold(f64::INFINITY, f64::min),
-                            file_bboxes.iter().map(|b| b[2]).fold(f64::NEG_INFINITY, f64::max),
-                            file_bboxes.iter().map(|b| b[3]).fold(f64::NEG_INFINITY, f64::max),
+                        let combined_2d = vec![
+                            file_bboxes.iter().map(|b| bbox_horizontal(b).0).fold(f64::INFINITY, f64::min),
+                            file_bboxes.iter().map(|b| bbox_horizontal(b).1).fold(f64::INFINITY, f64::min),
+                            file_bboxes.iter().map(|b| bbox_horizontal(b).2).fold(f64::NEG_INFINITY, f64::max),
+                            file_bboxes.iter().map(|b| bbox_horizontal(b).3).fold(f64::NEG_INFINITY, f64::max),
                         ];
-                        item.geometry = Some(bbox_to_polygon(&combined_bbox));
-                        item.bbox = Some(combined_bbox);
+                        item.geometry = Some(bbox_to_polygon(&combined_2d));
+
+                        // Aggregate Z bounds across files for 3D bbox
+                        let z_mins: Vec<f64> = file_infos.iter().filter_map(|f| f.z_min).collect();
+                        let z_maxs: Vec<f64> = file_infos.iter().filter_map(|f| f.z_max).collect();
+                        if !z_mins.is_empty() {
+                            let z_min = z_mins.iter().cloned().fold(f64::INFINITY, f64::min);
+                            let z_max = z_maxs.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+                            item.bbox = Some(vec![combined_2d[0], combined_2d[1], z_min, combined_2d[2], combined_2d[3], z_max]);
+                        } else {
+                            item.bbox = Some(combined_2d);
+                        }
                     }
 
                     item.files = file_infos;
@@ -3149,6 +3206,8 @@ fn main() -> Result<()> {
                         bbox_lv95: None,
                         geometry_lv95: None,
                         hash: None,
+                        z_min: None,
+                        z_max: None,
                     });
                 }
             }
@@ -4596,9 +4655,14 @@ fn extract_geometry_for_item_v2(
                     }
                 } else if ext == "laz" || ext == "las" {
                     if let Some(geo) = extract_las_geometry(file) {
+                        let item_bbox = if let (Some(z_min), Some(z_max)) = (geo.z_min, geo.z_max) {
+                            vec![geo.bbox[0], geo.bbox[1], z_min, geo.bbox[2], geo.bbox[3], z_max]
+                        } else {
+                            geo.bbox
+                        };
                         return ExtractionResult::Extracted {
                             source: format!("LAZ/LAS: {}", file.file_name().unwrap_or_default().to_string_lossy()),
-                            bbox: geo.bbox,
+                            bbox: item_bbox,
                             geometry: geo.geometry,
                             override_reason: None,
                         };
