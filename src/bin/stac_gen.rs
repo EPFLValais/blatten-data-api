@@ -1794,9 +1794,7 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str, coll
         }
 
         // Flag ZIP64 archives for UI warning
-        if item.archive_is_zip64 {
-            asset["blatten:zip64"] = serde_json::json!(true);
-        }
+        asset["blatten:zip64"] = serde_json::json!(item.archive_is_zip64);
 
         assets.insert("archive".to_string(), asset);
     }
