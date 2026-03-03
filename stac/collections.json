@@ -11,11 +11,12 @@
       "description": "",
       "license": "CC-BY-NC-SA-4.0",
       "keywords": [
-        "Birch Glacier",
+        "Nesthorn",
+        "Birchgletscher",
         "Blatten",
         "Switzerland",
-        "glacier collapse",
-        "landslide",
+        "process cascade",
+        "glacier",
         "3d model"
       ],
       "providers": [
@@ -99,11 +100,12 @@
       "description": "",
       "license": "CC-BY-NC-SA-4.0",
       "keywords": [
-        "Birch Glacier",
+        "Nesthorn",
+        "Birchgletscher",
         "Blatten",
         "Switzerland",
-        "glacier collapse",
-        "landslide",
+        "process cascade",
+        "glacier",
         "deformation analysis"
       ],
       "providers": [
@@ -188,11 +190,12 @@
       "description": "",
       "license": "CC-BY-NC-SA-4.0",
       "keywords": [
-        "Birch Glacier",
+        "Nesthorn",
+        "Birchgletscher",
         "Blatten",
         "Switzerland",
-        "glacier collapse",
-        "landslide",
+        "process cascade",
+        "glacier",
         "digital surface model"
       ],
       "providers": [
@@ -276,11 +279,12 @@
       "description": "",
       "license": "CC-BY-NC-SA-4.0",
       "keywords": [
-        "Birch Glacier",
+        "Nesthorn",
+        "Birchgletscher",
         "Blatten",
         "Switzerland",
-        "glacier collapse",
-        "landslide",
+        "process cascade",
+        "glacier",
         "digital terrain model"
       ],
       "providers": [
@@ -364,11 +368,12 @@
       "description": "",
       "license": "CC-BY-NC-SA-4.0",
       "keywords": [
-        "Birch Glacier",
+        "Nesthorn",
+        "Birchgletscher",
         "Blatten",
         "Switzerland",
-        "glacier collapse",
-        "landslide",
+        "process cascade",
+        "glacier",
         "gnss data"
       ],
       "providers": [
@@ -452,11 +457,12 @@
       "description": "",
       "license": "CC-BY-NC-SA-4.0",
       "keywords": [
-        "Birch Glacier",
+        "Nesthorn",
+        "Birchgletscher",
         "Blatten",
         "Switzerland",
-        "glacier collapse",
-        "landslide",
+        "process cascade",
+        "glacier",
         "hydrology"
       ],
       "providers": [
@@ -543,11 +549,12 @@
       "description": "",
       "license": "CC-BY-NC-SA-4.0",
       "keywords": [
-        "Birch Glacier",
+        "Nesthorn",
+        "Birchgletscher",
         "Blatten",
         "Switzerland",
-        "glacier collapse",
-        "landslide",
+        "process cascade",
+        "glacier",
         "orthophoto"
       ],
       "providers": [
@@ -631,11 +638,12 @@
       "description": "",
       "license": "CC-BY-NC-SA-4.0",
       "keywords": [
-        "Birch Glacier",
+        "Nesthorn",
+        "Birchgletscher",
         "Blatten",
         "Switzerland",
-        "glacier collapse",
-        "landslide",
+        "process cascade",
+        "glacier",
         "point cloud"
       ],
       "providers": [
@@ -719,11 +727,12 @@
       "description": "",
       "license": "CC-BY-NC-SA-4.0",
       "keywords": [
-        "Birch Glacier",
+        "Nesthorn",
+        "Birchgletscher",
         "Blatten",
         "Switzerland",
-        "glacier collapse",
-        "landslide",
+        "process cascade",
+        "glacier",
         "radar"
       ],
       "providers": [
@@ -809,11 +818,12 @@
       "description": "",
       "license": "CC-BY-NC-SA-4.0",
       "keywords": [
-        "Birch Glacier",
+        "Nesthorn",
+        "Birchgletscher",
         "Blatten",
         "Switzerland",
-        "glacier collapse",
-        "landslide",
+        "process cascade",
+        "glacier",
         "thermal image"
       ],
       "providers": [
@@ -897,11 +907,12 @@
       "description": "",
       "license": "CC-BY-NC-SA-4.0",
       "keywords": [
-        "Birch Glacier",
+        "Nesthorn",
+        "Birchgletscher",
         "Blatten",
         "Switzerland",
-        "glacier collapse",
-        "landslide",
+        "process cascade",
+        "glacier",
         "webcam image"
       ],
       "providers": [
