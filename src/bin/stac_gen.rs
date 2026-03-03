@@ -8,6 +8,7 @@
 //!     stac-gen validate --catalog-dir stac/
 
 use anyhow::{Context, Result};
+use calamine::{open_workbook, Reader, Xlsx};
 use csv::ReaderBuilder;
 use chrono::{NaiveDate, Utc};
 use clap::Parser;
@@ -231,7 +232,7 @@ ENVIRONMENT:
 struct Cli {
     /// Input metadata file (CSV, semicolon-delimited). If not specified,
     /// auto-discovers a single .csv file in the current directory.
-    #[arg(short = 'i', long, alias = "xlsx", short_alias = 'x')]
+    #[arg(short = 'i', long)]
     input: Option<PathBuf>,
 
     /// Output directory for STAC files
@@ -1271,11 +1272,13 @@ fn csv_field(s: &str) -> Option<String> {
 /// Parse the semicolon-delimited CSV metadata file (17 columns).
 ///
 /// Column layout (0-indexed):
-///  0: Code, 1: Product ID, 2: Sensor ID, 3: Dataset ID, 4: Bundle ID,
-///  5: Sensor, 6: ProductType, 7: Dataset, 8: Bundle, 9: Description,
-/// 10: Format, 11: Additional information, 12: Phase,
-/// 13: Date first (provided), 14: Date last (provided), 15: Frequency,
-/// 16: Source / Operator
+///   0: Code, 1: Product ID, 2: Sensor ID, 3: Dataset ID, 4: Bundle ID,
+///   5: Sensor, 6: ProductType, 7: Dataset, 8: Bundle, 9: Description,
+///  10: Format, 11: Additional information, 12: Phase,
+///  13: Date first (provided), 14: Date last (provided), 15: Frequency,
+///  16: Source / Operator
+///
+/// Note: Processing levels are read separately from the XLSX file (not in CSV).
 fn parse_csv(path: &Path, collection_map: &HashMap<String, String>) -> Result<Vec<ItemMetadata>> {
     // Read raw bytes and convert to UTF-8 (handles Latin-1/ISO-8859-1 encoded files)
     let raw = fs::read(path)
@@ -1330,14 +1333,14 @@ fn parse_csv(path: &Path, collection_map: &HashMap<String, String>) -> Result<Ve
             description: csv_field(record.get(9).unwrap_or("")),
             format: csv_field(record.get(10).unwrap_or("")),
             technical_info: csv_field(record.get(11).unwrap_or("")),
-            processing_level: record.get(12).and_then(|s| s.trim().parse::<i32>().ok()),
-            phase: csv_field(record.get(13).unwrap_or("")),
-            date_first: record.get(14).and_then(parse_european_date),
-            date_last: record.get(15).and_then(parse_european_date),
+            processing_level: None,  // Populated from XLSX if available
+            phase: csv_field(record.get(12).unwrap_or("")),
+            date_first: record.get(13).and_then(parse_european_date),
+            date_last: record.get(14).and_then(parse_european_date),
             continued: false,  // Not in CSV
-            frequency: csv_field(record.get(16).unwrap_or("")),
+            frequency: csv_field(record.get(15).unwrap_or("")),
             location: None,
-            source: csv_field(record.get(17).unwrap_or("")),
+            source: csv_field(record.get(16).unwrap_or("")),
             additional_remarks: None,
             storage_mb: None,
             internal_commentary: None,  // Not in CSV
@@ -1367,6 +1370,128 @@ fn parse_csv(path: &Path, collection_map: &HashMap<String, String>) -> Result<Ve
     }
 
     Ok(items)
+}
+
+// =============================================================================
+// XLSX Processing Level Reading
+// =============================================================================
+
+/// Find an XLSX file in the same directory as the input CSV.
+/// Resolves symlinks so that if the CSV is a symlink, we look alongside
+/// the real file (e.g., /blatten-data/ instead of the working directory).
+/// Returns Some(path) if exactly one .xlsx file is found, None otherwise.
+fn find_xlsx_near_input(csv_path: &Path) -> Option<PathBuf> {
+    // Resolve symlinks to find the real directory containing the CSV
+    let resolved = fs::canonicalize(csv_path).ok()?;
+    let dir = resolved.parent()?;
+
+    let xlsx_files: Vec<PathBuf> = fs::read_dir(dir)
+        .ok()?
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| {
+            p.extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e.eq_ignore_ascii_case("xlsx"))
+                .unwrap_or(false)
+        })
+        .collect();
+
+    if xlsx_files.len() == 1 {
+        Some(xlsx_files[0].clone())
+    } else {
+        if xlsx_files.len() > 1 {
+            debug!(
+                "Found {} .xlsx files in {}, skipping auto-discovery: {:?}",
+                xlsx_files.len(),
+                dir.display(),
+                xlsx_files
+            );
+        }
+        None
+    }
+}
+
+/// Read Processing-Level values from an XLSX file's "Data" (or "Test_Data") sheet.
+/// Returns a HashMap<code, processing_level>.
+///
+/// Finds the header row dynamically by searching for a row containing "Code".
+/// Calamine trims leading empty rows, so we cannot rely on a fixed row index.
+fn load_processing_levels_from_xlsx(path: &Path) -> Result<HashMap<String, i32>> {
+    let mut workbook: Xlsx<_> = open_workbook(path)
+        .with_context(|| format!("Failed to open XLSX: {:?}", path))?;
+
+    // Try "Data" sheet, fall back to "Test_Data"
+    let sheet_name = if workbook.sheet_names().iter().any(|n| n == "Data") {
+        "Data".to_string()
+    } else if workbook.sheet_names().iter().any(|n| n == "Test_Data") {
+        "Test_Data".to_string()
+    } else {
+        anyhow::bail!(
+            "XLSX has no 'Data' or 'Test_Data' sheet. Sheets found: {:?}",
+            workbook.sheet_names()
+        );
+    };
+
+    let range = workbook
+        .worksheet_range(&sheet_name)
+        .with_context(|| format!("Failed to read sheet '{}'", sheet_name))?;
+
+    // Find header row: search for the row containing "Code" and "Processing-Level"
+    let mut header_row_idx: Option<usize> = None;
+    let mut code_col: Option<usize> = None;
+    let mut pl_col: Option<usize> = None;
+
+    for (row_idx, row) in range.rows().enumerate() {
+        let mut found_code = false;
+        let mut found_pl = false;
+        for (col_idx, cell) in row.iter().enumerate() {
+            if let calamine::Data::String(s) = cell {
+                let text = s.trim();
+                if text == "Code" {
+                    code_col = Some(col_idx);
+                    found_code = true;
+                } else if text == "Processing-Level" {
+                    pl_col = Some(col_idx);
+                    found_pl = true;
+                }
+            }
+        }
+        if found_code && found_pl {
+            header_row_idx = Some(row_idx);
+            break;
+        }
+    }
+
+    let header_row_idx = header_row_idx.ok_or_else(|| {
+        anyhow::anyhow!("No header row with both 'Code' and 'Processing-Level' found in XLSX sheet '{}'", sheet_name)
+    })?;
+    let code_col = code_col.unwrap(); // guaranteed by the check above
+    let pl_col = pl_col.unwrap();
+
+    let mut map = HashMap::new();
+
+    // Data rows follow the header
+    for row in range.rows().skip(header_row_idx + 1) {
+        let code = match row.get(code_col) {
+            Some(calamine::Data::String(s)) if !s.trim().is_empty() => s.trim().to_string(),
+            _ => continue,
+        };
+
+        let level = match row.get(pl_col) {
+            Some(calamine::Data::Float(f)) => *f as i32,
+            Some(calamine::Data::Int(i)) => *i as i32,
+            Some(calamine::Data::String(s)) => match s.trim().parse::<i32>() {
+                Ok(v) => v,
+                Err(_) => continue,
+            },
+            _ => continue,
+        };
+
+        map.insert(code, level);
+    }
+
+    Ok(map)
 }
 
 // =============================================================================
@@ -2335,6 +2460,30 @@ fn main() -> Result<()> {
             let mut items = parse_csv(&input_file, &config.collections)?;
             info!("  Parsed {} items from {}", items.len(), input_file.display());
 
+            // Overlay processing levels from XLSX if available
+            if let Some(xlsx_path) = find_xlsx_near_input(&input_file) {
+                match load_processing_levels_from_xlsx(&xlsx_path) {
+                    Ok(pl_map) => {
+                        let mut matched = 0;
+                        for item in &mut items {
+                            if let Some(&level) = pl_map.get(&item.code) {
+                                item.processing_level = Some(level);
+                                matched += 1;
+                            }
+                        }
+                        info!(
+                            "  Loaded processing levels from {} ({}/{} items matched)",
+                            xlsx_path.display(),
+                            matched,
+                            items.len()
+                        );
+                    }
+                    Err(e) => {
+                        warn!("  Failed to read processing levels from {}: {}", xlsx_path.display(), e);
+                    }
+                }
+            }
+
             // Step 2: Scan folders if data provided (quick operation, use simple info log)
             let scanned_folders: HashMap<String, ScannedFolder> = if let Some(ref data_path) = data {
                 let folders = scan_data_folders(data_path, &config.folder_mappings, &config.exclude_files)?;
@@ -3188,6 +3337,16 @@ fn main() -> Result<()> {
                 "  Generated {} collections, {} items, {} assets",
                 num_collections, num_items, num_assets
             );
+
+            // Copy documentation to output/docs/ (for S3 sync)
+            if let Some(ref org) = organised_dir {
+                let docs_dir = org.join("docs");
+                fs::create_dir_all(&docs_dir)?;
+                let dest = docs_dir.join("dataset_overview.csv");
+                fs::copy(&input_file, &dest)
+                    .with_context(|| format!("Failed to copy {} → {:?}", input_file.display(), dest))?;
+                info!("  Copied {} → docs/dataset_overview.csv", input_file.display());
+            }
 
             // Compute detailed quality metrics - build per-item issue map
             let excel_codes: std::collections::HashSet<_> = items.iter().map(|i| &i.code).collect();
