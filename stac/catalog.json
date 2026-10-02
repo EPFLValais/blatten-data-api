@@ -89,9 +89,15 @@
     },
     {
       "rel": "describedby",
-      "href": "https://blatten-data.epfl.ch/s3/docs/detailed_report.pdf",
+      "href": "https://blatten-data.epfl.ch/s3/docs/A50039_Blatten4Science_TechnicalDocumentation.pdf",
       "type": "application/pdf",
-      "title": "Detailed Report"
+      "title": "Technical Documentation"
+    },
+    {
+      "rel": "describedby",
+      "href": "https://blatten-data.epfl.ch/s3/docs/A50039_Supplement1_GassnerJ_GBIR_Report.pdf",
+      "type": "application/pdf",
+      "title": "Supplement 1 - GBIR Report"
     },
     {
       "rel": "license",
