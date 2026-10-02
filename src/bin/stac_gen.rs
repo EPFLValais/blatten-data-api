@@ -48,6 +48,8 @@ struct GenConfig {
     geometry_overrides: HashMap<String, GeometryOverride>,
     #[serde(default)]
     product_type_strip: HashMap<String, Vec<String>>,
+    #[serde(default)]
+    exclude_items: Vec<String>,
 }
 
 /// Typed folder mapping entry — maps an item code to one or more data folders
@@ -137,8 +139,32 @@ fn load_config(path: &Path) -> Result<GenConfig> {
         .with_context(|| format!("Failed to parse config YAML: {:?}", path))
 }
 
+/// Normalise a numeric sensor ID by stripping leading zeros, so "07", "7" and "007"
+/// all compare equal. The CSV has used both padded and unpadded IDs between versions.
+fn sensor_key(id: &str) -> String {
+    let id = id.trim();
+    let stripped = id.trim_start_matches('0');
+    if stripped.is_empty() && !id.is_empty() { "0".to_string() } else { stripped.to_string() }
+}
+
+/// Whether a staged copy no longer matches its source: sizes differ, or the source was
+/// modified after the copy was made. Missing files count as stale.
+fn is_stale_copy(source: &Path, target: &Path) -> bool {
+    let (Ok(src), Ok(dst)) = (fs::metadata(source), fs::metadata(target)) else {
+        return true;
+    };
+    if src.len() != dst.len() {
+        return true;
+    }
+    match (src.modified(), dst.modified()) {
+        (Ok(s), Ok(d)) => s > d,
+        _ => false,
+    }
+}
+
 /// Scan a directory tree for StationFactsheet PDFs and build sensor_number → path mapping.
 /// Matches filenames like `StationFactsheet_07_WebcamGeoazimutLonza_A50039.pdf`.
+/// Keys are normalised with `sensor_key` to match CSV sensor IDs.
 fn discover_factsheets(dir: &Path) -> HashMap<String, PathBuf> {
     let mut map = HashMap::new();
     for entry in WalkDir::new(dir).into_iter().filter_map(|e| e.ok()) {
@@ -147,11 +173,15 @@ fn discover_factsheets(dir: &Path) -> HashMap<String, PathBuf> {
         }
         let fname = entry.file_name().to_string_lossy();
         if fname.starts_with("StationFactsheet_") && fname.ends_with(".pdf") {
+            // Skip files inside "old/" subdirectories
+            if entry.path().components().any(|c| c.as_os_str() == "old") {
+                continue;
+            }
             if let Some(nn) = fname
                 .strip_prefix("StationFactsheet_")
                 .and_then(|s| s.split('_').next())
             {
-                map.insert(nn.to_string(), entry.path().to_path_buf());
+                map.insert(sensor_key(nn), entry.path().to_path_buf());
             }
         }
     }
@@ -288,10 +318,19 @@ struct Cli {
     factsheets_dir: PathBuf,
 }
 
+/// Default metadata file name in the working directory.
+const DEFAULT_INPUT: &str = "dataset_overview.csv";
+
 /// Auto-discover a metadata file in the current directory.
-/// Prefers .csv files; falls back to .xlsx if no CSV found.
+/// Uses `dataset_overview.csv` when present; otherwise prefers a single .csv file,
+/// falling back to a single .xlsx file.
 /// Returns an error if zero or more than one candidate files are found.
 fn discover_input() -> Result<PathBuf> {
+    let default = PathBuf::from(DEFAULT_INPUT);
+    if default.is_file() {
+        return Ok(default);
+    }
+
     let all_files: Vec<PathBuf> = fs::read_dir(".")?
         .filter_map(|e| e.ok())
         .filter(|e| e.path().is_file())
@@ -1311,16 +1350,10 @@ fn csv_field(s: &str) -> Option<String> {
     }
 }
 
-/// Parse the semicolon-delimited CSV metadata file (17 columns).
+/// Parse the semicolon-delimited CSV metadata file.
 ///
-/// Column layout (0-indexed):
-///   0: Code, 1: Product ID, 2: Sensor ID, 3: Dataset ID, 4: Bundle ID,
-///   5: Sensor, 6: ProductType, 7: Dataset, 8: Bundle, 9: Description,
-///  10: Format, 11: Additional information, 12: Phase,
-///  13: Date first (provided), 14: Date last (provided), 15: Frequency,
-///  16: Source / Operator
-///
-/// Note: Processing levels are read separately from the XLSX file (not in CSV).
+/// Supports both 17-column (original) and 18-column (with Processing-Level) layouts.
+/// Columns are resolved by header name, not position, for forward compatibility.
 fn parse_csv(path: &Path, collection_map: &HashMap<String, String>) -> Result<Vec<ItemMetadata>> {
     // Read raw bytes and convert to UTF-8 (handles Latin-1/ISO-8859-1 encoded files)
     let raw = fs::read(path)
@@ -1331,6 +1364,9 @@ fn parse_csv(path: &Path, collection_map: &HashMap<String, String>) -> Result<Ve
         // Assume ISO-8859-1: every byte maps to a Unicode code point
         raw.iter().map(|&b| b as char).collect()
     };
+    // Excel's "CSV UTF-8" export starts with a byte-order mark, which would otherwise
+    // become part of the first header name ("\u{feff}Code")
+    let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
 
     let mut rdr = ReaderBuilder::new()
         .delimiter(b';')
@@ -1338,16 +1374,51 @@ fn parse_csv(path: &Path, collection_map: &HashMap<String, String>) -> Result<Ve
         .flexible(true)
         .from_reader(text.as_bytes());
 
-    // Validate headers
+    // Build header-name → column-index map
     let headers = rdr.headers()
         .with_context(|| "Failed to read CSV headers")?
         .clone();
-    if headers.get(0).map(|h| h.trim()) != Some("Code") {
+    let col: HashMap<&str, usize> = headers.iter()
+        .enumerate()
+        .map(|(i, h)| (h.trim(), i))
+        .collect();
+
+    if !col.contains_key("Code") {
         anyhow::bail!(
-            "Unexpected CSV header: expected first column 'Code', got '{}'",
+            "Unexpected CSV header: expected 'Code' column, got '{}'",
             headers.get(0).unwrap_or("(empty)")
         );
     }
+
+    // Resolve column indices (some names changed between CSV versions)
+    let col_code = col["Code"];
+    let col_product_id = *col.get("Product ID").unwrap_or(&1);
+    let col_sensor_id = *col.get("Sensor ID").unwrap_or(&2);
+    let col_dataset_id = *col.get("Dataset ID").unwrap_or(&3);
+    let col_bundle_id = *col.get("Bundle ID").unwrap_or(&4);
+    let col_sensor = *col.get("Sensor").unwrap_or(&5);
+    let col_product_type = *col.get("ProductType").unwrap_or(&6);
+    let col_dataset = *col.get("Dataset").unwrap_or(&7);
+    let col_bundle = *col.get("Bundle").unwrap_or(&8);
+    let col_description = *col.get("Description").unwrap_or(&9);
+    let col_format = *col.get("Format").unwrap_or(&10);
+    // Column 11 was renamed: "Additional information" → "Technical information"
+    let col_tech_info = col.get("Technical information")
+        .or_else(|| col.get("Additional information"))
+        .copied()
+        .unwrap_or(11);
+    let col_processing_level = col.get("Processing-Level").copied();
+    let col_phase = *col.get("Phase").unwrap_or(&12);
+    let col_date_first = *col.get("Date first (provided)").unwrap_or(&13);
+    let col_date_last = *col.get("Date last (provided)").unwrap_or(&14);
+    let col_frequency = *col.get("Frequency").unwrap_or(&15);
+    let col_source = *col.get("Source / Operator").unwrap_or(&16);
+
+    let has_pl_col = col_processing_level.is_some();
+    if has_pl_col {
+        info!("  CSV contains Processing-Level column (XLSX overlay will only fill gaps)");
+    }
+    info!("  CSV has {} columns", headers.len());
 
     let mut items = Vec::new();
 
@@ -1355,34 +1426,42 @@ fn parse_csv(path: &Path, collection_map: &HashMap<String, String>) -> Result<Ve
         let record = result
             .with_context(|| format!("Failed to read CSV row {}", row_idx + 2))?;
 
-        let code = match csv_field(record.get(0).unwrap_or("")) {
+        let code = match csv_field(record.get(col_code).unwrap_or("")) {
             Some(c) => c,
             None => continue,
         };
 
-        let product_id = csv_field(record.get(1).unwrap_or(""));
+        let product_id = csv_field(record.get(col_product_id).unwrap_or(""));
+
+        // Parse processing level from CSV if column exists
+        let processing_level = col_processing_level.and_then(|ci| {
+            record.get(ci)
+                .and_then(|s| s.trim().parse::<i32>().ok())
+        });
+
+        let phase = csv_field(record.get(col_phase).unwrap_or(""));
 
         let mut item = ItemMetadata {
             code: code.clone(),
             product_id: product_id.clone(),
-            sensor_id: csv_field(record.get(2).unwrap_or("")),
-            dataset_id: csv_field(record.get(3).unwrap_or("")),
-            bundle_id: csv_field(record.get(4).unwrap_or("")),
-            sensor: csv_field(record.get(5).unwrap_or("")).map(|s| strip_field_prefix(&s)),
-            product_type: csv_field(record.get(6).unwrap_or("")).map(|s| strip_field_prefix(&s)),
-            dataset: csv_field(record.get(7).unwrap_or("")).map(|s| strip_field_prefix(&s)),
-            bundle: csv_field(record.get(8).unwrap_or("")).map(|s| strip_field_prefix(&s)),
-            description: csv_field(record.get(9).unwrap_or("")),
-            format: csv_field(record.get(10).unwrap_or("")),
-            technical_info: csv_field(record.get(11).unwrap_or("")),
-            processing_level: None,  // Populated from XLSX if available
-            phase: csv_field(record.get(12).unwrap_or("")),
-            date_first: record.get(13).and_then(parse_european_date),
-            date_last: record.get(14).and_then(parse_european_date),
+            sensor_id: csv_field(record.get(col_sensor_id).unwrap_or("")).map(|s| sensor_key(&s)),
+            dataset_id: csv_field(record.get(col_dataset_id).unwrap_or("")),
+            bundle_id: csv_field(record.get(col_bundle_id).unwrap_or("")),
+            sensor: csv_field(record.get(col_sensor).unwrap_or("")).map(|s| strip_field_prefix(&s)),
+            product_type: csv_field(record.get(col_product_type).unwrap_or("")).map(|s| strip_field_prefix(&s)),
+            dataset: csv_field(record.get(col_dataset).unwrap_or("")).map(|s| strip_field_prefix(&s)),
+            bundle: csv_field(record.get(col_bundle).unwrap_or("")).map(|s| strip_field_prefix(&s)),
+            description: csv_field(record.get(col_description).unwrap_or("")),
+            format: csv_field(record.get(col_format).unwrap_or("")),
+            technical_info: csv_field(record.get(col_tech_info).unwrap_or("")),
+            processing_level,
+            phase,
+            date_first: record.get(col_date_first).and_then(parse_european_date),
+            date_last: record.get(col_date_last).and_then(parse_european_date),
             continued: false,  // Not in CSV
-            frequency: csv_field(record.get(15).unwrap_or("")),
+            frequency: csv_field(record.get(col_frequency).unwrap_or("")),
             location: None,
-            source: csv_field(record.get(16).unwrap_or("")),
+            source: csv_field(record.get(col_source).unwrap_or("")),
             additional_remarks: None,
             storage_mb: None,
             internal_commentary: None,  // Not in CSV
@@ -2501,22 +2580,34 @@ fn main() -> Result<()> {
             let mut items = parse_csv(&input_file, &config.collections)?;
             info!("  Parsed {} items from {}", items.len(), input_file.display());
 
-            // Overlay processing levels from XLSX if available
+            // Filter excluded items
+            if !config.exclude_items.is_empty() {
+                let exclude_set: HashSet<&str> = config.exclude_items.iter().map(|s| s.as_str()).collect();
+                let before = items.len();
+                items.retain(|item| !exclude_set.contains(item.code.as_str()));
+                let excluded = before - items.len();
+                if excluded > 0 {
+                    info!("  Excluded {} items via config: {:?}", excluded, config.exclude_items);
+                }
+            }
+
+            // Overlay processing levels from XLSX if available (fills gaps not covered by CSV)
             if let Some(xlsx_path) = find_xlsx_near_input(&input_file) {
                 match load_processing_levels_from_xlsx(&xlsx_path) {
                     Ok(pl_map) => {
                         let mut matched = 0;
                         for item in &mut items {
-                            if let Some(&level) = pl_map.get(&item.code) {
-                                item.processing_level = Some(level);
-                                matched += 1;
+                            if item.processing_level.is_none() {
+                                if let Some(&level) = pl_map.get(&item.code) {
+                                    item.processing_level = Some(level);
+                                    matched += 1;
+                                }
                             }
                         }
                         info!(
-                            "  Loaded processing levels from {} ({}/{} items matched)",
+                            "  Loaded processing levels from {} ({} gaps filled)",
                             xlsx_path.display(),
                             matched,
-                            items.len()
                         );
                     }
                     Err(e) => {
@@ -2796,7 +2887,12 @@ fn main() -> Result<()> {
                                             if let Some(ref mut stats) = stage_stats {
                                                 stats.expected_files.insert(target.clone());
                                             }
-                                            if !target.exists() {
+                                            // Replace a copy staged from an older factsheet with the same name
+                                            if is_stale_copy(src_path, &target) {
+                                                if target.symlink_metadata().is_ok() {
+                                                    fs::remove_file(&target)
+                                                        .with_context(|| format!("remove stale factsheet {:?}", target))?;
+                                                }
                                                 link_or_copy(src_path, &target, link_mode_parsed)?;
                                                 injected += 1;
                                             }
@@ -3403,6 +3499,25 @@ fn main() -> Result<()> {
                 fs::copy(&input_file, &dest)
                     .with_context(|| format!("Failed to copy {} → {:?}", input_file.display(), dest))?;
                 info!("  Copied {} → docs/dataset_overview.csv", input_file.display());
+
+                // PDFs at the top of the documentation folder (technical documentation,
+                // supplements) are published as-is; factsheets live in subfolders and go
+                // into each item's assets instead
+                if let Ok(entries) = fs::read_dir(&factsheets_dir) {
+                    for entry in entries.filter_map(|e| e.ok()) {
+                        let path = entry.path();
+                        let is_pdf = path.extension()
+                            .and_then(|e| e.to_str())
+                            .is_some_and(|e| e.eq_ignore_ascii_case("pdf"));
+                        if !is_pdf || !path.is_file() {
+                            continue;
+                        }
+                        let dest = docs_dir.join(entry.file_name());
+                        fs::copy(&path, &dest)
+                            .with_context(|| format!("Failed to copy {:?} → {:?}", path, dest))?;
+                        info!("  Copied {} → docs/{}", path.display(), entry.file_name().to_string_lossy());
+                    }
+                }
             }
 
             // Compute detailed quality metrics - build per-item issue map
@@ -3963,8 +4078,14 @@ fn stage_assets(
                     let _ = fs::remove_file(&target);
                     link_or_copy(source, &target, link_mode)?;
                     stats.staged += 1;
+                } else if is_stale_copy(source, &target) {
+                    // Real file staged from an older version of the source: replace it
+                    fs::remove_file(&target)
+                        .with_context(|| format!("remove stale staged file {:?}", target))?;
+                    link_or_copy(source, &target, link_mode)?;
+                    stats.staged += 1;
                 } else {
-                    // Real file (materialized copy or hardlink): preserve it
+                    // Real file (materialized copy or hardlink) matching its source: preserve it
                     stats.preserved += 1;
                 }
             } else {
@@ -4692,5 +4813,79 @@ fn extract_geometry_for_item_v2(
 
     ExtractionResult::NoGeometry {
         reason: "No extractable geometry or manual coordinates".to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn scratch_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("stac-gen-test-{}-{}", name, std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn sensor_key_ignores_zero_padding() {
+        assert_eq!(sensor_key("07"), "7");
+        assert_eq!(sensor_key("7"), "7");
+        assert_eq!(sensor_key("10"), "10");
+        assert_eq!(sensor_key(" 01 "), "1");
+        assert_eq!(sensor_key("00"), "0");
+    }
+
+    #[test]
+    fn padded_csv_ids_match_factsheet_names() {
+        let dir = scratch_dir("factsheets");
+        let sheet = dir.join("StationFactsheet_07_WebcamGeoazimutLonza_A50039.pdf");
+        fs::write(&sheet, b"pdf").unwrap();
+        let map = discover_factsheets(&dir);
+        assert_eq!(map.get(&sensor_key("07")), Some(&sheet));
+        assert_eq!(map.get(&sensor_key("7")), Some(&sheet));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn utf8_bom_csv_with_padded_ids_parses() {
+        let dir = scratch_dir("bom");
+        let csv = dir.join("dataset_overview.csv");
+        let body = "Code;Product ID;Sensor ID;Dataset ID;Bundle ID;Sensor;ProductType;Dataset;Bundle;Description;Format;Technical information;Processing-Level;Phase;Date first (provided);Date last (provided);Frequency;Source / Operator\r\n\
+                    10Ma00;M;10;a;00;10 - GNSS Weissenried;M - GPS-Data;a - Position;0 - Whole Period;GNSS positions;CSV;;1;3;04.06.2025;30.06.2025;1h;DNAGE\r\n\
+                    01Aa00;A;01;a;00;01 - Sensalpin Camera;A - Webcam-Image;a - Overview;0 - All Frames;All frames;JPG;;2;1-3;05.02.2020;30.06.2025;varied;SensAlpin\r\n";
+        let mut bytes = b"\xef\xbb\xbf".to_vec();
+        bytes.extend_from_slice(body.as_bytes());
+        fs::write(&csv, bytes).unwrap();
+
+        let items = parse_csv(&csv, &HashMap::new()).unwrap();
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].code, "10Ma00");
+        assert_eq!(items[0].sensor_id.as_deref(), Some("10"));
+        assert_eq!(items[1].sensor_id.as_deref(), Some("1"));
+        assert_eq!(items[1].phase.as_deref(), Some("1-3"));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn staged_copy_is_stale_when_source_changes() {
+        let dir = scratch_dir("stale");
+        let source = dir.join("source.csv");
+        let target = dir.join("target.csv");
+
+        fs::write(&source, b"old contents").unwrap();
+        fs::copy(&source, &target).unwrap();
+        assert!(!is_stale_copy(&source, &target), "fresh copy is current");
+
+        fs::write(&source, b"new, longer contents").unwrap();
+        assert!(is_stale_copy(&source, &target), "size change is stale");
+
+        fs::copy(&source, &target).unwrap();
+        let later = std::time::SystemTime::now() + std::time::Duration::from_secs(60);
+        fs::File::options().write(true).open(&source).unwrap().set_modified(later).unwrap();
+        assert!(is_stale_copy(&source, &target), "same size, newer source is stale");
+
+        assert!(is_stale_copy(&source, &dir.join("missing.csv")), "missing target is stale");
+        fs::remove_dir_all(&dir).unwrap();
     }
 }
