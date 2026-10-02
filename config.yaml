@@ -32,9 +32,13 @@ catalog:
       type: text/csv
       title: Dataset Overview
     - rel: describedby
-      href_suffix: /docs/detailed_report.pdf
+      href_suffix: /docs/A50039_Blatten4Science_TechnicalDocumentation.pdf
       type: application/pdf
-      title: Detailed Report
+      title: Technical Documentation
+    - rel: describedby
+      href_suffix: /docs/A50039_Supplement1_GassnerJ_GBIR_Report.pdf
+      type: application/pdf
+      title: Supplement 1 - GBIR Report
     - rel: license
       href: https://creativecommons.org/licenses/by-nc-sa/4.0/
       title: "Attribution-NonCommercial-ShareAlike 4.0 International"
@@ -92,6 +96,10 @@ crs_overrides:
 exclude_files:
   exact: [desktop.ini, thumbs.db, .ds_store]
   prefixes: [data_klnesthorn_sharepoint]
+
+# ─── Item Exclusion (skip specific items during STAC generation) ──────────────
+# Helimap flights 4 and 5 removed per Tobias Widmer (2026-03-27)
+exclude_items: [14Da04, 14Da05, 14Ia04, 14Ia05, 14Ja04, 14Ja05, 14Ka04, 14Ka05]
 
 # ─── Geometry Overrides (inherit bbox/geometry from a sibling item) ────────
 # For items without extractable CRS that share spatial extent with another item.
