@@ -974,8 +974,8 @@ async fn landing_page(State(state): State<AppState>) -> impl IntoResponse {
         "type": "Catalog",
         "id": "nesthorn-birchgletscher-process-cascade",
         "stac_version": STAC_VERSION,
-        "title": "Nesthorn – Birchgletscher Process Cascade",
-        "description": "STAC API for the data collected during the Nesthorn – Birchgletscher process cascade at Blatten, CH-VS. Licensed under Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0). By using this API you confirm that you have read the Dataset Overview and Detailed Report. This data is provided \"as is\" without warranty of any kind, express or implied.",
+        "title": "Blatten4Science - Observational Research Data of the 2025 Nesthorn – Birchgletscher Process Cascade",
+        "description": "STAC API for the data collected during the Nesthorn – Birchgletscher process cascade at Blatten, CH-VS. Licensed under Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0). By using this API you confirm that you have read the Dataset Overview and Technical Documentation. This data is provided \"as is\" without warranty of any kind, express or implied.",
         "conformsTo": CONFORMANCE_CLASSES,
         "links": [
             {
@@ -1018,9 +1018,20 @@ async fn landing_page(State(state): State<AppState>) -> impl IntoResponse {
             },
             {
                 "rel": "describedby",
-                "href": format!("{}/s3/docs/detailed_report.pdf", state.base_url),
+                "href": format!("{}/s3/docs/A50039_Blatten4Science_TechnicalDocumentation.pdf", state.base_url),
                 "type": "application/pdf",
-                "title": "Detailed Report"
+                "title": "Technical Documentation"
+            },
+            {
+                "rel": "describedby",
+                "href": format!("{}/s3/docs/A50039_Supplement1_GassnerJ_GBIR_Report.pdf", state.base_url),
+                "type": "application/pdf",
+                "title": "Supplement 1 - GBIR Report"
+            },
+            {
+                "rel": "cite-as",
+                "href": "https://doi.org/10.5075/epfl.20.500.14299/262163",
+                "title": "Citation and permanent link"
             },
             {
                 "rel": "license",
@@ -1031,7 +1042,7 @@ async fn landing_page(State(state): State<AppState>) -> impl IntoResponse {
                 "rel": "about",
                 "href": "https://blatten-data.epfl.ch/",
                 "type": "text/html",
-                "title": "Blatten Data website"
+                "title": "Blatten4Science website"
             }
         ]
     });

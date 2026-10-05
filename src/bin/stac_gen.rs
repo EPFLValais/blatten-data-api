@@ -2910,6 +2910,16 @@ fn main() -> Result<()> {
                         debug!("  Factsheets directory not found: {:?}", factsheets_dir);
                     }
 
+                    // Remove staged files no item expects before they are hashed and archived
+                    if let Some(ref stage_stats) = stage_stats {
+                        if !stage_stats.expected_files.is_empty() {
+                            let removed = remove_unexpected_assets(assets_path, &stage_stats.expected_files);
+                            if removed > 0 {
+                                info!("  Removed {} stale files from assets/", removed);
+                            }
+                        }
+                    }
+
                     // Step 2: Hash all staged assets in parallel
                     let hash_pb = multi_progress.add(ProgressBar::new(0));
                     hash_pb.set_style(pb_style.clone());
@@ -2960,42 +2970,6 @@ fn main() -> Result<()> {
                     if materialize {
                         info!("");
                         info!("=== Materializing ===");
-
-                        // Clean stale files: remove any file in assets/ not in the expected set
-                        if let Some(ref stage_stats) = stage_stats {
-                            if !stage_stats.expected_files.is_empty() {
-                                let mut stale_removed = 0usize;
-                                for entry in WalkDir::new(assets_path)
-                                    .into_iter()
-                                    .filter_map(|e| e.ok())
-                                {
-                                    let path = entry.path();
-                                    let is_file = path.symlink_metadata()
-                                        .map_or(false, |m| m.is_file() || m.file_type().is_symlink());
-                                    if !is_file { continue; }
-
-                                    if !stage_stats.expected_files.contains(path) {
-                                        let _ = fs::remove_file(path);
-                                        stale_removed += 1;
-                                    }
-                                }
-                                // Remove empty directories left behind
-                                for entry in WalkDir::new(assets_path)
-                                    .contents_first(true)
-                                    .into_iter()
-                                    .filter_map(|e| e.ok())
-                                {
-                                    let path = entry.path();
-                                    if path == assets_path { continue; }
-                                    if path.is_dir() {
-                                        let _ = fs::remove_dir(path); // only succeeds if empty
-                                    }
-                                }
-                                if stale_removed > 0 {
-                                    info!("  Removed {} stale files from assets/", stale_removed);
-                                }
-                            }
-                        }
 
                         // Materialize remaining symlinks/hardlinks in assets/
                         let (mat_assets, real_assets) = materialize_links(assets_path)?;
@@ -4119,6 +4093,28 @@ fn stage_assets(
     Ok(stats)
 }
 
+/// Remove files under `assets_dir` that are not in `expected`, then any directories left empty.
+/// Returns the number of files removed.
+fn remove_unexpected_assets(assets_dir: &Path, expected: &HashSet<PathBuf>) -> usize {
+    let mut removed = 0usize;
+    for entry in WalkDir::new(assets_dir).into_iter().filter_map(|e| e.ok()) {
+        let path = entry.path();
+        let is_file = path.symlink_metadata()
+            .map_or(false, |m| m.is_file() || m.file_type().is_symlink());
+        if is_file && !expected.contains(path) && fs::remove_file(path).is_ok() {
+            removed += 1;
+        }
+    }
+    for entry in WalkDir::new(assets_dir).contents_first(true).into_iter().filter_map(|e| e.ok()) {
+        let path = entry.path();
+        if path != assets_dir && path.is_dir() {
+            // Only succeeds if empty
+            let _ = fs::remove_dir(path);
+        }
+    }
+    removed
+}
+
 /// Hash all files in the staged assets directory, building a DataManifest.
 /// Walks `assets/<code>/<file>` in parallel, following symlinks.
 /// If `existing_manifest` is provided, carries forward hashes for files with matching size (incremental).
@@ -4604,7 +4600,59 @@ fn scan_data_folders(
         }
     }
 
+    apply_mapping_filters(&mut folders, data, folder_mappings);
+
     Ok(folders)
+}
+
+/// Keep only the files a mapping's `file` or `pattern` selects, relative to the mapped folder
+fn apply_mapping_filters(
+    folders: &mut HashMap<String, ScannedFolder>,
+    data: &Path,
+    folder_mappings: &HashMap<String, FolderMapping>,
+) {
+    for (code, mapping) in folder_mappings {
+        if mapping.file.is_none() && mapping.pattern.is_none() {
+            continue;
+        }
+        let Some(folder) = folders.get_mut(code) else { continue };
+        let pattern = mapping.pattern.as_deref().map(glob_to_regex);
+        let roots: Vec<PathBuf> = mapping.folders.iter().map(|rel| data.join(rel)).collect();
+
+        folder.files.retain(|file| {
+            roots.iter().any(|root| {
+                let Ok(rel) = file.strip_prefix(root) else { return false };
+                let rel = rel.to_string_lossy();
+                mapping.file.as_deref().map_or(true, |name| rel == name)
+                    && pattern.as_ref().map_or(true, |re| re.is_match(&rel))
+            })
+        });
+        if folder.files.is_empty() {
+            warn!("  {}: no files match the mapping's file/pattern in {:?}", code, mapping.folders);
+        }
+    }
+}
+
+/// Convert a glob into an anchored regex: `**/` spans any number of directories,
+/// `*` and `?` stay within one path component
+fn glob_to_regex(glob: &str) -> regex::Regex {
+    let mut re = String::from("^");
+    let mut rest = glob;
+    while let Some(c) = rest.chars().next() {
+        if let Some(after) = rest.strip_prefix("**/") {
+            re.push_str("(?:.*/)?");
+            rest = after;
+            continue;
+        }
+        match c {
+            '*' => re.push_str("[^/]*"),
+            '?' => re.push_str("[^/]"),
+            _ => re.push_str(&regex::escape(&c.to_string())),
+        }
+        rest = &rest[c.len_utf8()..];
+    }
+    re.push('$');
+    regex::Regex::new(&re).expect("escaped glob is a valid regex")
 }
 
 /// Scan a folder and detect nested code subfolders
@@ -4886,6 +4934,94 @@ mod tests {
         assert!(is_stale_copy(&source, &target), "same size, newer source is stale");
 
         assert!(is_stale_copy(&source, &dir.join("missing.csv")), "missing target is stale");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    fn mapping(folder: &str, file: Option<&str>, pattern: Option<&str>) -> FolderMapping {
+        FolderMapping {
+            folders: vec![folder.to_string()],
+            file: file.map(String::from),
+            pattern: pattern.map(String::from),
+            bundle_subset: false,
+            collection_id: None,
+        }
+    }
+
+    fn file_names(folder: &ScannedFolder) -> Vec<String> {
+        let mut names: Vec<String> = folder.files.iter()
+            .map(|f| f.strip_prefix(&folder.path).unwrap_or(f).to_string_lossy().to_string())
+            .collect();
+        names.sort();
+        names
+    }
+
+    #[test]
+    fn shared_folder_mappings_keep_only_their_file() {
+        let dir = scratch_dir("shared-folder");
+        let shared = dir.join("Orchard/apple_pear_counts");
+        fs::create_dir_all(&shared).unwrap();
+        fs::write(shared.join("90Xa00 - Apple tree.csv"), b"a").unwrap();
+        fs::write(shared.join("91Xa00 - Pear tree.csv"), b"b").unwrap();
+
+        let mappings = HashMap::from([
+            ("90Xa00".to_string(), mapping("Orchard/apple_pear_counts", Some("90Xa00 - Apple tree.csv"), None)),
+            ("91Xa00".to_string(), mapping("Orchard/apple_pear_counts", Some("91Xa00 - Pear tree.csv"), None)),
+        ]);
+        let folders = scan_data_folders(&dir, &mappings, &ExcludeFiles::default()).unwrap();
+
+        assert_eq!(file_names(&folders["90Xa00"]), vec!["90Xa00 - Apple tree.csv"]);
+        assert_eq!(file_names(&folders["91Xa00"]), vec!["91Xa00 - Pear tree.csv"]);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn mapping_pattern_selects_matching_files_in_subfolders() {
+        let dir = scratch_dir("pattern");
+        let folder = dir.join("Orchard/92Ya00_Hive_Camera");
+        fs::create_dir_all(folder.join("2024")).unwrap();
+        fs::write(folder.join("top.jpg"), b"j").unwrap();
+        fs::write(folder.join("2024/nested.jpg"), b"j").unwrap();
+        fs::write(folder.join("2024/notes.txt"), b"t").unwrap();
+
+        let mappings = HashMap::from([
+            ("92Ya00".to_string(), mapping("Orchard/92Ya00_Hive_Camera", None, Some("**/*.jpg"))),
+        ]);
+        let folders = scan_data_folders(&dir, &mappings, &ExcludeFiles::default()).unwrap();
+
+        assert_eq!(file_names(&folders["92Ya00"]), vec!["2024/nested.jpg", "top.jpg"]);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn glob_star_stays_within_one_directory() {
+        let re = glob_to_regex("*.jpg");
+        assert!(re.is_match("a.jpg"));
+        assert!(!re.is_match("sub/a.jpg"));
+        assert!(!re.is_match("a.jpg.txt"));
+        let re = glob_to_regex("**/*.jpg");
+        assert!(re.is_match("a.jpg"));
+        assert!(re.is_match("x/y/a.jpg"));
+        assert!(!re.is_match("a.jpeg"));
+    }
+
+    #[test]
+    fn unexpected_staged_files_are_removed() {
+        let dir = scratch_dir("unexpected");
+        let code_dir = dir.join("90Xa00");
+        fs::create_dir_all(&code_dir).unwrap();
+        let kept = code_dir.join("90Xa00 - Apple tree.csv");
+        let dropped = code_dir.join("91Xa00 - Pear tree.csv");
+        fs::write(&kept, b"a").unwrap();
+        fs::write(&dropped, b"b").unwrap();
+        fs::create_dir_all(dir.join("93Za00")).unwrap();
+        fs::write(dir.join("93Za00/gone.csv"), b"c").unwrap();
+
+        let removed = remove_unexpected_assets(&dir, &HashSet::from([kept.clone()]));
+
+        assert_eq!(removed, 2);
+        assert!(kept.exists());
+        assert!(!dropped.exists());
+        assert!(!dir.join("93Za00").exists(), "emptied code directory is removed");
         fs::remove_dir_all(&dir).unwrap();
     }
 }

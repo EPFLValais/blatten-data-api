@@ -2,8 +2,8 @@
   "type": "Catalog",
   "id": "nesthorn-birchgletscher-process-cascade",
   "stac_version": "1.1.0",
-  "title": "Nesthorn – Birchgletscher Process Cascade",
-  "description": "Data collected during the Nesthorn – Birchgletscher process cascade at Blatten, CH-VS. Licensed under Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0). By using this API you confirm that you have read the Dataset Overview and Detailed Report. This data is provided \"as is\" without warranty of any kind, express or implied.",
+  "title": "Blatten4Science - Observational Research Data of the 2025 Nesthorn – Birchgletscher Process Cascade",
+  "description": "Data collected during the Nesthorn – Birchgletscher process cascade at Blatten, CH-VS. Licensed under Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0). By using this API you confirm that you have read the Dataset Overview and Technical Documentation. This data is provided \"as is\" without warranty of any kind, express or implied.",
   "links": [
     {
       "rel": "self",
@@ -100,6 +100,11 @@
       "title": "Supplement 1 - GBIR Report"
     },
     {
+      "rel": "cite-as",
+      "href": "https://doi.org/10.5075/epfl.20.500.14299/262163",
+      "title": "Citation and permanent link"
+    },
+    {
       "rel": "license",
       "href": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
       "title": "Attribution-NonCommercial-ShareAlike 4.0 International"
@@ -108,7 +113,7 @@
       "rel": "about",
       "href": "https://blatten-data.epfl.ch/",
       "type": "text/html",
-      "title": "Blatten Data website"
+      "title": "Blatten4Science website"
     }
   ],
   "conformsTo": [

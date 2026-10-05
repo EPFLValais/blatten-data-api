@@ -1,6 +1,6 @@
 # Blatten Data API
 
-STAC API server for the Birch Glacier Collapse and Landslide Dataset.
+STAC API server for Blatten4Science: Observational Research Data of the 2025 Nesthorn – Birchgletscher Process Cascade.
 
 ## Overview
 
