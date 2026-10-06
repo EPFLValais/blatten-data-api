@@ -82,6 +82,11 @@
       "title": "Webcam Image"
     },
     {
+      "rel": "cite-as",
+      "href": "https://doi.org/10.5075/epfl.20.500.14299/262163",
+      "title": "Citation and permanent link"
+    },
+    {
       "rel": "describedby",
       "href": "${S3_BASE_URL}/docs/dataset_overview.csv",
       "type": "text/csv",
@@ -98,11 +103,6 @@
       "href": "${S3_BASE_URL}/docs/A50039_Supplement1_GassnerJ_GBIR_Report.pdf",
       "type": "application/pdf",
       "title": "Supplement 1 - GBIR Report"
-    },
-    {
-      "rel": "cite-as",
-      "href": "https://doi.org/10.5075/epfl.20.500.14299/262163",
-      "title": "Citation and permanent link"
     },
     {
       "rel": "license",

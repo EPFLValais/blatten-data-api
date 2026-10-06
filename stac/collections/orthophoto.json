@@ -3,7 +3,7 @@
   "id": "orthophoto",
   "stac_version": "1.1.0",
   "stac_extensions": [
-    "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
+    "https://stac-extensions.github.io/scientific/v1.0.0/schema.json"
   ],
   "title": "Orthophoto",
   "description": "",
@@ -34,6 +34,12 @@
         "host"
       ],
       "url": "https://www.epfl.ch/research/domains/alpole/"
+    },
+    {
+      "name": "Terradata AG",
+      "roles": [
+        "producer"
+      ]
     }
   ],
   "extent": {
@@ -84,7 +90,19 @@
       "rel": "items",
       "href": "${STAC_BASE_URL}/stac/collections/orthophoto/items",
       "type": "application/geo+json"
+    },
+    {
+      "rel": "cite-as",
+      "href": "https://doi.org/10.5075/epfl.20.500.14299/262163",
+      "title": "Citation and permanent link"
+    },
+    {
+      "rel": "license",
+      "href": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "title": "Attribution-NonCommercial-ShareAlike 4.0 International"
     }
   ],
-  "assets": {}
+  "assets": {},
+  "sci:doi": "10.5075/epfl.20.500.14299/262163",
+  "sci:citation": "Widmer T, Senn I, Gassner J, Oggier A, Mayoraz L, Thomas E, Knuth F, Zimmerli M, Carrel M, Wetter J, Von Wartburg J, Gsponer L, Werlen S, Farinotti D, Proksch M (2026): Blatten4Science – Technical Documentation. Natural Hazards Department of the Canton of Wallis SDANA. Brig, September 2026, https://doi.org/10.5075/epfl.20.500.14299/262163"
 }
