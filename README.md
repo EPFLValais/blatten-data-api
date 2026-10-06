@@ -194,6 +194,18 @@ Each run writes `stac/validation_report.json`, listing issues by severity (error
 info) and statistics per collection. With `--validate`, `stac-gen` exits with status 1 when
 there are errors.
 
+The run checks the catalog it writes:
+
+- the catalog, every collection and every item against the STAC 1.1.0 core schemas and the
+  schema of each extension they declare (an error per failure, with the object id and JSON
+  path). The schemas are vendored under `schemas/`, so the check needs no network;
+- an empty collection description (error) or item description (warning);
+- a CSV Format that matches none of an item's data file extensions (warning);
+- items whose data files have identical checksums (warning). A bundle `00` sharing the files
+  of its own siblings, tile schemes and a lone boundary frame do not count.
+
+`validation_passed` is false when any check reports an error.
+
 ## License
 
 Dataset: CC-BY-NC-SA-4.0

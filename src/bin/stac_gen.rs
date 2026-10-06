@@ -17,7 +17,7 @@ use gdal::Dataset;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
@@ -1494,7 +1494,7 @@ struct ItemMetadata {
 }
 
 /// Validation issue
-#[derive(Debug, Serialize)]
+#[derive(Debug, Default, Serialize)]
 struct ValidationIssue {
     item_id: String,
     severity: String,
@@ -1502,6 +1502,12 @@ struct ValidationIssue {
     /// Set when the issue is a disagreement between an item's dates and its files
     #[serde(skip_serializing_if = "Option::is_none")]
     date_kind: Option<DateIssueKind>,
+    /// Set when the issue comes from a check of the written catalog
+    #[serde(skip_serializing_if = "Option::is_none")]
+    check: Option<CheckKind>,
+    /// JSON path of the failing value, for schema failures
+    #[serde(skip_serializing_if = "Option::is_none")]
+    json_path: Option<String>,
 }
 
 // =============================================================================
@@ -1800,6 +1806,23 @@ fn load_processing_levels_from_xlsx(path: &Path) -> Result<HashMap<String, i32>>
 
 /// Generate a sanitized asset key from filename
 /// Removes extension and replaces non-alphanumeric characters
+/// Characters left as they are in a path segment of an href: the RFC 3986
+/// unreserved set. Everything else, including spaces, `#`, `?`, `%` and
+/// non-ASCII bytes, is percent-encoded so the href is a valid IRI reference
+/// that the S3 proxy decodes back to the object key.
+const HREF_SEGMENT: &percent_encoding::AsciiSet = &percent_encoding::NON_ALPHANUMERIC
+    .remove(b'-').remove(b'.').remove(b'_').remove(b'~');
+
+/// Href of an object under the S3 base URL. `path` is the `/`-separated key
+/// below the base; each segment is percent-encoded and the `/` separators and
+/// the base (which may be the `${S3_BASE_URL}` placeholder) are kept as is.
+fn s3_href(s3_base_url: &str, path: &str) -> String {
+    let encoded: Vec<String> = path.trim_start_matches('/').split('/')
+        .map(|segment| percent_encoding::utf8_percent_encode(segment, HREF_SEGMENT).to_string())
+        .collect();
+    format!("{}/{}", s3_base_url, encoded.join("/"))
+}
+
 fn sanitize_asset_key(filename: &str) -> String {
     let name = std::path::Path::new(filename)
         .file_stem()
@@ -2039,6 +2062,308 @@ fn date_summary_lines(issues: &[ValidationIssue]) -> Vec<String> {
     lines
 }
 
+/// Kind of check on the written catalog behind a validation issue
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum CheckKind {
+    EmptyDescription,
+    FormatMismatch,
+    DuplicateData,
+    SchemaInvalid,
+}
+
+impl CheckKind {
+    const ALL: [CheckKind; 4] = [CheckKind::EmptyDescription, CheckKind::FormatMismatch, CheckKind::DuplicateData, CheckKind::SchemaInvalid];
+
+    fn label(self) -> &'static str {
+        match self {
+            CheckKind::EmptyDescription => "empty description",
+            CheckKind::FormatMismatch => "format matches no data file",
+            CheckKind::DuplicateData => "data identical to another item",
+            CheckKind::SchemaInvalid => "STAC schema failure",
+        }
+    }
+}
+
+/// An empty or missing description: an error on a collection, whose schema
+/// requires one, and a warning on an item
+fn empty_description_issue(object: &serde_json::Value) -> Option<ValidationIssue> {
+    let is_item = object["type"] == "Feature";
+    let description = if is_item { &object["properties"]["description"] } else { &object["description"] };
+    if description.as_str().is_some_and(|d| !d.trim().is_empty()) {
+        return None;
+    }
+    Some(ValidationIssue {
+        item_id: object["id"].as_str().unwrap_or_default().to_string(),
+        severity: if is_item { "warning" } else { "error" }.to_string(),
+        message: format!("Empty {} description", if is_item { "item" } else { "collection" }),
+        check: Some(CheckKind::EmptyDescription),
+        ..Default::default()
+    })
+}
+
+/// Data-role assets of a STAC item, without the archive: (file name, checksum)
+fn data_files(item: &serde_json::Value) -> Vec<(String, Option<&str>)> {
+    let Some(assets) = item["assets"].as_object() else { return Vec::new() };
+    assets.values()
+        .filter(|a| {
+            let roles = a["roles"].as_array();
+            let has = |role: &str| roles.is_some_and(|r| r.iter().any(|x| x == role));
+            has("data") && !has("archive")
+        })
+        .map(|a| {
+            let href = a["href"].as_str().unwrap_or_default();
+            let name = href.rsplit('/').next().unwrap_or(href).to_string();
+            (name, a["file:checksum"].as_str())
+        })
+        .collect()
+}
+
+/// Lowercase extension of a file name, with spelling variants folded together
+fn normalized_extension(name: &str) -> Option<String> {
+    let ext = Path::new(name).extension()?.to_str()?.to_lowercase();
+    Some(match ext.as_str() {
+        "jpeg" => "jpg".to_string(),
+        "tiff" | "geotiff" => "tif".to_string(),
+        _ => ext,
+    })
+}
+
+/// A CSV Format naming none of the item's data file extensions
+fn format_issue(item: &serde_json::Value, format: Option<&str>) -> Option<ValidationIssue> {
+    let tokens: Vec<String> = format?
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|t| !t.is_empty())
+        .filter_map(|t| normalized_extension(&format!("f.{}", t)))
+        .collect();
+    let extensions: BTreeSet<String> = data_files(item).iter().filter_map(|(name, _)| normalized_extension(name)).collect();
+    if tokens.is_empty() || extensions.is_empty() || tokens.iter().any(|t| extensions.contains(t)) {
+        return None;
+    }
+    Some(ValidationIssue {
+        item_id: item["id"].as_str().unwrap_or_default().to_string(),
+        severity: "warning".to_string(),
+        message: format!(
+            "CSV Format {} matches none of the data file extensions ({})",
+            format.unwrap_or_default().trim(),
+            extensions.into_iter().collect::<Vec<_>>().join(", ")
+        ),
+        check: Some(CheckKind::FormatMismatch),
+        ..Default::default()
+    })
+}
+
+/// Checksums of an item's data files that identify its data. Tile schemes are
+/// shared by every item of a survey, and an item whose only file is a vector
+/// frame shares it with its siblings, so neither counts.
+fn data_checksums(item: &serde_json::Value) -> BTreeSet<String> {
+    let files: Vec<(String, &str)> = data_files(item).into_iter()
+        .filter_map(|(name, checksum)| Some((name, checksum?)))
+        .filter(|(name, _)| !Path::new(name).file_stem().is_some_and(|s| s.to_string_lossy().to_lowercase().ends_with("scheme")))
+        .collect();
+    let is_frame = |name: &str| matches!(normalized_extension(name).as_deref(), Some("shp" | "dxf" | "kml" | "geojson" | "gpkg"));
+    if let [(name, _)] = files.as_slice() {
+        if is_frame(name) {
+            return BTreeSet::new();
+        }
+    }
+    files.into_iter().map(|(_, checksum)| checksum.to_string()).collect()
+}
+
+/// Items whose data files have identical checksum sets, one issue per group.
+/// A bundle `00` aggregates its siblings (same first four code characters),
+/// so it is left out of a group holding one of them.
+fn duplicate_data_issues(items: &[serde_json::Value]) -> Vec<ValidationIssue> {
+    let mut groups: BTreeMap<BTreeSet<String>, Vec<&str>> = BTreeMap::new();
+    for item in items {
+        let checksums = data_checksums(item);
+        if !checksums.is_empty() {
+            groups.entry(checksums).or_default().push(item["id"].as_str().unwrap_or_default());
+        }
+    }
+    let prefix = |code: &str| code.get(..4).map(str::to_string);
+    let mut issues = Vec::new();
+    for ids in groups.into_values() {
+        let mut ids: Vec<&str> = ids.iter().copied()
+            .filter(|id| !(id.ends_with("00") && ids.iter().any(|other| other != id && prefix(other) == prefix(id))))
+            .collect();
+        if ids.len() < 2 {
+            continue;
+        }
+        ids.sort_unstable();
+        issues.push(ValidationIssue {
+            item_id: ids[0].to_string(),
+            severity: "warning".to_string(),
+            message: format!("Data files identical across items {}", ids.join(", ")),
+            check: Some(CheckKind::DuplicateData),
+            ..Default::default()
+        });
+    }
+    issues
+}
+
+/// Lines of the end-of-run summary of catalog checks: a count per kind, then
+/// one line per issue sorted by item. Empty when no check found anything.
+fn check_summary_lines(issues: &[ValidationIssue]) -> Vec<String> {
+    let mut checked: Vec<(&str, CheckKind, &str, &str)> = issues.iter()
+        .filter_map(|i| i.check.map(|k| (i.item_id.as_str(), k, i.severity.as_str(), i.message.as_str())))
+        .collect();
+    if checked.is_empty() {
+        return Vec::new();
+    }
+    checked.sort();
+    let errors = checked.iter().filter(|(_, _, severity, _)| *severity == "error").count();
+    let mut lines = vec![format!("{} catalog check issues ({} errors)", checked.len(), errors)];
+    for kind in CheckKind::ALL {
+        let count = checked.iter().filter(|(_, k, _, _)| *k == kind).count();
+        if count > 0 {
+            lines.push(format!("  {:<32} {}", format!("{}:", kind.label()), count));
+        }
+    }
+    // Schema failures can run to one per asset, so each item gets one line with its first failure
+    let mut schema_failures: BTreeMap<&str, (usize, &str)> = BTreeMap::new();
+    for (item, kind, severity, message) in &checked {
+        if *kind == CheckKind::SchemaInvalid {
+            schema_failures.entry(item).or_insert((0, message)).0 += 1;
+        } else {
+            lines.push(format!("  {} [{}]: {}", item, severity, message));
+        }
+    }
+    for (item, (count, first)) in schema_failures {
+        lines.push(format!("  {} [error]: {} schema failures, first: {}", item, count, first));
+    }
+    lines
+}
+
+/// Vendored JSON schemas by URI: STAC 1.1.0 core, GeoJSON, PROJJSON and each
+/// extension the generator declares, so validation needs no network
+macro_rules! vendored_schemas {
+    ($($path:literal),* $(,)?) => {
+        &[$((concat!("https://", $path), include_str!(concat!("../../schemas/", $path)))),*]
+    };
+}
+const VENDORED_SCHEMAS: &[(&str, &str)] = vendored_schemas![
+    "schemas.stacspec.org/v1.1.0/catalog-spec/json-schema/catalog.json",
+    "schemas.stacspec.org/v1.1.0/collection-spec/json-schema/collection.json",
+    "schemas.stacspec.org/v1.1.0/item-spec/json-schema/item.json",
+    "schemas.stacspec.org/v1.1.0/item-spec/json-schema/common.json",
+    "schemas.stacspec.org/v1.1.0/item-spec/json-schema/basics.json",
+    "schemas.stacspec.org/v1.1.0/item-spec/json-schema/bands.json",
+    "schemas.stacspec.org/v1.1.0/item-spec/json-schema/datetime.json",
+    "schemas.stacspec.org/v1.1.0/item-spec/json-schema/data-values.json",
+    "schemas.stacspec.org/v1.1.0/item-spec/json-schema/instrument.json",
+    "schemas.stacspec.org/v1.1.0/item-spec/json-schema/licensing.json",
+    "schemas.stacspec.org/v1.1.0/item-spec/json-schema/provider.json",
+    "geojson.org/schema/Feature.json",
+    "geojson.org/schema/Geometry.json",
+    "proj.org/schemas/v0.7/projjson.schema.json",
+    "stac-extensions.github.io/timestamps/v1.1.0/schema.json",
+    "stac-extensions.github.io/file/v2.1.0/schema.json",
+    "stac-extensions.github.io/projection/v2.0.0/schema.json",
+];
+
+/// Serves `$ref`s from the vendored schemas and refuses every other URI
+struct VendoredRetriever;
+
+impl jsonschema::Retrieve for VendoredRetriever {
+    fn retrieve(&self, uri: &jsonschema::Uri<String>) -> std::result::Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
+        let wanted = uri.as_str().trim_end_matches('#');
+        let (_, text) = VENDORED_SCHEMAS.iter()
+            .find(|(u, _)| *u == wanted)
+            .ok_or_else(|| format!("no vendored schema for {}", wanted))?;
+        Ok(serde_json::from_str(text)?)
+    }
+}
+
+/// The written catalog leaves its base URLs as `${STAC_BASE_URL}` and
+/// `${S3_BASE_URL}` for the API to fill in on load. Braces are not allowed in a
+/// URI, so the placeholders are resolved to a reserved host before validation,
+/// the way the API serves them. `None` when the object holds no placeholder.
+fn resolve_url_placeholders(value: &serde_json::Value) -> Option<serde_json::Value> {
+    let text = serde_json::to_string(value).ok()?;
+    if !text.contains("${") {
+        return None;
+    }
+    let text = text
+        .replace("${STAC_BASE_URL}", "https://stac.example.org")
+        .replace("${S3_BASE_URL}", "https://stac.example.org/s3");
+    serde_json::from_str(&text).ok()
+}
+
+/// Validators for the STAC core object schemas and the vendored extensions
+struct StacSchemas {
+    catalog: jsonschema::Validator,
+    collection: jsonschema::Validator,
+    item: jsonschema::Validator,
+    extensions: HashMap<&'static str, jsonschema::Validator>,
+}
+
+impl StacSchemas {
+    fn load() -> Result<Self> {
+        let build = |uri: &str| -> Result<jsonschema::Validator> {
+            let (_, text) = VENDORED_SCHEMAS.iter().find(|(u, _)| *u == uri)
+                .with_context(|| format!("schema {} is not vendored", uri))?;
+            jsonschema::options()
+                .with_draft(jsonschema::Draft::Draft7)
+                .with_retriever(VendoredRetriever)
+                .build(&serde_json::from_str(text)?)
+                .map_err(|e| anyhow::anyhow!("schema {}: {}", uri, e))
+        };
+        let base = "https://schemas.stacspec.org/v1.1.0";
+        let mut extensions = HashMap::new();
+        for (uri, _) in VENDORED_SCHEMAS.iter().filter(|(u, _)| u.starts_with("https://stac-extensions.github.io/")) {
+            extensions.insert(*uri, build(uri)?);
+        }
+        Ok(StacSchemas {
+            catalog: build(&format!("{}/catalog-spec/json-schema/catalog.json", base))?,
+            collection: build(&format!("{}/collection-spec/json-schema/collection.json", base))?,
+            item: build(&format!("{}/item-spec/json-schema/item.json", base))?,
+            extensions,
+        })
+    }
+
+    /// Every schema failure of a catalog, collection or item: its core schema
+    /// and each extension it declares, one error per failing JSON path
+    fn issues(&self, value: &serde_json::Value) -> Vec<ValidationIssue> {
+        let resolved = resolve_url_placeholders(value);
+        let value = resolved.as_ref().unwrap_or(value);
+        let id = value["id"].as_str().unwrap_or_default().to_string();
+        let issue = |schema: &str, path: String, message: String| {
+            let mut message = format!("{} schema: {}", schema, message);
+            if message.len() > 300 {
+                let cut = (0..=300).rev().find(|&i| message.is_char_boundary(i)).unwrap_or(0);
+                message.truncate(cut);
+                message.push('…');
+            }
+            ValidationIssue {
+                item_id: id.clone(),
+                severity: "error".to_string(),
+                message: format!("{} (at {})", message, if path.is_empty() { "/" } else { &path }),
+                check: Some(CheckKind::SchemaInvalid),
+                json_path: Some(path),
+                ..Default::default()
+            }
+        };
+        let core = match value["type"].as_str() {
+            Some("Catalog") => &self.catalog,
+            Some("Collection") => &self.collection,
+            Some("Feature") => &self.item,
+            other => return vec![issue("STAC", "/type".into(), format!("unknown object type {:?}", other))],
+        };
+        let mut issues: Vec<ValidationIssue> = core.iter_errors(value)
+            .map(|e| issue("STAC 1.1.0", e.instance_path.to_string(), e.to_string()))
+            .collect();
+        for uri in value["stac_extensions"].as_array().into_iter().flatten().filter_map(|u| u.as_str()) {
+            match self.extensions.get(uri) {
+                Some(validator) => issues.extend(validator.iter_errors(value)
+                    .map(|e| issue(uri, e.instance_path.to_string(), e.to_string()))),
+                None => issues.push(issue(uri, "/stac_extensions".into(), "extension schema is not vendored".into())),
+            }
+        }
+        issues
+    }
+}
+
 /// Create a STAC Item from metadata with all files as assets
 /// This creates STAC 1.1.0 compliant items with:
 /// - Item-level geometry in WGS84 (combined extent of all files)
@@ -2205,7 +2530,7 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str, coll
         };
 
         let mut asset = serde_json::json!({
-            "href": format!("{}/archives/{}", s3_base_url, archive),
+            "href": s3_href(s3_base_url, &format!("archives/{}", archive)),
             "type": media_type,
             "title": format!("{} complete archive", item.code),
             "roles": ["data", "archive"]
@@ -2254,12 +2579,12 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str, coll
         // This preserves subdirectory structure within the item folder
         let rel_path_from_folder = if let Some(ref folder_path) = item.folder_path {
             file_info.path.strip_prefix(folder_path)
-                .map(|p| p.to_string_lossy().to_string())
+                .map(|p| p.components().map(|c| c.as_os_str().to_string_lossy()).collect::<Vec<_>>().join("/"))
                 .unwrap_or_else(|_| filename.clone())
         } else {
             filename.clone()
         };
-        let href = format!("{}/assets/{}/{}", s3_base_url, item.code, rel_path_from_folder);
+        let href = s3_href(s3_base_url, &format!("assets/{}/{}", item.code, rel_path_from_folder));
         let mime_type = get_mime_type(&file_info.path);
 
         let roles = vec![asset_role(&filename)];
@@ -2440,6 +2765,15 @@ fn create_stac_collection(
         .collect();
     sources.sort_unstable();
 
+    // A summary must list at least one value, so empty ones are left out
+    let mut summaries = serde_json::Map::new();
+    if !processing_levels.is_empty() {
+        summaries.insert("processing_level".to_string(), serde_json::json!(processing_levels));
+    }
+    if !sources.is_empty() {
+        summaries.insert("source".to_string(), serde_json::json!(sources));
+    }
+
     let providers = collection_providers(
         &catalog_config.providers,
         items.iter().filter_map(|i| i.source.as_deref()),
@@ -2464,10 +2798,7 @@ fn create_stac_collection(
             "spatial": { "bbox": spatial_bbox },
             "temporal": { "interval": temporal_interval }
         },
-        "summaries": {
-            "processing_level": processing_levels,
-            "source": sources
-        },
+        "summaries": summaries,
         "links": [
             {
                 "rel": "self",
@@ -2589,7 +2920,7 @@ fn generate_catalog(
                     item_id: item.code.clone(),
                     severity: "warning".to_string(),
                     message: "Missing geometry".to_string(),
-                    date_kind: None,
+                    ..Default::default()
                 });
             }
             if item.archive_file.is_none() && !item.is_single_file {
@@ -2597,7 +2928,7 @@ fn generate_catalog(
                     item_id: item.code.clone(),
                     severity: "warning".to_string(),
                     message: "No archive file mapped".to_string(),
-                    date_kind: None,
+                    ..Default::default()
                 });
             }
             if item.files.is_empty() {
@@ -2605,7 +2936,7 @@ fn generate_catalog(
                     item_id: item.code.clone(),
                     severity: "warning".to_string(),
                     message: "No files found".to_string(),
-                    date_kind: None,
+                    ..Default::default()
                 });
             }
             let csv_date = |d: &Option<String>| d.as_deref().and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok());
@@ -2616,6 +2947,7 @@ fn generate_catalog(
                     severity: "warning".to_string(),
                     message: date_issue.message(),
                     date_kind: Some(date_issue.kind),
+                    ..Default::default()
                 });
             }
             if let Some(src) = item.source.as_deref().filter(|s| !s.trim().is_empty()) {
@@ -2624,10 +2956,13 @@ fn generate_catalog(
                         item_id: item.code.clone(),
                         severity: "warning".to_string(),
                         message: format!("Source / Operator '{}' has no producer mapping", src),
-                        date_kind: None,
+                        ..Default::default()
                     });
                 }
             }
+
+            item_issues.extend(empty_description_issue(&stac_item));
+            item_issues.extend(format_issue(&stac_item, item.format.as_deref()));
 
             item_pb.inc(1);
             (item, stac_item, asset_count, item_issues)
@@ -2730,7 +3065,7 @@ fn generate_catalog(
         link_obj.insert("rel".to_string(), serde_json::json!(link.rel));
         // Resolve href: use href_suffix (relative to s3_base_url, as asset hrefs are) or absolute href
         if let Some(ref suffix) = link.href_suffix {
-            link_obj.insert("href".to_string(), serde_json::json!(format!("{}{}", s3_base_url, suffix)));
+            link_obj.insert("href".to_string(), serde_json::json!(s3_href(s3_base_url, suffix)));
         } else if let Some(ref href) = link.href {
             link_obj.insert("href".to_string(), serde_json::json!(href));
         }
@@ -2804,6 +3139,17 @@ fn generate_catalog(
         output_dir.join("collections.json"),
         serde_json::to_string_pretty(&collections_list)?,
     )?;
+
+    issues.extend(duplicate_data_issues(&all_items));
+
+    // Check the written catalog, collections and items against the vendored STAC schemas
+    let schemas = StacSchemas::load()?;
+    issues.extend(schemas.issues(&catalog));
+    for collection in &stac_collections {
+        issues.extend(empty_description_issue(collection));
+        issues.extend(schemas.issues(collection));
+    }
+    issues.extend(all_items.par_iter().flat_map_iter(|item| schemas.issues(item)).collect::<Vec<_>>());
 
     // Compute quality metrics
     let num_items = all_items.len();
@@ -3924,10 +4270,12 @@ fn main() -> Result<()> {
 
             // Add validation issues from generate_catalog (skip ones we already track)
             for issue in &issues {
-                // Skip issues we already track in the quality report above
+                // Skip issues we already track in the quality report above, and schema
+                // failures, which the catalog checks summary lists per item
                 if issue.message == "Missing geometry"
                     || issue.message == "No archive file mapped"
                     || issue.message == "No files found"
+                    || issue.check == Some(CheckKind::SchemaInvalid)
                 {
                     continue;
                 }
@@ -4009,6 +4357,17 @@ fn main() -> Result<()> {
                 warn!("║        ITEM DATES DISAGREE WITH THEIR FILES OR INVERT        ║");
                 warn!("╚══════════════════════════════════════════════════════════════╝");
                 for line in &date_lines {
+                    warn!("{}", line);
+                }
+            }
+
+            let check_lines = check_summary_lines(&issues);
+            if !check_lines.is_empty() {
+                warn!("");
+                warn!("╔══════════════════════════════════════════════════════════════╗");
+                warn!("║                   CATALOG CHECKS REPORT ISSUES               ║");
+                warn!("╚══════════════════════════════════════════════════════════════╝");
+                for line in &check_lines {
                     warn!("{}", line);
                 }
             }
@@ -5308,6 +5667,26 @@ mod tests {
     }
 
     #[test]
+    fn asset_hrefs_percent_encode_each_path_segment() {
+        let mut item: ItemMetadata = serde_json::from_value(serde_json::json!({
+            "code": "99Za02",
+            "continued": false,
+            "collection_id": "kites",
+            "archive_file": "Kite flights #1.zip",
+            "files": [{ "path": "/data/99Za02/sub dir/Kite flight #1.tif", "size": 10, "bbox": null, "geometry": null }],
+        })).unwrap();
+        item.folder_path = Some(PathBuf::from("/data/99Za02"));
+        let stac = create_stac_item(&item, "${STAC_BASE_URL}", "${S3_BASE_URL}", &HashMap::new(), &HashMap::new(), &HashMap::new());
+
+        let hrefs: Vec<&str> = stac["assets"].as_object().unwrap().values().map(|a| a["href"].as_str().unwrap()).collect();
+        assert!(hrefs.contains(&"${S3_BASE_URL}/archives/Kite%20flights%20%231.zip"), "{:?}", hrefs);
+        assert!(hrefs.contains(&"${S3_BASE_URL}/assets/99Za02/sub%20dir/Kite%20flight%20%231.tif"), "{:?}", hrefs);
+
+        let issues = StacSchemas::load().unwrap().issues(&stac);
+        assert!(!issues.iter().any(|i| i.message.contains("iri-reference")), "{:?}", issues);
+    }
+
+    #[test]
     fn sidecar_and_descriptor_files_take_the_metadata_role() {
         for name in [
             "StationFactsheet_03_WindVane_A12345.pdf",
@@ -5687,12 +6066,13 @@ mod tests {
             severity: "warning".to_string(),
             message: format!("{} message", item),
             date_kind: Some(kind),
+            ..Default::default()
         };
         let issues = vec![
             issue("90Xa01", DateIssueKind::StartAfterEnd),
             issue("90Xa01", DateIssueKind::EndDiffers),
             issue("90Xa02", DateIssueKind::EndDiffers),
-            ValidationIssue { item_id: "90Xa03".into(), severity: "warning".into(), message: "Missing geometry".into(), date_kind: None },
+            ValidationIssue { item_id: "90Xa03".into(), severity: "warning".into(), message: "Missing geometry".into(), ..Default::default() },
         ];
 
         let lines = date_summary_lines(&issues);
@@ -5749,5 +6129,112 @@ links:
         assert_eq!(link("cite-as").unwrap()["href"], "https://doi.org/10.1234/example.5678");
         assert_eq!(link("license").unwrap()["href"], "https://creativecommons.org/licenses/by/4.0/");
         assert!(link("about").is_none(), "only the licence is taken from the catalog links");
+    }
+
+    fn data_item(id: &str, files: &[(&str, &str)]) -> serde_json::Value {
+        let assets: serde_json::Map<String, serde_json::Value> = files.iter().map(|(name, checksum)| {
+            (name.to_string(), serde_json::json!({
+                "href": format!("/s3/assets/{}/{}", id, name),
+                "roles": ["data"],
+                "file:checksum": format!("1220{}", checksum),
+            }))
+        }).collect();
+        serde_json::json!({ "type": "Feature", "id": id, "assets": assets })
+    }
+
+    #[test]
+    fn items_with_equal_data_checksums_give_one_issue_naming_both() {
+        let files = [("tile-0-0.tif", "aa"), ("tile-0-1.tif", "bb")];
+        let items = [data_item("90Ka06", &files), data_item("90Ka07", &files), data_item("90Ka08", &[("tile-0-0.tif", "cc")])];
+
+        let issues = duplicate_data_issues(&items);
+
+        assert_eq!(issues.len(), 1);
+        assert!(issues[0].message.contains("90Ka06") && issues[0].message.contains("90Ka07"));
+        assert!(!issues[0].message.contains("90Ka08"));
+        assert_eq!(issues[0].check, Some(CheckKind::DuplicateData));
+    }
+
+    #[test]
+    fn bundle_00_sharing_its_childs_files_is_not_a_duplicate() {
+        let files = [("frame-001.jpg", "aa"), ("frame-002.jpg", "bb")];
+        let items = [data_item("90Ka00", &files), data_item("90Ka01", &files)];
+
+        assert!(duplicate_data_issues(&items).is_empty());
+    }
+
+    #[test]
+    fn shared_tile_schemes_and_a_single_frame_are_not_duplicates() {
+        let items = [
+            data_item("90Ka01", &[("tile-0-0.tif", "aa"), ("tile-scheme.shp", "ss")]),
+            data_item("90Ka02", &[("tile-0-0.tif", "bb"), ("tile-scheme.shp", "ss")]),
+            data_item("90Ka03", &[("tile-scheme.shp", "ss")]),
+            data_item("90Kb01", &[("outline.shp", "ff")]),
+            data_item("90Kb02", &[("outline.shp", "ff")]),
+        ];
+
+        assert!(duplicate_data_issues(&items).is_empty());
+    }
+
+    #[test]
+    fn format_matching_no_data_file_extension_is_reported() {
+        let item = data_item("90Ka01", &[("frame-001.png", "aa"), ("frame-002.png", "bb")]);
+
+        let issue = format_issue(&item, Some("JPG")).expect("format mismatch");
+        assert!(issue.message.contains("JPG") && issue.message.contains("png"));
+        assert_eq!(issue.check, Some(CheckKind::FormatMismatch));
+        assert!(format_issue(&item, Some("PNG")).is_none());
+        assert!(format_issue(&data_item("90Ka02", &[("a.jpeg", "aa")]), Some("JPG")).is_none());
+        assert!(format_issue(&data_item("90Ka03", &[("a.tiff", "aa")]), Some("TIF")).is_none());
+    }
+
+    #[test]
+    fn empty_descriptions_are_reported_by_kind() {
+        let collection = serde_json::json!({ "type": "Collection", "id": "kites", "description": "" });
+        let item = serde_json::json!({ "type": "Feature", "id": "90Ka01", "properties": { "description": " " } });
+        let described = serde_json::json!({ "type": "Feature", "id": "90Ka02", "properties": { "description": "Kite flights" } });
+
+        assert_eq!(empty_description_issue(&collection).unwrap().severity, "error");
+        assert_eq!(empty_description_issue(&item).unwrap().severity, "warning");
+        assert!(empty_description_issue(&described).is_none());
+    }
+
+    #[test]
+    fn written_collection_with_empty_description_fails_the_vendored_schema() {
+        let dir = scratch_dir("schema-collection");
+        let def = CollectionDef { id: "kites".into(), title: "Kites".into(), description: String::new() };
+        let catalog_config = CatalogConfig {
+            id: "kite-catalog".into(),
+            title: "Kite catalog".into(),
+            description: "Kite flights".into(),
+            license: "CC-BY-4.0".into(),
+            keywords: vec![],
+            providers: vec![],
+            links: vec![],
+            default_bbox: vec![7.0, 46.0, 8.0, 47.0],
+            citation: None,
+        };
+        let collection = create_stac_collection(&def, &[], "http://localhost:3000", &catalog_config, &HashMap::new());
+        let path = dir.join("kites.json");
+        fs::write(&path, serde_json::to_string_pretty(&collection).unwrap()).unwrap();
+        let written: serde_json::Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+
+        let issues = StacSchemas::load().unwrap().issues(&written);
+
+        assert_eq!(issues.len(), 1, "{:?}", issues);
+        assert_eq!(issues[0].severity, "error");
+        assert_eq!(issues[0].item_id, "kites");
+        assert_eq!(issues[0].json_path.as_deref(), Some("/description"));
+
+        let placeholders = serde_json::json!({ "type": "Catalog", "id": "kite-catalog", "stac_version": "1.1.0", "description": "Kite flights",
+            "links": [{ "rel": "root", "href": "${STAC_BASE_URL}/stac" }, { "rel": "data", "href": "${S3_BASE_URL}/assets/a kite.jpg" }] });
+        let placeholder_issues = StacSchemas::load().unwrap().issues(&placeholders);
+        assert_eq!(placeholder_issues.len(), 1, "{:?}", placeholder_issues);
+        assert_eq!(placeholder_issues[0].json_path.as_deref(), Some("/links/1/href"));
+
+        let described = serde_json::json!({ "description": "Kite flights" });
+        let mut valid = written.clone();
+        valid["description"] = described["description"].clone();
+        assert!(StacSchemas::load().unwrap().issues(&valid).is_empty());
     }
 }

@@ -17,7 +17,7 @@ required-features = ["generator"]
 
 [features]
 default = []
-generator = ["dep:csv", "dep:gdal", "dep:las", "dep:zip", "dep:regex", "dep:rayon", "dep:indicatif", "dep:walkdir", "dep:reqwest", "dep:sha2", "dep:xxhash-rust", "dep:serde_yaml", "dep:calamine"]
+generator = ["dep:csv", "dep:gdal", "dep:las", "dep:zip", "dep:regex", "dep:rayon", "dep:indicatif", "dep:walkdir", "dep:reqwest", "dep:sha2", "dep:xxhash-rust", "dep:serde_yaml", "dep:calamine", "dep:jsonschema", "dep:percent-encoding"]
 
 [dependencies]
 # Web framework
@@ -70,6 +70,8 @@ sha2 = { version = "0.10", optional = true }
 xxhash-rust = { version = "0.8", features = ["xxh64"], optional = true }
 serde_yaml = { version = "0.9", optional = true }
 calamine = { version = "0.26", optional = true }
+jsonschema = { version = "0.33", default-features = false, optional = true }
+percent-encoding = { version = "2", optional = true }
 
 [profile.release]
 lto = true
