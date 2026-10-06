@@ -69,22 +69,22 @@
   "links": [
     {
       "rel": "self",
-      "href": "https://blatten-data.epfl.ch/stac/collections/radar",
+      "href": "${STAC_BASE_URL}/stac/collections/radar",
       "type": "application/json"
     },
     {
       "rel": "root",
-      "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+      "href": "${STAC_BASE_URL}/stac",
       "type": "application/json"
     },
     {
       "rel": "parent",
-      "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+      "href": "${STAC_BASE_URL}/stac",
       "type": "application/json"
     },
     {
       "rel": "items",
-      "href": "https://blatten-data.epfl.ch/stac/collections/radar/items",
+      "href": "${STAC_BASE_URL}/stac/collections/radar/items",
       "type": "application/geo+json"
     }
   ],

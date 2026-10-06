@@ -67,22 +67,22 @@
   "links": [
     {
       "rel": "self",
-      "href": "https://blatten-data.epfl.ch/stac/collections/thermal-image",
+      "href": "${STAC_BASE_URL}/stac/collections/thermal-image",
       "type": "application/json"
     },
     {
       "rel": "root",
-      "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+      "href": "${STAC_BASE_URL}/stac",
       "type": "application/json"
     },
     {
       "rel": "parent",
-      "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+      "href": "${STAC_BASE_URL}/stac",
       "type": "application/json"
     },
     {
       "rel": "items",
-      "href": "https://blatten-data.epfl.ch/stac/collections/thermal-image/items",
+      "href": "${STAC_BASE_URL}/stac/collections/thermal-image/items",
       "type": "application/geo+json"
     }
   ],

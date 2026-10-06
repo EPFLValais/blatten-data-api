@@ -52,6 +52,17 @@ struct GenConfig {
     product_type_strip: HashMap<String, Vec<String>>,
     #[serde(default)]
     exclude_items: Vec<String>,
+    /// `Source / Operator` value in the CSV → organisation that produced the data
+    #[serde(default)]
+    producers: HashMap<String, ProducerConfig>,
+}
+
+/// Organisation credited with the `producer` role for items whose source maps to it
+#[derive(Debug, Deserialize)]
+struct ProducerConfig {
+    name: String,
+    #[serde(default)]
+    url: Option<String>,
 }
 
 /// Typed folder mapping entry — maps an item code to one or more data folders
@@ -77,7 +88,43 @@ struct CatalogConfig {
     keywords: Vec<String>,
     default_bbox: Vec<f64>,
     providers: Vec<ProviderConfig>,
+    #[serde(default)]
+    citation: Option<CitationConfig>,
     links: Vec<LinkConfig>,
+}
+
+/// How the dataset is cited: the bare DOI and the recommended reference text
+#[derive(Debug, Deserialize)]
+struct CitationConfig {
+    doi: String,
+    text: String,
+}
+
+impl CitationConfig {
+    fn doi_url(&self) -> String {
+        format!("https://doi.org/{}", self.doi)
+    }
+
+    fn cite_as_link(&self) -> serde_json::Value {
+        serde_json::json!({
+            "rel": "cite-as",
+            "href": self.doi_url(),
+            "title": "Citation and permanent link"
+        })
+    }
+}
+
+impl CatalogConfig {
+    /// The catalog's `rel: license` link, which collections repeat
+    fn license_link(&self) -> Option<serde_json::Value> {
+        self.links.iter().find(|l| l.rel == "license").map(|l| {
+            let mut link = serde_json::json!({ "rel": "license", "href": l.href });
+            if let Some(ref title) = l.title {
+                link["title"] = serde_json::json!(title);
+            }
+            link
+        })
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -191,6 +238,82 @@ fn discover_factsheets(dir: &Path) -> HashMap<String, PathBuf> {
 }
 
 const STAC_VERSION: &str = "1.1.0";
+const SCIENTIFIC_EXTENSION: &str = "https://stac-extensions.github.io/scientific/v1.0.0/schema.json";
+
+/// The `producer` providers for an item, from its `Source / Operator` value.
+fn item_providers(source: Option<&str>, producers: &HashMap<String, ProducerConfig>) -> Vec<serde_json::Value> {
+    source
+        .and_then(|s| producers.get(s.trim()))
+        .map(producer_json)
+        .into_iter()
+        .collect()
+}
+
+fn producer_json(producer: &ProducerConfig) -> serde_json::Value {
+    let mut json = serde_json::json!({
+        "name": producer.name,
+        "roles": ["producer"],
+    });
+    if let Some(ref url) = producer.url {
+        json["url"] = serde_json::json!(url);
+    }
+    json
+}
+
+/// A collection's providers: the catalog's own, then each distinct producer of its items.
+fn collection_providers<'a>(
+    catalog_providers: &[ProviderConfig],
+    sources: impl IntoIterator<Item = &'a str>,
+    producers: &HashMap<String, ProducerConfig>,
+) -> Vec<serde_json::Value> {
+    let mut providers: Vec<serde_json::Value> = catalog_providers.iter().map(|p| {
+        serde_json::json!({
+            "name": p.name,
+            "roles": p.roles,
+            "url": p.url
+        })
+    }).collect();
+    let mut seen = std::collections::HashSet::new();
+    for source in sources {
+        for producer in item_providers(Some(source), producers) {
+            if seen.insert(producer["name"].as_str().unwrap_or_default().to_string()) {
+                providers.push(producer);
+            }
+        }
+    }
+    providers
+}
+
+/// Schema URL of each STAC extension the generator writes, keyed by the field prefix it owns.
+const EXTENSION_SCHEMAS: &[(&str, &str)] = &[
+    ("file:", "https://stac-extensions.github.io/file/v2.1.0/schema.json"),
+    ("proj:", "https://stac-extensions.github.io/projection/v2.0.0/schema.json"),
+    ("sci:", SCIENTIFIC_EXTENSION),
+];
+
+/// Timestamps extension fields; `created` and `updated` are core common metadata.
+const TIMESTAMPS_FIELDS: &[&str] = &["published", "expires", "unpublished"];
+const TIMESTAMPS_SCHEMA: &str = "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json";
+
+/// `stac_extensions` for an Item or Collection: the schema of each extension whose fields
+/// appear at its top level, in its `properties`, or in any of its assets.
+fn stac_extensions(object: &serde_json::Value) -> Vec<String> {
+    let assets = object["assets"].as_object().into_iter().flat_map(|a| a.values());
+    let keys: Vec<&str> = [object, &object["properties"]].into_iter()
+        .chain(assets)
+        .filter_map(serde_json::Value::as_object)
+        .flat_map(|map| map.keys().map(String::as_str))
+        .collect();
+
+    let mut extensions: Vec<String> = EXTENSION_SCHEMAS.iter()
+        .filter(|(prefix, _)| keys.iter().any(|k| k.starts_with(prefix)))
+        .map(|(_, schema)| schema.to_string())
+        .collect();
+    if keys.iter().any(|k| TIMESTAMPS_FIELDS.contains(k)) {
+        extensions.push(TIMESTAMPS_SCHEMA.to_string());
+    }
+    extensions
+}
 
 /// Strip leading "prefix - " from Excel field values.
 /// Handles patterns like "14 - Helimap", "D - Orthophoto", "a - Overview", "1 - 23.05."
@@ -271,12 +394,14 @@ struct Cli {
     #[arg(short, long, default_value = "stac")]
     output: PathBuf,
 
-    /// Base URL for STAC links
-    #[arg(short, long, default_value = "https://blatten-data.epfl.ch")]
+    /// Base URL for STAC links. The default placeholder is replaced by the
+    /// API's STAC_BASE_URL when it loads the catalog.
+    #[arg(short, long, default_value = "${STAC_BASE_URL}")]
     base_url: String,
 
-    /// S3 base URL for file assets
-    #[arg(long, default_value = "/s3")]
+    /// S3 base URL for file assets. The default placeholder is replaced by the
+    /// API's S3_BASE_URL when it loads the catalog.
+    #[arg(long, default_value = "${S3_BASE_URL}")]
     s3_base_url: String,
 
     /// Data directory containing provider folders (auto-discovered).
@@ -579,7 +704,8 @@ impl DataManifest {
 // Geometry Cache
 // =============================================================================
 
-const GEOMETRY_CACHE_VERSION: u32 = 1;
+// Bumped when extraction changes what a cached entry would hold, so stale entries are recomputed
+const GEOMETRY_CACHE_VERSION: u32 = 2;
 
 /// Cached geometry result for a single file
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -892,20 +1018,77 @@ fn transform_to_wgs84(minx: f64, miny: f64, maxx: f64, maxy: f64, epsg: i32) -> 
     ])
 }
 
+/// EPSG code of a CRS itself, not of a CRS nested inside it (such as the base geographic
+/// CRS of a projected one). Reads GDAL's root authority, falling back to the WKT.
+fn epsg_of_spatial_ref(srs: &SpatialRef) -> Option<i32> {
+    if srs.auth_name().as_deref() == Some("EPSG") {
+        if let Ok(code) = srs.auth_code() {
+            return Some(code);
+        }
+    }
+    extract_epsg_from_crs(&srs.to_wkt().ok()?).and_then(|s| s.strip_prefix("EPSG:").and_then(|n| n.parse().ok()))
+}
+
+/// Whether a CRS string is WKT: a root keyword followed by its bracketed node
+fn is_wkt(crs: &str) -> bool {
+    let crs = crs.trim_start();
+    match crs.find('[') {
+        Some(keyword_len) if keyword_len > 0 => {
+            crs[..keyword_len].chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
+        }
+        _ => false,
+    }
+}
+
+/// EPSG code in the `ID[...]` (WKT2) or `AUTHORITY[...]` (WKT1) node directly under the root
+/// node of a WKT string. Nested nodes (base CRS, datum, method, units) carry ids of their own,
+/// which are not the code of the CRS. `None` when the root has no id.
+fn wkt_root_epsg(wkt: &str) -> Option<String> {
+    let id_node = regex::Regex::new(r#"^\s*(?:ID|AUTHORITY)\[\s*"EPSG"\s*,\s*"?(\d+)"?"#).ok()?;
+    let mut depth = 0usize;
+    let mut in_quotes = false;
+    let mut node_start = 0usize;
+    let mut found = None;
+    for (i, c) in wkt.char_indices() {
+        match c {
+            '"' => in_quotes = !in_quotes,
+            _ if in_quotes => {}
+            '[' | '(' => {
+                if depth == 1 {
+                    if let Some(caps) = id_node.captures(&wkt[node_start..]) {
+                        found = Some(format!("EPSG:{}", &caps[1]));
+                    }
+                }
+                depth += 1;
+                if depth == 1 {
+                    node_start = i + 1;
+                }
+            }
+            ']' | ')' => depth = depth.saturating_sub(1),
+            ',' if depth == 1 => node_start = i + 1,
+            _ => {}
+        }
+    }
+    found
+}
+
 /// Extract EPSG code from WKT or other CRS representation
 fn extract_epsg_from_crs(crs: &str) -> Option<String> {
-    // Look for EPSG code patterns
-    let patterns = [
-        r#"EPSG[",:\s]+(\d+)"#,
-        r#"AUTHORITY\["EPSG","(\d+)"\]"#,
-        r#"urn:ogc:def:crs:EPSG::(\d+)"#,
-    ];
-
-    for pattern in &patterns {
-        if let Ok(re) = regex::Regex::new(pattern) {
-            if let Some(caps) = re.captures(crs) {
-                if let Some(code) = caps.get(1) {
-                    return Some(format!("EPSG:{}", code.as_str()));
+    if is_wkt(crs) {
+        if let Some(code) = wkt_root_epsg(crs) {
+            return Some(code);
+        }
+    } else {
+        let patterns = [
+            r#"EPSG[",:\s]+(\d+)"#,
+            r#"urn:ogc:def:crs:EPSG::(\d+)"#,
+        ];
+        for pattern in &patterns {
+            if let Ok(re) = regex::Regex::new(pattern) {
+                if let Some(caps) = re.captures(crs) {
+                    if let Some(code) = caps.get(1) {
+                        return Some(format!("EPSG:{}", code.as_str()));
+                    }
                 }
             }
         }
@@ -957,12 +1140,7 @@ fn extract_geotiff_geometry(path: &Path, crs_overrides: &[CrsOverride]) -> (Opti
     let source_epsg: Option<i32> = if let Some(ovr) = file_override {
         ovr.crs_epsg
     } else if let Ok(spatial_ref) = dataset.spatial_ref() {
-        if let Ok(wkt) = spatial_ref.to_wkt() {
-            extract_epsg_from_crs(&wkt)
-                .and_then(|s| s.strip_prefix("EPSG:").and_then(|n| n.parse().ok()))
-        } else {
-            None
-        }
+        epsg_of_spatial_ref(&spatial_ref)
     } else if looks_like_lv95(minx, miny, maxx, maxy) {
         Some(2056) // Swiss LV95
     } else {
@@ -1030,22 +1208,10 @@ fn extract_geotiff_geometry(path: &Path, crs_overrides: &[CrsOverride]) -> (Opti
             }
         } else {
             // Try extracting EPSG from WKT
-            if let Ok(wkt) = spatial_ref.to_wkt() {
-                if let Some(epsg_str) = extract_epsg_from_crs(&wkt) {
-                    if let Ok(epsg) = epsg_str.strip_prefix("EPSG:").unwrap_or("").parse::<i32>() {
-                        if epsg == 4326 {
-                            (Some(vec![minx, miny, maxx, maxy]), Some(4326))
-                        } else {
-                            (transform_to_wgs84(minx, miny, maxx, maxy, epsg), Some(epsg))
-                        }
-                    } else {
-                        (None, None)
-                    }
-                } else {
-                    (None, None)
-                }
-            } else {
-                (None, None)
+            match epsg_of_spatial_ref(&spatial_ref) {
+                Some(4326) => (Some(vec![minx, miny, maxx, maxy]), Some(4326)),
+                Some(epsg) => (transform_to_wgs84(minx, miny, maxx, maxy, epsg), Some(epsg)),
+                None => (None, None),
             }
         };
 
@@ -1877,7 +2043,7 @@ fn date_summary_lines(issues: &[ValidationIssue]) -> Vec<String> {
 /// This creates STAC 1.1.0 compliant items with:
 /// - Item-level geometry in WGS84 (combined extent of all files)
 /// - Per-asset geometry using Projection Extension (LV95 when available)
-fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str, collection_titles: &HashMap<String, String>, product_type_strip: &HashMap<String, Vec<String>>) -> serde_json::Value {
+fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str, collection_titles: &HashMap<String, String>, product_type_strip: &HashMap<String, Vec<String>>, producers: &HashMap<String, ProducerConfig>) -> serde_json::Value {
     let collection_id = item.collection_id.as_deref().unwrap_or("unknown");
 
     // Build datetime fields
@@ -1991,6 +2157,10 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str, coll
     if let Some(ref src) = item.source {
         properties["blatten:source"] = serde_json::json!(src);
     }
+    let providers = item_providers(item.source.as_deref(), producers);
+    if !providers.is_empty() {
+        properties["providers"] = serde_json::json!(providers);
+    }
     if let Some(level) = item.processing_level {
         properties["blatten:processing_level"] = serde_json::json!(level);
     }
@@ -2023,7 +2193,6 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str, coll
 
     // Build assets - now includes all individual files
     let mut assets = serde_json::Map::new();
-    let mut has_proj_extension = false;
 
     // Add archive asset if available
     if let Some(ref archive) = item.archive_file {
@@ -2093,11 +2262,7 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str, coll
         let href = format!("{}/assets/{}/{}", s3_base_url, item.code, rel_path_from_folder);
         let mime_type = get_mime_type(&file_info.path);
 
-        let roles = if filename.starts_with("StationFactsheet_") {
-            vec!["metadata"]
-        } else {
-            vec!["data"]
-        };
+        let roles = vec![asset_role(&filename)];
         let mut asset = serde_json::json!({
             "href": href,
             "type": mime_type,
@@ -2124,7 +2289,6 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str, coll
         if let Some(ref bbox_lv95) = file_info.bbox_lv95 {
             asset["proj:code"] = serde_json::json!("EPSG:2056");
             asset["proj:bbox"] = serde_json::json!(bbox_lv95);
-            has_proj_extension = true;
 
             if let Some(ref geometry_lv95) = file_info.geometry_lv95 {
                 asset["proj:geometry"] = geometry_lv95.clone();
@@ -2153,24 +2317,15 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str, coll
         }),
         serde_json::json!({
             "rel": "root",
-            "href": format!("{}/stac/catalog.json", base_url),
+            "href": format!("{}/stac", base_url),
             "type": "application/json"
         }),
     ];
 
-    // Build stac_extensions list
-    let mut extensions = vec![
-        "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json".to_string(),
-        "https://stac-extensions.github.io/file/v2.1.0/schema.json".to_string(),
-    ];
-    if has_proj_extension {
-        extensions.push("https://stac-extensions.github.io/projection/v2.0.0/schema.json".to_string());
-    }
-
-    serde_json::json!({
+    let mut feature = serde_json::json!({
         "type": "Feature",
         "stac_version": STAC_VERSION,
-        "stac_extensions": extensions,
+        "stac_extensions": [],
         "id": item.code,
         "geometry": item.geometry,
         "bbox": item.bbox,
@@ -2178,11 +2333,29 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str, coll
         "links": links,
         "assets": assets,
         "collection": collection_id
-    })
+    });
+    feature["stac_extensions"] = serde_json::json!(stac_extensions(&feature));
+    feature
 }
 
 /// Get MIME type for a file extension
 /// Media types are IANA-registered; text formats with no registered type are `text/plain`.
+/// STAC role of a file asset: `metadata` for sidecar and descriptive files (station
+/// factsheets, GDAL `*.aux.xml` statistics, `*.tfw` world files, `*-scheme` tile layouts,
+/// `DEM_*.json` tile descriptors and the `Global_Lokal.txt` coordinate offset), `data`
+/// for everything else.
+fn asset_role(filename: &str) -> &'static str {
+    let lower = filename.to_lowercase();
+    let stem = Path::new(&lower).file_stem().and_then(|s| s.to_str()).unwrap_or("");
+    let is_metadata = filename.starts_with("StationFactsheet_")
+        || lower.ends_with(".aux.xml")
+        || lower.ends_with(".tfw")
+        || stem.ends_with("-scheme")
+        || (lower.starts_with("dem_") && lower.ends_with(".json"))
+        || lower == "global_lokal.txt";
+    if is_metadata { "metadata" } else { "data" }
+}
+
 fn get_mime_type(path: &Path) -> &'static str {
     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_lowercase();
     // GDAL PAM sidecars (`*.aux.xml`) are matched by full suffix before the bare extension
@@ -2217,6 +2390,7 @@ fn create_stac_collection(
     items: &[&ItemMetadata],
     base_url: &str,
     catalog_config: &CatalogConfig,
+    producers: &HashMap<String, ProducerConfig>,
 ) -> serde_json::Value {
     // Compute spatial extent using config default_bbox as fallback
     let bboxes: Vec<&Vec<f64>> = items.iter().filter_map(|i| i.bbox.as_ref()).collect();
@@ -2266,26 +2440,21 @@ fn create_stac_collection(
         .collect();
     sources.sort_unstable();
 
-    // Build providers from config
-    let providers: Vec<serde_json::Value> = catalog_config.providers.iter().map(|p| {
-        serde_json::json!({
-            "name": p.name,
-            "roles": p.roles,
-            "url": p.url
-        })
-    }).collect();
+    let providers = collection_providers(
+        &catalog_config.providers,
+        items.iter().filter_map(|i| i.source.as_deref()),
+        producers,
+    );
 
     // Build keywords from config + collection title
     let mut keywords: Vec<String> = catalog_config.keywords.clone();
     keywords.push(def.title.to_lowercase());
 
-    serde_json::json!({
+    let mut collection = serde_json::json!({
         "type": "Collection",
         "id": def.id,
         "stac_version": STAC_VERSION,
-        "stac_extensions": [
-            "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
-        ],
+        "stac_extensions": [],
         "title": def.title,
         "description": def.description,
         "license": catalog_config.license,
@@ -2307,12 +2476,12 @@ fn create_stac_collection(
             },
             {
                 "rel": "root",
-                "href": format!("{}/stac/catalog.json", base_url),
+                "href": format!("{}/stac", base_url),
                 "type": "application/json"
             },
             {
                 "rel": "parent",
-                "href": format!("{}/stac/catalog.json", base_url),
+                "href": format!("{}/stac", base_url),
                 "type": "application/json"
             },
             {
@@ -2322,7 +2491,18 @@ fn create_stac_collection(
             }
         ],
         "assets": {}
-    })
+    });
+
+    if let Some(ref citation) = catalog_config.citation {
+        collection["sci:doi"] = serde_json::json!(citation.doi);
+        collection["sci:citation"] = serde_json::json!(citation.text);
+        collection["links"].as_array_mut().unwrap().push(citation.cite_as_link());
+    }
+    if let Some(license) = catalog_config.license_link() {
+        collection["links"].as_array_mut().unwrap().push(license);
+    }
+    collection["stac_extensions"] = serde_json::json!(stac_extensions(&collection));
+    collection
 }
 
 /// Generate the complete STAC catalog
@@ -2393,7 +2573,7 @@ fn generate_catalog(
     let results: Vec<_> = items
         .par_iter()
         .map(|item| {
-            let stac_item = create_stac_item(item, base_url, s3_base_url, &coll_title_map, &config.product_type_strip);
+            let stac_item = create_stac_item(item, base_url, s3_base_url, &coll_title_map, &config.product_type_strip, &config.producers);
 
             // Count assets for stats
             let asset_count = stac_item
@@ -2438,6 +2618,16 @@ fn generate_catalog(
                     date_kind: Some(date_issue.kind),
                 });
             }
+            if let Some(src) = item.source.as_deref().filter(|s| !s.trim().is_empty()) {
+                if !config.producers.contains_key(src.trim()) {
+                    item_issues.push(ValidationIssue {
+                        item_id: item.code.clone(),
+                        severity: "warning".to_string(),
+                        message: format!("Source / Operator '{}' has no producer mapping", src),
+                        date_kind: None,
+                    });
+                }
+            }
 
             item_pb.inc(1);
             (item, stac_item, asset_count, item_issues)
@@ -2470,7 +2660,7 @@ fn generate_catalog(
                 .expect("Unknown collection");
 
             // Create collection JSON
-            let collection = create_stac_collection(def, coll_items, base_url, &config.catalog);
+            let collection = create_stac_collection(def, coll_items, base_url, &config.catalog, &config.producers);
             let collection_json = serde_json::to_string_pretty(&collection).unwrap();
 
             coll_pb.inc(1);
@@ -2515,7 +2705,7 @@ fn generate_catalog(
         }),
         serde_json::json!({
             "rel": "root",
-            "href": format!("{}/stac/catalog.json", base_url),
+            "href": format!("{}/stac", base_url),
             "type": "application/json"
         }),
     ];
@@ -2530,13 +2720,17 @@ fn generate_catalog(
         }));
     }
 
+    if let Some(ref citation) = config.catalog.citation {
+        catalog_links.push(citation.cite_as_link());
+    }
+
     // Add links from config (describedby, license, about, etc.)
     for link in &config.catalog.links {
         let mut link_obj = serde_json::Map::new();
         link_obj.insert("rel".to_string(), serde_json::json!(link.rel));
-        // Resolve href: use href_suffix (relative to base_url + s3_base_url) or absolute href
+        // Resolve href: use href_suffix (relative to s3_base_url, as asset hrefs are) or absolute href
         if let Some(ref suffix) = link.href_suffix {
-            link_obj.insert("href".to_string(), serde_json::json!(format!("{}{}{}", base_url, s3_base_url, suffix)));
+            link_obj.insert("href".to_string(), serde_json::json!(format!("{}{}", s3_base_url, suffix)));
         } else if let Some(ref href) = link.href {
             link_obj.insert("href".to_string(), serde_json::json!(href));
         }
@@ -2602,7 +2796,7 @@ fn generate_catalog(
             },
             {
                 "rel": "root",
-                "href": format!("{}/stac/catalog.json", base_url)
+                "href": format!("{}/stac", base_url)
             }
         ]
     });
@@ -5048,11 +5242,93 @@ fn extract_geometry_for_item_v2(
 mod tests {
     use super::*;
 
+    #[test]
+    fn extensions_list_only_the_fields_an_object_writes() {
+        let item = serde_json::json!({
+            "type": "Feature",
+            "properties": { "datetime": "2024-03-01T00:00:00Z", "created": "2024-03-02T00:00:00Z" },
+            "assets": { "harvest": { "href": "/a.csv", "file:size": 12 } }
+        });
+        assert_eq!(stac_extensions(&item), vec!["https://stac-extensions.github.io/file/v2.1.0/schema.json"]);
+
+        let collection = serde_json::json!({
+            "type": "Collection",
+            "sci:doi": "10.0000/orchard",
+            "published": "2024-04-01T00:00:00Z",
+            "assets": {}
+        });
+        assert_eq!(stac_extensions(&collection), vec![
+            "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+            "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json",
+        ]);
+
+        let projected = serde_json::json!({
+            "properties": {},
+            "assets": { "grove": { "proj:code": "EPSG:2056" } }
+        });
+        assert_eq!(stac_extensions(&projected), vec!["https://stac-extensions.github.io/projection/v2.0.0/schema.json"]);
+
+        assert!(stac_extensions(&serde_json::json!({ "assets": {} })).is_empty());
+    }
+
     fn scratch_dir(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("stac-gen-test-{}-{}", name, std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    fn link_href<'a>(value: &'a serde_json::Value, rel: &str) -> &'a str {
+        value["links"].as_array().unwrap().iter()
+            .find(|l| l["rel"] == rel)
+            .and_then(|l| l["href"].as_str())
+            .unwrap()
+    }
+
+    #[test]
+    fn default_urls_are_placeholders_the_api_substitutes() {
+        let cli = Cli::parse_from(["stac-gen"]);
+        assert_eq!(cli.base_url, "${STAC_BASE_URL}");
+        assert_eq!(cli.s3_base_url, "${S3_BASE_URL}");
+    }
+
+    #[test]
+    fn item_links_point_at_the_api_landing_page_and_collection() {
+        let item: ItemMetadata = serde_json::from_value(serde_json::json!({
+            "code": "99Za01",
+            "continued": false,
+            "collection_id": "kites",
+        })).unwrap();
+        let stac = create_stac_item(&item, "${STAC_BASE_URL}", "${S3_BASE_URL}", &HashMap::new(), &HashMap::new(), &HashMap::new());
+
+        assert_eq!(link_href(&stac, "root"), "${STAC_BASE_URL}/stac");
+        assert_eq!(link_href(&stac, "parent"), "${STAC_BASE_URL}/stac/collections/kites");
+        assert_eq!(link_href(&stac, "collection"), "${STAC_BASE_URL}/stac/collections/kites");
+        assert_eq!(link_href(&stac, "self"), "${STAC_BASE_URL}/stac/collections/kites/items/99Za01");
+    }
+
+    #[test]
+    fn sidecar_and_descriptor_files_take_the_metadata_role() {
+        for name in [
+            "StationFactsheet_03_WindVane_A12345.pdf",
+            "orthophoto_20250601-scheme.shp",
+            "orthophoto_20250601-scheme.dxf",
+            "orthophoto_20250601-0-0.tif.aux.xml",
+            "ORTHO_10cm_SAMPLE.tfw",
+            "DEM_20250601_50cmPP.json",
+            "Global_Lokal.txt",
+        ] {
+            assert_eq!(asset_role(name), "metadata", "{}", name);
+        }
+        for name in [
+            "orthophoto_20250601-0-0.tif",
+            "points_20250601.laz",
+            "levels.csv",
+            "readings.txt",
+            "summary.json",
+        ] {
+            assert_eq!(asset_role(name), "data", "{}", name);
+        }
     }
 
     #[test]
@@ -5096,6 +5372,76 @@ mod tests {
         assert!(!dir.join("notes.txt").exists());
         assert!(dir.join("sub").join("b.json").exists());
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    fn producer_map() -> HashMap<String, ProducerConfig> {
+        let mut map = HashMap::new();
+        map.insert("Kiln".to_string(), ProducerConfig { name: "Kiln Works AG".to_string(), url: Some("https://kiln.example/".to_string()) });
+        map.insert("Guild (Glaze)".to_string(), ProducerConfig { name: "Glaze Guild".to_string(), url: None });
+        map.insert("Guild (Clay)".to_string(), ProducerConfig { name: "Glaze Guild".to_string(), url: None });
+        map
+    }
+
+    #[test]
+    fn item_names_its_mapped_producer() {
+        let providers = item_providers(Some("Guild (Glaze)"), &producer_map());
+        assert_eq!(providers, vec![serde_json::json!({"name": "Glaze Guild", "roles": ["producer"]})]);
+
+        let providers = item_providers(Some("Kiln"), &producer_map());
+        assert_eq!(providers, vec![serde_json::json!({"name": "Kiln Works AG", "roles": ["producer"], "url": "https://kiln.example/"})]);
+    }
+
+    #[test]
+    fn item_without_mapped_source_has_no_producer() {
+        assert!(item_providers(Some("Unknown Potter"), &producer_map()).is_empty());
+        assert!(item_providers(None, &producer_map()).is_empty());
+    }
+
+    #[test]
+    fn collection_lists_catalog_providers_then_distinct_producers() {
+        let catalog = vec![
+            ProviderConfig { name: "Pottery Office".to_string(), roles: vec!["licensor".to_string(), "host".to_string()], url: "https://office.example/".to_string() },
+        ];
+        let providers = collection_providers(
+            &catalog,
+            ["Kiln", "Guild (Glaze)", "Kiln", "Guild (Clay)", "Unknown Potter"],
+            &producer_map(),
+        );
+        let names: Vec<&str> = providers.iter().map(|p| p["name"].as_str().unwrap()).collect();
+        assert_eq!(names, vec!["Pottery Office", "Kiln Works AG", "Glaze Guild"]);
+        assert_eq!(providers[0]["roles"], serde_json::json!(["licensor", "host"]));
+        assert_eq!(providers[1]["roles"], serde_json::json!(["producer"]));
+    }
+
+    const PROJCRS_WITH_BASE_ID: &str = r#"PROJCRS["CH1903+ / LV95",BASEGEOGCRS["CH1903+",DATUM["CH1903+",ELLIPSOID["Bessel 1841",6377397.155,299.1528128,LENGTHUNIT["metre",1]]],PRIMEM["Greenwich",0,ANGLEUNIT["degree",0.0174532925199433]],ID["EPSG",4150]],CONVERSION["Swiss Oblique Mercator 1995",METHOD["Hotine Oblique Mercator (variant B)",ID["EPSG",9815]],PARAMETER["Latitude of projection centre",46.9524055555556,ANGLEUNIT["degree",0.0174532925199433],ID["EPSG",8811]]],CS[Cartesian,2],AXIS["(E)",east,ORDER[1],LENGTHUNIT["metre",1]],AXIS["(N)",north,ORDER[2],LENGTHUNIT["metre",1]],USAGE[SCOPE["Cadastre."],AREA["Liechtenstein; Switzerland."],BBOX[45.82,5.96,47.81,10.49]],ID["EPSG",2056]]"#;
+
+    #[test]
+    fn epsg_of_projected_wkt2_is_the_root_id() {
+        assert_eq!(extract_epsg_from_crs(PROJCRS_WITH_BASE_ID).as_deref(), Some("EPSG:2056"));
+    }
+
+    #[test]
+    fn epsg_of_projected_wkt1_is_the_root_authority() {
+        let wkt = r#"PROJCS["CH1903+ / LV95",GEOGCS["CH1903+",DATUM["CH1903+",SPHEROID["Bessel 1841",6377397.155,299.1528128,AUTHORITY["EPSG","7004"]],AUTHORITY["EPSG","6150"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4150"]],PROJECTION["Hotine_Oblique_Mercator_Azimuth_Center"],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["Easting",EAST],AXIS["Northing",NORTH],AUTHORITY["EPSG","2056"]]"#;
+        assert_eq!(extract_epsg_from_crs(wkt).as_deref(), Some("EPSG:2056"));
+    }
+
+    #[test]
+    fn epsg_of_projected_wkt_without_root_id_is_not_a_nested_id() {
+        let wkt = PROJCRS_WITH_BASE_ID.replace(r#",ID["EPSG",2056]]"#, "]").replace("CH1903+ / LV95", "Test grid").replace("CH1903+", "Test datum");
+        assert_eq!(extract_epsg_from_crs(&wkt), None);
+    }
+
+    #[test]
+    fn epsg_of_plain_identifiers() {
+        assert_eq!(extract_epsg_from_crs("EPSG:2056").as_deref(), Some("EPSG:2056"));
+        assert_eq!(extract_epsg_from_crs("urn:ogc:def:crs:EPSG::4326").as_deref(), Some("EPSG:4326"));
+    }
+
+    #[test]
+    fn epsg_of_spatial_ref_reads_the_root_authority() {
+        let srs = SpatialRef::from_wkt(PROJCRS_WITH_BASE_ID).unwrap();
+        assert_eq!(epsg_of_spatial_ref(&srs), Some(2056));
     }
 
     #[test]
@@ -5356,5 +5702,52 @@ mod tests {
         assert!(lines.iter().any(|l| l.contains("90Xa01") && l.contains("90Xa01 message")));
         assert!(!lines.iter().any(|l| l.contains("90Xa03")));
         assert!(date_summary_lines(&issues[3..]).is_empty());
+    }
+
+    fn cited_catalog_config() -> CatalogConfig {
+        let yaml = r#"
+id: example-catalog
+title: Example
+description: Example catalog
+license: CC-BY-4.0
+keywords: [orchard]
+default_bbox: [0.0, 0.0, 1.0, 1.0]
+providers: []
+citation:
+  doi: 10.1234/example.5678
+  text: "Appleseed J (2030): Orchard Survey. Example Press, https://doi.org/10.1234/example.5678"
+links:
+  - rel: license
+    href: https://creativecommons.org/licenses/by/4.0/
+    title: Attribution 4.0 International
+  - rel: about
+    href: https://example.org/
+"#;
+        serde_yaml::from_str(yaml).unwrap()
+    }
+
+    #[test]
+    fn collection_carries_citation_and_license_link() {
+        let config = cited_catalog_config();
+        let def = CollectionDef {
+            id: "orchard-survey".to_string(),
+            title: "Orchard Survey".to_string(),
+            description: "Apple trees".to_string(),
+        };
+        let collection = create_stac_collection(&def, &[], "https://example.org", &config, &HashMap::new());
+
+        assert_eq!(collection["sci:doi"], "10.1234/example.5678");
+        assert_eq!(
+            collection["sci:citation"],
+            "Appleseed J (2030): Orchard Survey. Example Press, https://doi.org/10.1234/example.5678"
+        );
+        let extensions = collection["stac_extensions"].as_array().unwrap();
+        assert!(extensions.iter().any(|e| e == SCIENTIFIC_EXTENSION));
+
+        let links = collection["links"].as_array().unwrap();
+        let link = |rel: &str| links.iter().find(|l| l["rel"] == rel).cloned();
+        assert_eq!(link("cite-as").unwrap()["href"], "https://doi.org/10.1234/example.5678");
+        assert_eq!(link("license").unwrap()["href"], "https://creativecommons.org/licenses/by/4.0/");
+        assert!(link("about").is_none(), "only the licence is taken from the catalog links");
     }
 }

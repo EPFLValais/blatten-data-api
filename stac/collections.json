@@ -69,22 +69,22 @@
       "links": [
         {
           "rel": "self",
-          "href": "https://blatten-data.epfl.ch/stac/collections/3d-model",
+          "href": "${STAC_BASE_URL}/stac/collections/3d-model",
           "type": "application/json"
         },
         {
           "rel": "root",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "href": "${STAC_BASE_URL}/stac",
           "type": "application/json"
         },
         {
           "rel": "parent",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "href": "${STAC_BASE_URL}/stac",
           "type": "application/json"
         },
         {
           "rel": "items",
-          "href": "https://blatten-data.epfl.ch/stac/collections/3d-model/items",
+          "href": "${STAC_BASE_URL}/stac/collections/3d-model/items",
           "type": "application/geo+json"
         }
       ],
@@ -160,22 +160,22 @@
       "links": [
         {
           "rel": "self",
-          "href": "https://blatten-data.epfl.ch/stac/collections/deformation-analysis",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis",
           "type": "application/json"
         },
         {
           "rel": "root",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "href": "${STAC_BASE_URL}/stac",
           "type": "application/json"
         },
         {
           "rel": "parent",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "href": "${STAC_BASE_URL}/stac",
           "type": "application/json"
         },
         {
           "rel": "items",
-          "href": "https://blatten-data.epfl.ch/stac/collections/deformation-analysis/items",
+          "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis/items",
           "type": "application/geo+json"
         }
       ],
@@ -250,22 +250,22 @@
       "links": [
         {
           "rel": "self",
-          "href": "https://blatten-data.epfl.ch/stac/collections/digital-surface-model-dsm",
+          "href": "${STAC_BASE_URL}/stac/collections/digital-surface-model-dsm",
           "type": "application/json"
         },
         {
           "rel": "root",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "href": "${STAC_BASE_URL}/stac",
           "type": "application/json"
         },
         {
           "rel": "parent",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "href": "${STAC_BASE_URL}/stac",
           "type": "application/json"
         },
         {
           "rel": "items",
-          "href": "https://blatten-data.epfl.ch/stac/collections/digital-surface-model-dsm/items",
+          "href": "${STAC_BASE_URL}/stac/collections/digital-surface-model-dsm/items",
           "type": "application/geo+json"
         }
       ],
@@ -340,22 +340,22 @@
       "links": [
         {
           "rel": "self",
-          "href": "https://blatten-data.epfl.ch/stac/collections/digital-terrain-model-dtm",
+          "href": "${STAC_BASE_URL}/stac/collections/digital-terrain-model-dtm",
           "type": "application/json"
         },
         {
           "rel": "root",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "href": "${STAC_BASE_URL}/stac",
           "type": "application/json"
         },
         {
           "rel": "parent",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "href": "${STAC_BASE_URL}/stac",
           "type": "application/json"
         },
         {
           "rel": "items",
-          "href": "https://blatten-data.epfl.ch/stac/collections/digital-terrain-model-dtm/items",
+          "href": "${STAC_BASE_URL}/stac/collections/digital-terrain-model-dtm/items",
           "type": "application/geo+json"
         }
       ],
@@ -430,22 +430,22 @@
       "links": [
         {
           "rel": "self",
-          "href": "https://blatten-data.epfl.ch/stac/collections/gps-data",
+          "href": "${STAC_BASE_URL}/stac/collections/gps-data",
           "type": "application/json"
         },
         {
           "rel": "root",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "href": "${STAC_BASE_URL}/stac",
           "type": "application/json"
         },
         {
           "rel": "parent",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "href": "${STAC_BASE_URL}/stac",
           "type": "application/json"
         },
         {
           "rel": "items",
-          "href": "https://blatten-data.epfl.ch/stac/collections/gps-data/items",
+          "href": "${STAC_BASE_URL}/stac/collections/gps-data/items",
           "type": "application/geo+json"
         }
       ],
@@ -523,22 +523,22 @@
       "links": [
         {
           "rel": "self",
-          "href": "https://blatten-data.epfl.ch/stac/collections/hydrology",
+          "href": "${STAC_BASE_URL}/stac/collections/hydrology",
           "type": "application/json"
         },
         {
           "rel": "root",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "href": "${STAC_BASE_URL}/stac",
           "type": "application/json"
         },
         {
           "rel": "parent",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "href": "${STAC_BASE_URL}/stac",
           "type": "application/json"
         },
         {
           "rel": "items",
-          "href": "https://blatten-data.epfl.ch/stac/collections/hydrology/items",
+          "href": "${STAC_BASE_URL}/stac/collections/hydrology/items",
           "type": "application/geo+json"
         }
       ],
@@ -613,22 +613,22 @@
       "links": [
         {
           "rel": "self",
-          "href": "https://blatten-data.epfl.ch/stac/collections/orthophoto",
+          "href": "${STAC_BASE_URL}/stac/collections/orthophoto",
           "type": "application/json"
         },
         {
           "rel": "root",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "href": "${STAC_BASE_URL}/stac",
           "type": "application/json"
         },
         {
           "rel": "parent",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "href": "${STAC_BASE_URL}/stac",
           "type": "application/json"
         },
         {
           "rel": "items",
-          "href": "https://blatten-data.epfl.ch/stac/collections/orthophoto/items",
+          "href": "${STAC_BASE_URL}/stac/collections/orthophoto/items",
           "type": "application/geo+json"
         }
       ],
@@ -703,22 +703,22 @@
       "links": [
         {
           "rel": "self",
-          "href": "https://blatten-data.epfl.ch/stac/collections/point-cloud",
+          "href": "${STAC_BASE_URL}/stac/collections/point-cloud",
           "type": "application/json"
         },
         {
           "rel": "root",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "href": "${STAC_BASE_URL}/stac",
           "type": "application/json"
         },
         {
           "rel": "parent",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "href": "${STAC_BASE_URL}/stac",
           "type": "application/json"
         },
         {
           "rel": "items",
-          "href": "https://blatten-data.epfl.ch/stac/collections/point-cloud/items",
+          "href": "${STAC_BASE_URL}/stac/collections/point-cloud/items",
           "type": "application/geo+json"
         }
       ],
@@ -795,22 +795,22 @@
       "links": [
         {
           "rel": "self",
-          "href": "https://blatten-data.epfl.ch/stac/collections/radar",
+          "href": "${STAC_BASE_URL}/stac/collections/radar",
           "type": "application/json"
         },
         {
           "rel": "root",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "href": "${STAC_BASE_URL}/stac",
           "type": "application/json"
         },
         {
           "rel": "parent",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "href": "${STAC_BASE_URL}/stac",
           "type": "application/json"
         },
         {
           "rel": "items",
-          "href": "https://blatten-data.epfl.ch/stac/collections/radar/items",
+          "href": "${STAC_BASE_URL}/stac/collections/radar/items",
           "type": "application/geo+json"
         }
       ],
@@ -885,22 +885,22 @@
       "links": [
         {
           "rel": "self",
-          "href": "https://blatten-data.epfl.ch/stac/collections/thermal-image",
+          "href": "${STAC_BASE_URL}/stac/collections/thermal-image",
           "type": "application/json"
         },
         {
           "rel": "root",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "href": "${STAC_BASE_URL}/stac",
           "type": "application/json"
         },
         {
           "rel": "parent",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "href": "${STAC_BASE_URL}/stac",
           "type": "application/json"
         },
         {
           "rel": "items",
-          "href": "https://blatten-data.epfl.ch/stac/collections/thermal-image/items",
+          "href": "${STAC_BASE_URL}/stac/collections/thermal-image/items",
           "type": "application/geo+json"
         }
       ],
@@ -979,22 +979,22 @@
       "links": [
         {
           "rel": "self",
-          "href": "https://blatten-data.epfl.ch/stac/collections/webcam-image",
+          "href": "${STAC_BASE_URL}/stac/collections/webcam-image",
           "type": "application/json"
         },
         {
           "rel": "root",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "href": "${STAC_BASE_URL}/stac",
           "type": "application/json"
         },
         {
           "rel": "parent",
-          "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+          "href": "${STAC_BASE_URL}/stac",
           "type": "application/json"
         },
         {
           "rel": "items",
-          "href": "https://blatten-data.epfl.ch/stac/collections/webcam-image/items",
+          "href": "${STAC_BASE_URL}/stac/collections/webcam-image/items",
           "type": "application/geo+json"
         }
       ],
@@ -1004,11 +1004,11 @@
   "links": [
     {
       "rel": "self",
-      "href": "https://blatten-data.epfl.ch/stac/collections"
+      "href": "${STAC_BASE_URL}/stac/collections"
     },
     {
       "rel": "root",
-      "href": "https://blatten-data.epfl.ch/stac/catalog.json"
+      "href": "${STAC_BASE_URL}/stac"
     }
   ]
 }

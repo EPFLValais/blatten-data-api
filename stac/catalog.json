@@ -7,95 +7,95 @@
   "links": [
     {
       "rel": "self",
-      "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+      "href": "${STAC_BASE_URL}/stac/catalog.json",
       "type": "application/json"
     },
     {
       "rel": "root",
-      "href": "https://blatten-data.epfl.ch/stac/catalog.json",
+      "href": "${STAC_BASE_URL}/stac",
       "type": "application/json"
     },
     {
       "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/3d-model",
+      "href": "${STAC_BASE_URL}/stac/collections/3d-model",
       "type": "application/json",
       "title": "3D Model"
     },
     {
       "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/deformation-analysis",
+      "href": "${STAC_BASE_URL}/stac/collections/deformation-analysis",
       "type": "application/json",
       "title": "Deformation Analysis"
     },
     {
       "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/digital-surface-model-dsm",
+      "href": "${STAC_BASE_URL}/stac/collections/digital-surface-model-dsm",
       "type": "application/json",
       "title": "Digital Surface Model"
     },
     {
       "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/digital-terrain-model-dtm",
+      "href": "${STAC_BASE_URL}/stac/collections/digital-terrain-model-dtm",
       "type": "application/json",
       "title": "Digital Terrain Model"
     },
     {
       "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/gps-data",
+      "href": "${STAC_BASE_URL}/stac/collections/gps-data",
       "type": "application/json",
       "title": "GNSS Data"
     },
     {
       "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/hydrology",
+      "href": "${STAC_BASE_URL}/stac/collections/hydrology",
       "type": "application/json",
       "title": "Hydrology"
     },
     {
       "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/orthophoto",
+      "href": "${STAC_BASE_URL}/stac/collections/orthophoto",
       "type": "application/json",
       "title": "Orthophoto"
     },
     {
       "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/point-cloud",
+      "href": "${STAC_BASE_URL}/stac/collections/point-cloud",
       "type": "application/json",
       "title": "Point Cloud"
     },
     {
       "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/radar",
+      "href": "${STAC_BASE_URL}/stac/collections/radar",
       "type": "application/json",
       "title": "Radar"
     },
     {
       "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/thermal-image",
+      "href": "${STAC_BASE_URL}/stac/collections/thermal-image",
       "type": "application/json",
       "title": "Thermal Image"
     },
     {
       "rel": "child",
-      "href": "https://blatten-data.epfl.ch/stac/collections/webcam-image",
+      "href": "${STAC_BASE_URL}/stac/collections/webcam-image",
       "type": "application/json",
       "title": "Webcam Image"
     },
     {
       "rel": "describedby",
-      "href": "https://blatten-data.epfl.ch/s3/docs/dataset_overview.csv",
+      "href": "${S3_BASE_URL}/docs/dataset_overview.csv",
       "type": "text/csv",
       "title": "Dataset Overview"
     },
     {
       "rel": "describedby",
-      "href": "https://blatten-data.epfl.ch/s3/docs/A50039_Blatten4Science_TechnicalDocumentation.pdf",
+      "href": "${S3_BASE_URL}/docs/A50039_Blatten4Science_TechnicalDocumentation.pdf",
       "type": "application/pdf",
       "title": "Technical Documentation"
     },
     {
       "rel": "describedby",
-      "href": "https://blatten-data.epfl.ch/s3/docs/A50039_Supplement1_GassnerJ_GBIR_Report.pdf",
+      "href": "${S3_BASE_URL}/docs/A50039_Supplement1_GassnerJ_GBIR_Report.pdf",
       "type": "application/pdf",
       "title": "Supplement 1 - GBIR Report"
     },

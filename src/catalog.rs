@@ -24,6 +24,25 @@ pub const VALID_PROCESSING_LEVELS: std::ops::RangeInclusive<i32> = 1..=4;
 /// STAC version string (from stac crate)
 pub const STAC_VERSION: &str = "1.1.0";
 
+/// Asset base URL as written into hrefs. A root-relative S3 base (`/s3`) is
+/// served from the API's own origin, so it is prefixed with the API base URL:
+/// a relative href would resolve against the item's `self` link, and an item
+/// saved outside the site would lose its downloads.
+pub fn resolve_s3_base_url(base_url: &str, s3_base_url: &str) -> String {
+    if s3_base_url.starts_with('/') {
+        format!("{}{}", base_url.trim_end_matches('/'), s3_base_url)
+    } else {
+        s3_base_url.to_string()
+    }
+}
+
+/// Replace the `${STAC_BASE_URL}` and `${S3_BASE_URL}` placeholders the
+/// generator writes into links and asset hrefs.
+fn substitute_placeholders(json: &str, base_url: &str, s3_base_url: &str) -> String {
+    json.replace("${STAC_BASE_URL}", base_url)
+        .replace("${S3_BASE_URL}", s3_base_url)
+}
+
 /// Root STAC Catalog with indexed collections and items
 #[derive(Debug, Clone)]
 pub struct StacCatalog {
@@ -42,6 +61,8 @@ pub struct StacCatalog {
 impl StacCatalog {
     /// Load a STAC catalog from a directory
     pub fn load_from_dir(dir: &Path, base_url: &str, s3_base_url: &str) -> Result<Self> {
+        let s3_base_url = &resolve_s3_base_url(base_url, s3_base_url);
+
         // Load root catalog
         let catalog_path = dir.join("catalog.json");
         info!("Loading catalog from {:?}", catalog_path);
@@ -49,18 +70,12 @@ impl StacCatalog {
         let catalog_json = fs::read_to_string(&catalog_path)
             .with_context(|| format!("Failed to read {:?}", catalog_path))?;
 
-        // Replace URL placeholders
-        let catalog_json = catalog_json.replace("${STAC_BASE_URL}", base_url);
-        let catalog_json = catalog_json.replace("${S3_BASE_URL}", s3_base_url);
+        let catalog_json = substitute_placeholders(&catalog_json, base_url, s3_base_url);
 
-        let root: StacCatalogRoot = serde_json::from_str(&catalog_json)
-            .with_context(|| "Failed to parse catalog.json")?;
+        let root: StacCatalogRoot =
+            serde_json::from_str(&catalog_json).with_context(|| "Failed to parse catalog.json")?;
 
-        info!(
-            "Loaded catalog: {} (STAC {})",
-            root.id,
-            stac::STAC_VERSION
-        );
+        info!("Loaded catalog: {} (STAC {})", root.id, stac::STAC_VERSION);
 
         // Load collections
         let collections_dir = dir.join("collections");
@@ -82,8 +97,7 @@ impl StacCatalog {
                     debug!("Loading collection from {:?}", path);
 
                     let json = fs::read_to_string(&path)?;
-                    let json = json.replace("${STAC_BASE_URL}", base_url);
-                    let json = json.replace("${S3_BASE_URL}", s3_base_url);
+                    let json = substitute_placeholders(&json, base_url, s3_base_url);
 
                     match serde_json::from_str::<StacCollection>(&json) {
                         Ok(collection) => {
@@ -114,10 +128,7 @@ impl StacCatalog {
                     continue;
                 }
 
-                // Replace URL placeholders
-                let line = line
-                    .replace("${STAC_BASE_URL}", base_url)
-                    .replace("${S3_BASE_URL}", s3_base_url);
+                let line = substitute_placeholders(&line, base_url, s3_base_url);
 
                 match serde_json::from_str::<StacItem>(&line) {
                     Ok(item) => items.push(item),
@@ -222,6 +233,66 @@ impl PropertiesDatetimeExt for StacItem {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn fixture_dir(name: &str) -> std::path::PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("catalog-test-{}-{}", name, std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("catalog.json"),
+            r#"{"type": "Catalog", "stac_version": "1.1.0", "id": "kites", "description": "Kites",
+                "links": [{"rel": "root", "href": "${STAC_BASE_URL}/stac"}]}"#,
+        )
+        .unwrap();
+        fs::write(
+            dir.join("items.ndjson"),
+            r#"{"type":"Feature","stac_version":"1.1.0","id":"box-kite","geometry":null,"properties":{"datetime":"2025-05-28T00:00:00Z"},"links":[{"rel":"root","href":"${STAC_BASE_URL}/stac"},{"rel":"collection","href":"${STAC_BASE_URL}/stac/collections/kites"}],"assets":{"sail":{"href":"${S3_BASE_URL}/assets/box-kite/sail.tif"}},"collection":"kites"}"#,
+        )
+        .unwrap();
+        dir
+    }
+
+    fn link_href<'a>(links: &'a [stac::Link], rel: &str) -> &'a str {
+        links
+            .iter()
+            .find(|l| l.rel == rel)
+            .map(|l| l.href.as_str())
+            .unwrap()
+    }
+
+    #[test]
+    fn root_relative_s3_base_resolves_against_api_base() {
+        let dir = fixture_dir("relative-s3");
+        let catalog = StacCatalog::load_from_dir(&dir, "https://dev.example", "/s3").unwrap();
+        let item = catalog.get_item("kites", "box-kite").unwrap();
+
+        assert_eq!(link_href(&item.links, "root"), "https://dev.example/stac");
+        assert_eq!(
+            link_href(&catalog.root.links, "root"),
+            "https://dev.example/stac"
+        );
+        assert_eq!(
+            item.assets["sail"].href,
+            "https://dev.example/s3/assets/box-kite/sail.tif"
+        );
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn absolute_s3_base_is_used_as_given() {
+        let dir = fixture_dir("absolute-s3");
+        let catalog =
+            StacCatalog::load_from_dir(&dir, "https://dev.example", "https://files.example/bucket")
+                .unwrap();
+        let item = catalog.get_item("kites", "box-kite").unwrap();
+
+        assert_eq!(
+            item.assets["sail"].href,
+            "https://files.example/bucket/assets/box-kite/sail.tif"
+        );
+        fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn test_deserialize_item() {

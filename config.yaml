@@ -27,6 +27,16 @@ catalog:
     - name: EPFL ALPOLE
       roles: [processor, host]
       url: https://www.epfl.ch/research/domains/alpole/
+  # The catalog's cite-as link and each collection's sci:doi, sci:citation and
+  # cite-as link come from here; collections also repeat the license link below.
+  citation:
+    doi: 10.5075/epfl.20.500.14299/262163
+    text: >-
+      Widmer T, Senn I, Gassner J, Oggier A, Mayoraz L, Thomas E, Knuth F,
+      Zimmerli M, Carrel M, Wetter J, Von Wartburg J, Gsponer L, Werlen S,
+      Farinotti D, Proksch M (2026): Blatten4Science – Technical Documentation.
+      Natural Hazards Department of the Canton of Wallis SDANA. Brig, September
+      2026, https://doi.org/10.5075/epfl.20.500.14299/262163
   links:
     - rel: describedby
       href_suffix: /docs/dataset_overview.csv
@@ -40,9 +50,6 @@ catalog:
       href_suffix: /docs/A50039_Supplement1_GassnerJ_GBIR_Report.pdf
       type: application/pdf
       title: Supplement 1 - GBIR Report
-    - rel: cite-as
-      href: https://doi.org/10.5075/epfl.20.500.14299/262163
-      title: Citation and permanent link
     - rel: license
       href: https://creativecommons.org/licenses/by-nc-sa/4.0/
       title: "Attribution-NonCommercial-ShareAlike 4.0 International"
@@ -50,6 +57,28 @@ catalog:
       href: https://blatten-data.epfl.ch/
       type: text/html
       title: Blatten4Science website
+
+# ─── Source / Operator → Producer ────────────────────────────────────────────
+# Organisation credited as `producer` on items and their collections, keyed by the
+# CSV's `Source / Operator` value. Names follow Table 1 of the Technical
+# Documentation. A value with no entry here is reported as a warning.
+producers:
+  Terradata:
+    name: Terradata AG
+  Geoprevent:
+    name: GEOPRAEVENT AG
+  SensAlpin:
+    name: SensAlpin GmbH
+  DNAGE (Geoazimut):
+    name: Geoazimut
+  DNAGE (Glaciorisk):
+    name: Glaciorisk
+  DNAGE (HYDRO OFEV):
+    name: Federal Office for the Environment FOEN
+  DNAGE (HYDRO-VS):
+    name: Canton of Wallis / Guardaval / CREALP
+  DNAGE (Guardaval):
+    name: Canton of Wallis / Guardaval / CREALP
 
 # ─── ProductID Letter → Collection Slug ──────────────────────────────────────
 collections:
