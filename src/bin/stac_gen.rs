@@ -295,6 +295,11 @@ const EXTENSION_SCHEMAS: &[(&str, &str)] = &[
 const TIMESTAMPS_FIELDS: &[&str] = &["published", "expires", "unpublished"];
 const TIMESTAMPS_SCHEMA: &str = "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json";
 
+/// Every schema URL `stac_extensions` can declare; each must be vendored for validation.
+fn declared_extension_schemas() -> impl Iterator<Item = &'static str> {
+    EXTENSION_SCHEMAS.iter().map(|(_, schema)| *schema).chain([TIMESTAMPS_SCHEMA])
+}
+
 /// `stac_extensions` for an Item or Collection: the schema of each extension whose fields
 /// appear at its top level, in its `properties`, or in any of its assets.
 fn stac_extensions(object: &serde_json::Value) -> Vec<String> {
@@ -2260,6 +2265,7 @@ const VENDORED_SCHEMAS: &[(&str, &str)] = vendored_schemas![
     "stac-extensions.github.io/timestamps/v1.1.0/schema.json",
     "stac-extensions.github.io/file/v2.1.0/schema.json",
     "stac-extensions.github.io/projection/v2.0.0/schema.json",
+    "stac-extensions.github.io/scientific/v1.0.0/schema.json",
 ];
 
 /// Serves `$ref`s from the vendored schemas and refuses every other URI
@@ -2311,8 +2317,8 @@ impl StacSchemas {
         };
         let base = "https://schemas.stacspec.org/v1.1.0";
         let mut extensions = HashMap::new();
-        for (uri, _) in VENDORED_SCHEMAS.iter().filter(|(u, _)| u.starts_with("https://stac-extensions.github.io/")) {
-            extensions.insert(*uri, build(uri)?);
+        for uri in declared_extension_schemas() {
+            extensions.insert(uri, build(uri)?);
         }
         Ok(StacSchemas {
             catalog: build(&format!("{}/catalog-spec/json-schema/catalog.json", base))?,
@@ -6236,5 +6242,27 @@ links:
         let mut valid = written.clone();
         valid["description"] = described["description"].clone();
         assert!(StacSchemas::load().unwrap().issues(&valid).is_empty());
+    }
+
+    #[test]
+    fn every_declared_extension_schema_is_loaded() {
+        let schemas = StacSchemas::load().unwrap();
+        for uri in declared_extension_schemas() {
+            assert!(schemas.extensions.contains_key(uri), "{} is declared but not loaded", uri);
+        }
+    }
+
+    #[test]
+    fn cited_collection_passes_the_vendored_schemas() {
+        let def = CollectionDef {
+            id: "orchard-survey".to_string(),
+            title: "Orchard Survey".to_string(),
+            description: "Apple trees".to_string(),
+        };
+        let collection = create_stac_collection(&def, &[], "https://example.org", &cited_catalog_config(), &HashMap::new());
+
+        let issues = StacSchemas::load().unwrap().issues(&collection);
+
+        assert!(issues.is_empty(), "{:?}", issues);
     }
 }
