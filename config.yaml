@@ -82,6 +82,11 @@ collection_titles:
   digital-terrain-model-dtm: Digital Terrain Model
   radar: Radar
 
+# ─── Collection Descriptions ──────────────────────────────────────────────────
+# Description text per collection id. A collection without an entry gets an
+# empty description, which the validation report flags.
+collection_descriptions: {}
+
 # ─── Product Type Strip (extra prefixes to remove from item titles) ───────────
 # For collections where hyphen normalization alone isn't enough.
 # Entries are tried alongside the collection title; longest match wins.

@@ -45,6 +45,8 @@ struct GenConfig {
     #[serde(default)]
     collection_titles: HashMap<String, String>,
     #[serde(default)]
+    collection_descriptions: HashMap<String, String>,
+    #[serde(default)]
     geometry_overrides: HashMap<String, GeometryOverride>,
     #[serde(default)]
     product_type_strip: HashMap<String, Vec<String>>,
@@ -706,6 +708,7 @@ fn build_collections(
     items: &[ItemMetadata],
     collection_map: &HashMap<String, String>,
     title_overrides: &HashMap<String, String>,
+    descriptions: &HashMap<String, String>,
 ) -> HashMap<String, CollectionDef> {
     let mut collections: HashMap<String, CollectionDef> = HashMap::new();
 
@@ -745,6 +748,13 @@ fn build_collections(
     for (slug, title) in title_overrides {
         if let Some(entry) = collections.get_mut(slug) {
             entry.title = title.clone();
+        }
+    }
+
+    // Descriptions come only from config; a collection without one stays empty
+    for (slug, description) in descriptions {
+        if let Some(entry) = collections.get_mut(slug) {
+            entry.description = description.clone();
         }
     }
 
@@ -1323,6 +1333,9 @@ struct ValidationIssue {
     item_id: String,
     severity: String,
     message: String,
+    /// Set when the issue is a disagreement between an item's dates and its files
+    #[serde(skip_serializing_if = "Option::is_none")]
+    date_kind: Option<DateIssueKind>,
 }
 
 // =============================================================================
@@ -1733,6 +1746,133 @@ fn extract_datetime_from_filename(filename: &str) -> Option<String> {
     None
 }
 
+/// Kind of disagreement between an item's CSV date range and the dates of its files
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum DateIssueKind {
+    StartAfterEnd,
+    StartDiffers,
+    EndDiffers,
+}
+
+impl DateIssueKind {
+    const ALL: [DateIssueKind; 3] = [DateIssueKind::StartAfterEnd, DateIssueKind::StartDiffers, DateIssueKind::EndDiffers];
+
+    fn label(self) -> &'static str {
+        match self {
+            DateIssueKind::StartAfterEnd => "start after end",
+            DateIssueKind::StartDiffers => "start differs from files",
+            DateIssueKind::EndDiffers => "end differs from files",
+        }
+    }
+}
+
+/// A date disagreement: `csv` is the CSV value, `other` the CSV end for an
+/// inverted range, otherwise the earliest or latest file date
+#[derive(Debug, Clone, PartialEq)]
+struct DateIssue {
+    kind: DateIssueKind,
+    csv: NaiveDate,
+    other: NaiveDate,
+}
+
+impl DateIssue {
+    fn message(&self) -> String {
+        match self.kind {
+            DateIssueKind::StartAfterEnd => format!("CSV start {} is after CSV end {}", self.csv, self.other),
+            DateIssueKind::StartDiffers => format!("CSV start {} differs from earliest file date {}", self.csv, self.other),
+            DateIssueKind::EndDiffers => format!("CSV end {} differs from latest file date {}", self.csv, self.other),
+        }
+    }
+}
+
+/// Compare an item's CSV date range with the dates of its files. A CSV date
+/// more than one day from the earliest or latest file date is reported.
+fn check_item_dates(csv_first: Option<NaiveDate>, csv_last: Option<NaiveDate>, file_dates: &[NaiveDate]) -> Vec<DateIssue> {
+    let mut issues = Vec::new();
+    if let (Some(first), Some(last)) = (csv_first, csv_last) {
+        if first > last {
+            issues.push(DateIssue { kind: DateIssueKind::StartAfterEnd, csv: first, other: last });
+        }
+    }
+    let (Some(&earliest), Some(&latest)) = (file_dates.iter().min(), file_dates.iter().max()) else {
+        return issues;
+    };
+    let far = |a: NaiveDate, b: NaiveDate| (a - b).num_days().abs() > 1;
+    if let Some(first) = csv_first.filter(|&f| far(f, earliest)) {
+        issues.push(DateIssue { kind: DateIssueKind::StartDiffers, csv: first, other: earliest });
+    }
+    if let Some(last) = csv_last.filter(|&l| far(l, latest)) {
+        issues.push(DateIssue { kind: DateIssueKind::EndDiffers, csv: last, other: latest });
+    }
+    issues
+}
+
+/// First and last row dates of a time-series CSV, read from the first date
+/// (`dd.mm.yyyy` or `yyyy-mm-dd`) on each data row
+fn csv_row_date_range(path: &Path) -> Option<(NaiveDate, NaiveDate)> {
+    let bytes = fs::read(path).ok()?;
+    let text = String::from_utf8_lossy(&bytes);
+    let date_re = regex::Regex::new(r"(\d{2})\.(\d{2})\.(\d{4})|(\d{4})-(\d{2})-(\d{2})").ok()?;
+    let row_date = |line: &str| {
+        let caps = date_re.captures(line)?;
+        let num = |i: usize| caps.get(i).and_then(|m| m.as_str().parse::<u32>().ok());
+        if caps.get(1).is_some() {
+            NaiveDate::from_ymd_opt(num(3)? as i32, num(2)?, num(1)?)
+        } else {
+            NaiveDate::from_ymd_opt(num(4)? as i32, num(5)?, num(6)?)
+        }
+    };
+    let mut dates = text.lines().skip(1).filter_map(row_date);
+    let first = dates.next()?;
+    Some((first, dates.last().unwrap_or(first)))
+}
+
+/// Dates of an item's files: the timestamp in each file name, and the first
+/// and last row dates of each CSV
+fn item_file_dates(files: &[FileInfo]) -> Vec<NaiveDate> {
+    let mut dates = Vec::new();
+    for file in files {
+        let name = file.path.file_name().unwrap_or_default().to_string_lossy();
+        if let Some(date) = extract_datetime_from_filename(&name)
+            .and_then(|dt| NaiveDate::parse_from_str(dt.get(..10)?, "%Y-%m-%d").ok())
+        {
+            dates.push(date);
+        }
+        let is_csv = file.path.extension().is_some_and(|e| e.eq_ignore_ascii_case("csv"));
+        if is_csv {
+            if let Some((first, last)) = csv_row_date_range(&file.path) {
+                dates.extend([first, last]);
+            }
+        }
+    }
+    dates
+}
+
+/// Lines of the end-of-run date summary: a count per kind, then one line per
+/// date issue sorted by item. Empty when no item has a date issue.
+fn date_summary_lines(issues: &[ValidationIssue]) -> Vec<String> {
+    let mut date_issues: Vec<(&str, DateIssueKind, &str)> = issues.iter()
+        .filter_map(|i| i.date_kind.map(|k| (i.item_id.as_str(), k, i.message.as_str())))
+        .collect();
+    if date_issues.is_empty() {
+        return Vec::new();
+    }
+    date_issues.sort();
+    let item_count = date_issues.iter().map(|(item, _, _)| *item).collect::<HashSet<_>>().len();
+    let mut lines = vec![format!("{} date issues across {} items (catalog written with CSV dates)", date_issues.len(), item_count)];
+    for kind in DateIssueKind::ALL {
+        let count = date_issues.iter().filter(|(_, k, _)| *k == kind).count();
+        if count > 0 {
+            lines.push(format!("  {:<26} {}", format!("{}:", kind.label()), count));
+        }
+    }
+    for (item, _, message) in &date_issues {
+        lines.push(format!("  {}: {}", item, message));
+    }
+    lines
+}
+
 /// Create a STAC Item from metadata with all files as assets
 /// This creates STAC 1.1.0 compliant items with:
 /// - Item-level geometry in WGS84 (combined extent of all files)
@@ -2042,7 +2182,13 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str, coll
 }
 
 /// Get MIME type for a file extension
+/// Media types are IANA-registered; text formats with no registered type are `text/plain`.
 fn get_mime_type(path: &Path) -> &'static str {
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_lowercase();
+    // GDAL PAM sidecars (`*.aux.xml`) are matched by full suffix before the bare extension
+    if name.ends_with(".aux.xml") {
+        return "application/xml";
+    }
     match path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase().as_str() {
         "tif" | "tiff" => "image/tiff; application=geotiff",
         "laz" => "application/vnd.laszip",
@@ -2054,7 +2200,13 @@ fn get_mime_type(path: &Path) -> &'static str {
         "json" => "application/json",
         "pdf" => "application/pdf",
         "obj" => "model/obj",
-        "ply" => "application/ply",
+        "mtl" => "model/mtl",
+        "dxf" => "image/vnd.dxf",
+        "shp" => "application/vnd.shp",
+        "gif" => "image/gif",
+        "mp4" => "video/mp4",
+        "mkv" => "video/matroska",
+        "asc" | "tfw" | "txt" => "text/plain",
         _ => "application/octet-stream",
     }
 }
@@ -2174,6 +2326,27 @@ fn create_stac_collection(
 }
 
 /// Generate the complete STAC catalog
+/// Removes every file in `dir` whose name is not in `written`, logging each removal.
+/// Subdirectories and anything outside `dir` are left alone. Returns the removed paths.
+fn remove_unwritten_files(dir: &Path, written: &HashSet<String>) -> Vec<PathBuf> {
+    let mut removed = Vec::new();
+    let Ok(entries) = fs::read_dir(dir) else { return removed };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() || written.contains(&entry.file_name().to_string_lossy().into_owned()) {
+            continue;
+        }
+        match fs::remove_file(&path) {
+            Ok(()) => {
+                info!("Removed stale file {:?}", path);
+                removed.push(path);
+            }
+            Err(e) => warn!("Failed to remove stale file {:?}: {}", path, e),
+        }
+    }
+    removed
+}
+
 /// Returns (num_collections, num_items, total_assets, issues)
 fn generate_catalog(
     items: &[ItemMetadata],
@@ -2186,7 +2359,7 @@ fn generate_catalog(
     fs::create_dir_all(output_dir)?;
     fs::create_dir_all(output_dir.join("collections"))?;
 
-    let collections_defs = build_collections(items, &config.collections, &config.collection_titles);
+    let collections_defs = build_collections(items, &config.collections, &config.collection_titles, &config.collection_descriptions);
     let mut issues = Vec::new();
 
     // Group items by collection
@@ -2236,6 +2409,7 @@ fn generate_catalog(
                     item_id: item.code.clone(),
                     severity: "warning".to_string(),
                     message: "Missing geometry".to_string(),
+                    date_kind: None,
                 });
             }
             if item.archive_file.is_none() && !item.is_single_file {
@@ -2243,6 +2417,7 @@ fn generate_catalog(
                     item_id: item.code.clone(),
                     severity: "warning".to_string(),
                     message: "No archive file mapped".to_string(),
+                    date_kind: None,
                 });
             }
             if item.files.is_empty() {
@@ -2250,6 +2425,17 @@ fn generate_catalog(
                     item_id: item.code.clone(),
                     severity: "warning".to_string(),
                     message: "No files found".to_string(),
+                    date_kind: None,
+                });
+            }
+            let csv_date = |d: &Option<String>| d.as_deref().and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok());
+            let file_dates = item_file_dates(&item.files);
+            for date_issue in check_item_dates(csv_date(&item.date_first), csv_date(&item.date_last), &file_dates) {
+                item_issues.push(ValidationIssue {
+                    item_id: item.code.clone(),
+                    severity: "warning".to_string(),
+                    message: date_issue.message(),
+                    date_kind: Some(date_issue.kind),
                 });
             }
 
@@ -2305,27 +2491,10 @@ fn generate_catalog(
         fs::write(&coll_path, collection_json)?;
     }
 
-    // Remove stale collection files from previous runs (e.g. after collection ID renames)
-    let valid_ids: std::collections::HashSet<&str> =
-        collection_data.iter().map(|(id, _, _)| id.as_str()).collect();
-    let collections_path = output_dir.join("collections");
-    if let Ok(entries) = fs::read_dir(&collections_path) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            let ext = path.extension().and_then(|e| e.to_str());
-            if ext == Some("json") || ext == Some("ndjson") {
-                if let Some(name) = path.file_stem().and_then(|s| s.to_str()) {
-                    // For "foo_items.ndjson", check "foo"; for "foo.json", check "foo"
-                    let base_id = name.strip_suffix("_items").unwrap_or(name);
-                    if !valid_ids.contains(base_id) {
-                        if let Err(e) = fs::remove_file(&path) {
-                            eprintln!("Warning: failed to remove stale file {:?}: {}", path, e);
-                        }
-                    }
-                }
-            }
-        }
-    }
+    // Remove every file in collections/ this run did not write (renamed ids, retired item files)
+    let written: HashSet<String> =
+        collection_data.iter().map(|(id, _, _)| format!("{}.json", id)).collect();
+    remove_unwritten_files(&output_dir.join("collections"), &written);
 
     coll_pb.finish_with_message(format!("Wrote {} collection files", stac_collections.len()));
 
@@ -3639,6 +3808,17 @@ fn main() -> Result<()> {
             info!("  Items without archives:   {}", count_no_archive);
             info!("  Orphan folders:           {}", orphan_folders.len());
 
+            let date_lines = date_summary_lines(&issues);
+            if !date_lines.is_empty() {
+                warn!("");
+                warn!("╔══════════════════════════════════════════════════════════════╗");
+                warn!("║        ITEM DATES DISAGREE WITH THEIR FILES OR INVERT        ║");
+                warn!("╚══════════════════════════════════════════════════════════════╝");
+                for line in &date_lines {
+                    warn!("{}", line);
+                }
+            }
+
             // Run validation after generation if requested
             if validate {
                 let warning_count = issues.iter().filter(|i| i.severity == "warning").count();
@@ -4876,6 +5056,49 @@ mod tests {
     }
 
     #[test]
+    fn media_types_follow_the_iana_registry() {
+        let cases = [
+            ("a/survey.dxf", "image/vnd.dxf"),
+            ("a/outline.shp", "application/vnd.shp"),
+            ("a/clip.mkv", "video/matroska"),
+            ("a/clip.mp4", "video/mp4"),
+            ("a/loop.gif", "image/gif"),
+            ("a/mesh.mtl", "model/mtl"),
+            ("a/raster.tif.aux.xml", "application/xml"),
+            ("a/RASTER.TIF.AUX.XML", "application/xml"),
+            ("a/grid.asc", "text/plain"),
+            ("a/raster.tfw", "text/plain"),
+            ("a/offsets.txt", "text/plain"),
+            ("a/cloud.laz", "application/vnd.laszip"),
+            ("a/mesh.ply", "application/octet-stream"),
+        ];
+        for (path, expected) in cases {
+            assert_eq!(get_mime_type(Path::new(path)), expected, "{}", path);
+        }
+    }
+
+    #[test]
+    fn cleanup_removes_files_the_run_did_not_write() {
+        let dir = scratch_dir("collections-cleanup");
+        fs::write(dir.join("a.json"), b"{}").unwrap();
+        fs::write(dir.join("a_items.ndjson"), b"{}").unwrap();
+        fs::write(dir.join("old_items.ndjson"), b"{}").unwrap();
+        fs::write(dir.join("notes.txt"), b"x").unwrap();
+        fs::create_dir(dir.join("sub")).unwrap();
+        fs::write(dir.join("sub").join("b.json"), b"{}").unwrap();
+
+        let written: HashSet<String> = ["a.json".to_string()].into_iter().collect();
+        remove_unwritten_files(&dir, &written);
+
+        assert!(dir.join("a.json").exists());
+        assert!(!dir.join("a_items.ndjson").exists());
+        assert!(!dir.join("old_items.ndjson").exists());
+        assert!(!dir.join("notes.txt").exists());
+        assert!(dir.join("sub").join("b.json").exists());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn sensor_key_ignores_zero_padding() {
         assert_eq!(sensor_key("07"), "7");
         assert_eq!(sensor_key("7"), "7");
@@ -4935,6 +5158,21 @@ mod tests {
 
         assert!(is_stale_copy(&source, &dir.join("missing.csv")), "missing target is stale");
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn collections_take_configured_descriptions() {
+        let collection_map = HashMap::from([
+            ("K".to_string(), "kite-survey".to_string()),
+            ("L".to_string(), "lantern-count".to_string()),
+        ]);
+        let descriptions = HashMap::from([
+            ("kite-survey".to_string(), "Kite flights over the meadow.".to_string()),
+        ]);
+        let collections = build_collections(&[], &collection_map, &HashMap::new(), &descriptions);
+
+        assert_eq!(collections["kite-survey"].description, "Kite flights over the meadow.");
+        assert_eq!(collections["lantern-count"].description, "");
     }
 
     fn mapping(folder: &str, file: Option<&str>, pattern: Option<&str>) -> FolderMapping {
@@ -5023,5 +5261,100 @@ mod tests {
         assert!(!dropped.exists());
         assert!(!dir.join("93Za00").exists(), "emptied code directory is removed");
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    fn day(s: &str) -> NaiveDate {
+        NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap()
+    }
+
+    #[test]
+    fn inverted_csv_range_is_reported() {
+        let files = [day("2025-09-03"), day("2025-09-03")];
+
+        let issues = check_item_dates(Some(day("2025-09-03")), Some(day("2025-06-30")), &files);
+
+        assert!(issues.iter().any(|i| i.kind == DateIssueKind::StartAfterEnd
+            && i.csv == day("2025-09-03") && i.other == day("2025-06-30")));
+    }
+
+    #[test]
+    fn csv_end_before_last_file_is_reported_with_both_dates() {
+        let files = [day("2025-06-01"), day("2025-08-15"), day("2025-09-23")];
+
+        let issues = check_item_dates(Some(day("2025-06-01")), Some(day("2025-06-30")), &files);
+
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].kind, DateIssueKind::EndDiffers);
+        let message = issues[0].message();
+        assert!(message.contains("2025-06-30") && message.contains("2025-09-23"), "{}", message);
+    }
+
+    #[test]
+    fn csv_range_matching_files_reports_nothing() {
+        let files = [day("2025-07-01"), day("2025-08-12"), day("2025-09-30")];
+
+        assert!(check_item_dates(Some(day("2025-07-01")), Some(day("2025-09-30")), &files).is_empty());
+    }
+
+    #[test]
+    fn one_day_of_slack_is_allowed() {
+        let files = [day("2025-06-30"), day("2025-10-01")];
+
+        assert!(check_item_dates(Some(day("2025-07-01")), Some(day("2025-09-30")), &files).is_empty());
+    }
+
+    #[test]
+    fn timeseries_rows_give_first_and_last_dates() {
+        let dir = scratch_dir("rows");
+        let european = dir.join("90Xa00 - Orchard.csv");
+        fs::write(&european, "Time;Height\r\n01.07.2025 00:00;1.0\r\n15.08.2025 12:00;1.1\r\n22.09.2025 21:59;1.2\r\n").unwrap();
+        let iso = dir.join("91Xa00 - Orchard.csv");
+        fs::write(&iso, "time,value\n2025-07-02T00:00:00Z,3\n2025-09-21 10:00,4\n\n").unwrap();
+
+        assert_eq!(csv_row_date_range(&european), Some((day("2025-07-01"), day("2025-09-22"))));
+        assert_eq!(csv_row_date_range(&iso), Some((day("2025-07-02"), day("2025-09-21"))));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn item_file_dates_come_from_names_and_csv_rows() {
+        let dir = scratch_dir("filedates");
+        let csv = dir.join("92Xa00 - Orchard.csv");
+        fs::write(&csv, "Time;Height\n03.07.2025 00:00;1\n04.07.2025 00:00;2\n").unwrap();
+        let file = |path: PathBuf| FileInfo {
+            path, size: 0, bbox: None, geometry: None, bbox_lv95: None,
+            geometry_lv95: None, hash: None, z_min: None, z_max: None,
+        };
+        let files = vec![file(dir.join("20250701T070108Z.jpg")), file(csv), file(dir.join("notes.pdf"))];
+
+        let mut dates = item_file_dates(&files);
+        dates.sort();
+
+        assert_eq!(dates, vec![day("2025-07-01"), day("2025-07-03"), day("2025-07-04")]);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn date_summary_counts_kinds_and_lists_items() {
+        let issue = |item: &str, kind| ValidationIssue {
+            item_id: item.to_string(),
+            severity: "warning".to_string(),
+            message: format!("{} message", item),
+            date_kind: Some(kind),
+        };
+        let issues = vec![
+            issue("90Xa01", DateIssueKind::StartAfterEnd),
+            issue("90Xa01", DateIssueKind::EndDiffers),
+            issue("90Xa02", DateIssueKind::EndDiffers),
+            ValidationIssue { item_id: "90Xa03".into(), severity: "warning".into(), message: "Missing geometry".into(), date_kind: None },
+        ];
+
+        let lines = date_summary_lines(&issues);
+
+        assert!(lines.iter().any(|l| l.contains("start after end") && l.contains('1')));
+        assert!(lines.iter().any(|l| l.contains("end differs from files") && l.contains('2')));
+        assert!(lines.iter().any(|l| l.contains("90Xa01") && l.contains("90Xa01 message")));
+        assert!(!lines.iter().any(|l| l.contains("90Xa03")));
+        assert!(date_summary_lines(&issues[3..]).is_empty());
     }
 }
