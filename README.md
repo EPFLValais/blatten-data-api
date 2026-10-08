@@ -201,6 +201,8 @@ The run checks the catalog it writes:
   path). The schemas are vendored under `schemas/`, so the check needs no network;
 - an empty collection description (error) or item description (warning);
 - a CSV Format that matches none of an item's data file extensions (warning);
+- a CSV Phase that is not a number or a range like `1-3` (warning). A spreadsheet that
+  turned the range into a date (`01. Mär`) is reported with the range it stood for;
 - items whose data files have identical checksums (warning). A bundle `00` sharing the files
   of its own siblings, tile schemes and a lone boundary frame do not count.
 

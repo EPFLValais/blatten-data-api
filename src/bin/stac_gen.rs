@@ -2075,10 +2075,11 @@ enum CheckKind {
     FormatMismatch,
     DuplicateData,
     SchemaInvalid,
+    PhaseInvalid,
 }
 
 impl CheckKind {
-    const ALL: [CheckKind; 4] = [CheckKind::EmptyDescription, CheckKind::FormatMismatch, CheckKind::DuplicateData, CheckKind::SchemaInvalid];
+    const ALL: [CheckKind; 5] = [CheckKind::EmptyDescription, CheckKind::FormatMismatch, CheckKind::DuplicateData, CheckKind::SchemaInvalid, CheckKind::PhaseInvalid];
 
     fn label(self) -> &'static str {
         match self {
@@ -2086,6 +2087,7 @@ impl CheckKind {
             CheckKind::FormatMismatch => "format matches no data file",
             CheckKind::DuplicateData => "data identical to another item",
             CheckKind::SchemaInvalid => "STAC schema failure",
+            CheckKind::PhaseInvalid => "phase not a number or range",
         }
     }
 }
@@ -2154,6 +2156,42 @@ fn format_issue(item: &serde_json::Value, format: Option<&str>) -> Option<Valida
             extensions.into_iter().collect::<Vec<_>>().join(", ")
         ),
         check: Some(CheckKind::FormatMismatch),
+        ..Default::default()
+    })
+}
+
+/// A CSV Phase that is neither a phase number nor a range like `1-3`. A spreadsheet
+/// that reads `1-3` as a date writes it back as `01. Mär`, so a value of that shape
+/// is reported with the range it most likely stood for.
+fn phase_issue(code: &str, phase: Option<&str>) -> Option<ValidationIssue> {
+    let phase = phase?.trim();
+    let is_number = |s: &str| !s.is_empty() && s.chars().all(|c| c.is_ascii_digit());
+    let valid = match phase.split_once('-') {
+        Some((from, to)) => is_number(from) && is_number(to),
+        None => is_number(phase),
+    };
+    if valid {
+        return None;
+    }
+    const MONTHS: [&[&str]; 12] = [
+        &["jan"], &["feb"], &["mär", "mar", "mrz"], &["apr"], &["mai", "may"], &["jun"],
+        &["jul"], &["aug"], &["sep"], &["okt", "oct"], &["nov"], &["dez", "dec"],
+    ];
+    let range = phase.split_once('.').and_then(|(day, month)| {
+        let day: u32 = day.trim().parse().ok()?;
+        let month = month.trim().to_lowercase();
+        let month = MONTHS.iter().position(|names| names.iter().any(|n| month.starts_with(n)))? + 1;
+        Some(format!("{}-{}", day, month))
+    });
+    let message = match range {
+        Some(range) => format!("CSV Phase '{}' is a date, most likely the range {} converted by a spreadsheet", phase, range),
+        None => format!("CSV Phase '{}' is not a phase number or range", phase),
+    };
+    Some(ValidationIssue {
+        item_id: code.to_string(),
+        severity: "warning".to_string(),
+        message,
+        check: Some(CheckKind::PhaseInvalid),
         ..Default::default()
     })
 }
@@ -2969,6 +3007,7 @@ fn generate_catalog(
 
             item_issues.extend(empty_description_issue(&stac_item));
             item_issues.extend(format_issue(&stac_item, item.format.as_deref()));
+            item_issues.extend(phase_issue(&item.code, item.phase.as_deref()));
 
             item_pb.inc(1);
             (item, stac_item, asset_count, item_issues)
@@ -6192,6 +6231,19 @@ links:
         assert!(format_issue(&item, Some("PNG")).is_none());
         assert!(format_issue(&data_item("90Ka02", &[("a.jpeg", "aa")]), Some("JPG")).is_none());
         assert!(format_issue(&data_item("90Ka03", &[("a.tiff", "aa")]), Some("TIF")).is_none());
+    }
+
+    #[test]
+    fn phase_that_is_not_a_number_or_range_is_reported() {
+        let issue = phase_issue("90Ka01", Some("03. Apr")).expect("phase issue");
+        assert_eq!(issue.check, Some(CheckKind::PhaseInvalid));
+        assert!(issue.message.contains("03. Apr") && issue.message.contains("3-4"), "{}", issue.message);
+        assert!(phase_issue("90Ka01", Some("01. Mär")).unwrap().message.contains("1-3"));
+        assert!(phase_issue("90Ka01", Some("phase two")).is_some());
+        for ok in ["3", "1-3", "2-4"] {
+            assert!(phase_issue("90Ka01", Some(ok)).is_none(), "{}", ok);
+        }
+        assert!(phase_issue("90Ka01", None).is_none());
     }
 
     #[test]
