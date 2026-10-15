@@ -90,6 +90,10 @@ struct CatalogConfig {
     providers: Vec<ProviderConfig>,
     #[serde(default)]
     citation: Option<CitationConfig>,
+    /// Release date of the dataset, written to each collection as the timestamps
+    /// extension's `published`
+    #[serde(default)]
+    published: Option<chrono::DateTime<chrono::Utc>>,
     links: Vec<LinkConfig>,
 }
 
@@ -2872,6 +2876,9 @@ fn create_stac_collection(
         collection["sci:doi"] = serde_json::json!(citation.doi);
         collection["sci:citation"] = serde_json::json!(citation.text);
         collection["links"].as_array_mut().unwrap().push(citation.cite_as_link());
+    }
+    if let Some(published) = catalog_config.published {
+        collection["published"] = serde_json::json!(published.to_rfc3339_opts(chrono::SecondsFormat::Secs, true));
     }
     if let Some(license) = catalog_config.license_link() {
         collection["links"].as_array_mut().unwrap().push(license);
@@ -6138,6 +6145,7 @@ license: CC-BY-4.0
 keywords: [orchard]
 default_bbox: [0.0, 0.0, 1.0, 1.0]
 providers: []
+published: "2030-04-01T00:00:00Z"
 citation:
   doi: 10.1234/example.5678
   text: "Appleseed J (2030): Orchard Survey. Example Press, https://doi.org/10.1234/example.5678"
@@ -6174,6 +6182,21 @@ links:
         assert_eq!(link("cite-as").unwrap()["href"], "https://doi.org/10.1234/example.5678");
         assert_eq!(link("license").unwrap()["href"], "https://creativecommons.org/licenses/by/4.0/");
         assert!(link("about").is_none(), "only the licence is taken from the catalog links");
+    }
+
+    #[test]
+    fn collection_carries_release_date_as_published() {
+        let config = cited_catalog_config();
+        let def = CollectionDef {
+            id: "orchard-survey".to_string(),
+            title: "Orchard Survey".to_string(),
+            description: "Apple trees".to_string(),
+        };
+        let collection = create_stac_collection(&def, &[], "https://example.org", &config, &HashMap::new());
+
+        assert_eq!(collection["published"], "2030-04-01T00:00:00Z");
+        let extensions = collection["stac_extensions"].as_array().unwrap();
+        assert!(extensions.iter().any(|e| e == TIMESTAMPS_SCHEMA));
     }
 
     fn data_item(id: &str, files: &[(&str, &str)]) -> serde_json::Value {
@@ -6271,6 +6294,7 @@ links:
             links: vec![],
             default_bbox: vec![7.0, 46.0, 8.0, 47.0],
             citation: None,
+            published: Some("2030-04-01T00:00:00Z".parse().unwrap()),
         };
         let collection = create_stac_collection(&def, &[], "http://localhost:3000", &catalog_config, &HashMap::new());
         let path = dir.join("kites.json");

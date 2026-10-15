@@ -3,7 +3,8 @@
   "id": "digital-surface-model-dsm",
   "stac_version": "1.1.0",
   "stac_extensions": [
-    "https://stac-extensions.github.io/scientific/v1.0.0/schema.json"
+    "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+    "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json"
   ],
   "title": "Digital Surface Model",
   "description": "",
@@ -104,5 +105,6 @@
   ],
   "assets": {},
   "sci:doi": "10.5075/epfl.20.500.14299/262163",
-  "sci:citation": "Widmer T, Senn I, Gassner J, Oggier A, Mayoraz L, Thomas E, Knuth F, Zimmerli M, Carrel M, Wetter J, Von Wartburg J, Gsponer L, Werlen S, Farinotti D, Proksch M (2026): Blatten4Science – Technical Documentation. Natural Hazards Department of the Canton of Wallis SDANA. Brig, September 2026, https://doi.org/10.5075/epfl.20.500.14299/262163"
+  "sci:citation": "Widmer T, Senn I, Gassner J, Oggier A, Mayoraz L, Thomas E, Knuth F, Zimmerli M, Carrel M, Wetter J, Von Wartburg J, Gsponer L, Werlen S, Farinotti D, Proksch M (2026): Blatten4Science – Technical Documentation. Natural Hazards Department of the Canton of Wallis SDANA. Brig, September 2026, https://doi.org/10.5075/epfl.20.500.14299/262163",
+  "published": "2026-10-30T00:00:00Z"
 }

@@ -27,6 +27,8 @@ catalog:
     - name: EPFL ALPOLE
       roles: [processor, host]
       url: https://www.epfl.ch/research/domains/alpole/
+  # Release date, written to each collection as `published` (timestamps extension)
+  published: "2026-10-30T00:00:00Z"
   # The catalog's cite-as link and each collection's sci:doi, sci:citation and
   # cite-as link come from here; collections also repeat the license link below.
   citation:
