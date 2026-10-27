@@ -1,5 +1,6 @@
 // The overview strip and the period it selects. Periods are whole UTC days, `from..=to`, as the
-// statistics routes take them; the strip maps them to and from x positions in its SVG.
+// statistics routes take them; the strip maps them to and from x positions over its plot, which is
+// uPlot's selection there.
 const DAY_MS = 86400000;
 const STEP_MS = { hour: 3600000, day: DAY_MS, week: 7 * DAY_MS };
 
@@ -32,15 +33,44 @@ function windowSpan(period, s) {
   };
 }
 
+// The selection, from the left of the plot, that shows the window over `period`.
+function stripSelect(period, s) {
+  const { x0, x1 } = windowSpan(period, s);
+  return { left: x0 - s.left, width: x1 - x0 };
+}
+
+// The days under a selection `left..left + width` from the left of the plot.
+function selectPeriod(s, left, width) {
+  const from = isoDay(s.at(s.left + left));
+  const to = isoDay(Math.max(dayStart(from), s.at(s.left + left + width) - 1));
+  return { from, to };
+}
+
+// What a drag starting at `x` does: within EDGE_PX of an end of the window it moves that end,
+// inside the window it moves the window, and elsewhere, or over all time, it brushes a new one.
+const EDGE_PX = 4;
+function dragMode(s, period, x) {
+  if (!period.from && !period.to) return 'brush';
+  const { x0, x1 } = windowSpan(period, s);
+  if (Math.abs(x - x0) <= EDGE_PX) return 'from';
+  if (Math.abs(x - x1) <= EDGE_PX) return 'to';
+  return x > x0 && x < x1 ? 'move' : 'brush';
+}
+
 // The period after a drag from `drag.start` to `x`. A brush selects the days under it; a move
-// shifts `drag.span` by whole days and keeps it inside the strip.
+// shifts `drag.span` by whole days and keeps it inside the strip; dragging an end moves it to the
+// day boundary nearest `x`, never past the other end.
 function dragWindow(s, drag, x) {
   if (drag.mode === 'brush') {
     const a = Math.min(drag.start, x);
-    const b = Math.max(drag.start, x);
-    const from = isoDay(s.at(a));
-    const to = isoDay(Math.max(dayStart(from), s.at(b) - 1));
-    return { from, to };
+    return selectPeriod(s, a - s.left, Math.max(drag.start, x) - a);
+  }
+  const boundary = () => Math.round(s.at(x) / DAY_MS) * DAY_MS;
+  if (drag.mode === 'from') {
+    return { from: isoDay(Math.min(boundary(), dayStart(drag.span.to))), to: drag.span.to };
+  }
+  if (drag.mode === 'to') {
+    return { from: drag.span.from, to: isoDay(Math.max(boundary() - DAY_MS, dayStart(drag.span.from))) };
   }
   const from = dayStart(drag.span.from);
   const to = dayStart(drag.span.to);

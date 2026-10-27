@@ -16,9 +16,10 @@
   // ---- state ----------------------------------------------------------------------------------
   const saved = (() => { try { return JSON.parse(sessionStorage.getItem('stats_view') || '{}'); } catch (e) { return {}; } })();
   const view = {
-    range: '7', from: '', to: '', group: 'collection', metric: 'requests', cumulative: false,
+    range: '7', from: '', to: '', group: 'collection', metric: 'requests',
     filter: {}, sort: { key: 'requests', dir: 'desc' }, q: '', offset: 0, ...saved,
   };
+  delete view.cumulative; // a toggle the page no longer has
   if (!GROUPS[view.group]) view.group = 'collection';
   if (!MEASURES[view.metric]) view.metric = 'requests';
   const open = new Map(); // item code -> number of file rows loaded
@@ -37,7 +38,7 @@
   let overview = null;
   let series = null;
   let groupRows = [];
-  let strip = null; // { series, scale, box }: all-time totals under the window
+  let strip = null; // { series, scale }: all-time totals under the window
 
   // ---- formatting -----------------------------------------------------------------------------
   const nf = new Intl.NumberFormat('en-GB');
@@ -51,7 +52,6 @@
     do { v /= 1024; i++; } while (v >= 1024 && i < units.length - 1);
     return v.toFixed(v >= 100 ? 0 : v >= 10 ? 1 : 2) + ' ' + units[i];
   }
-  const fmtMeasure = (n) => (view.metric === 'bytes' ? bytes(n) : view.metric === 'whole_files' ? whole(n) : num(n));
   const setText = (id, text) => { $(id).textContent = text; };
 
   // ---- sign-in (authorization code with PKCE) -------------------------------------------------
@@ -139,76 +139,98 @@
   }
 
   // ---- charts ---------------------------------------------------------------------------------
-  const SVG = 'http://www.w3.org/2000/svg';
   const PALETTE = ['#0072B2', '#E69F00', '#009E73', '#CC79A7', '#56B4E9', '#D55E00', '#8c564b'];
   const GREYS = { 'Documents and other': '#7f8790', 'Smaller groups': '#b9c0c7' };
   const colour = (name, i) => GREYS[name] || PALETTE[i % PALETTE.length];
-  function el(name, attrs, text) {
-    const n = document.createElementNS(SVG, name);
-    for (const [k, v] of Object.entries(attrs || {})) n.setAttribute(k, v);
-    if (text !== undefined) n.textContent = text;
-    return n;
+
+  // A uPlot chart in `box`, made once the box has a width: the dashboard is hidden until access is
+  // granted, and a chart made in a hidden box has no size. `options(width)` gives its options for
+  // the data last set; data under the same `key` is swapped in, a new key makes the chart again.
+  function lineChart(box, options) {
+    const c = { plot: null, key: null, data: null };
+    const build = () => {
+      if (c.plot) c.plot.destroy();
+      c.plot = new uPlot(options(box.clientWidth), c.data, box);
+      c.built = c.key;
+    };
+    c.set = (key, data) => {
+      c.key = key;
+      c.data = data;
+      if (!box.clientWidth) return;
+      if (c.plot && c.built === key) c.plot.setData(data); else build();
+    };
+    new ResizeObserver(() => {
+      if (!c.data || !box.clientWidth) return;
+      if (c.plot && c.built === c.key) c.plot.setSize({ width: box.clientWidth, height: c.plot.height }); else build();
+    }).observe(box);
+    return c;
   }
 
-  // groups: [{ name, values }] over labels, drawn as stacked bars. `onBar(i)` is called when the
-  // bar of label i is clicked.
-  const PLOT_LEFT = 52;
-  const PLOT_RIGHT = 4;
-  function stackedChart(svg, labels, groups, legend, onBar) {
-    svg.replaceChildren();
-    if (legend) legend.replaceChildren();
-    const vb = svg.viewBox.baseVal;
-    const W = vb.width, H = vb.height, left = PLOT_LEFT, bottom = 16, top = 8;
-    const plotW = W - left - PLOT_RIGHT, plotH = H - bottom - top;
-    const totals = labels.map((_, i) => groups.reduce((a, g) => a + g.values[i], 0));
-    const max = Math.max(1, ...totals);
-    for (const frac of [0, 0.5, 1]) {
-      const y = top + plotH - frac * plotH;
-      svg.appendChild(el('line', { class: 'grid', x1: left, y1: y, x2: W, y2: y }));
-      svg.appendChild(el('text', { x: left - 4, y: y + (frac === 1 ? 7 : frac === 0 ? 0 : 3), 'text-anchor': 'end' }, fmtMeasure(max * frac)));
-    }
-    if (!labels.length) return;
-    const slot = plotW / labels.length;
-    const barW = Math.min(60, Math.max(1, slot * 0.8));
-    labels.forEach((label, i) => {
-      let y = top + plotH;
-      groups.forEach((g, gi) => {
-        const v = g.values[i];
-        if (v <= 0) return;
-        const h = Math.max(0.5, (v / max) * plotH);
-        y -= h;
-        const bar = el('rect', { x: left + i * slot + (slot - barW) / 2, y, width: barW, height: h, fill: colour(g.name, gi) });
-        bar.appendChild(el('title', {}, label + ' · ' + g.name + ': ' + fmtMeasure(v)));
-        if (onBar) { bar.classList.add('zoom'); bar.addEventListener('click', () => onBar(i)); }
-        svg.appendChild(bar);
-      });
-    });
-    svg.appendChild(el('text', { x: left, y: H - 3 }, labels[0]));
-    svg.appendChild(el('text', { x: W - 4, y: H - 3, 'text-anchor': 'end' }, labels[labels.length - 1]));
-    if (legend && groups.length > 1) {
-      groups.forEach((g, gi) => {
-        const item = document.createElement('span');
-        const sw = el('svg', { viewBox: '0 0 10 10' });
-        sw.appendChild(el('rect', { width: 10, height: 10, rx: 2, fill: colour(g.name, gi) }));
-        item.appendChild(sw);
-        item.appendChild(document.createTextNode(g.name));
-        legend.appendChild(item);
-      });
-    }
+  // Buckets are UTC, so the axes and the values on hover are read in UTC too.
+  const utc = (ts) => uPlot.tzDate(new Date(ts * 1e3), 'Etc/UTC');
+  const fmtOf = (m) => (m === 'bytes' ? bytes : m === 'whole_files' ? whole : num);
+  const shown = (fmt) => (u, v) => (v === null || v === undefined ? '–' : fmt(v));
+  const bucketText = (resolution) => (ts) => {
+    const d = new Date(ts * 1000).toISOString();
+    if (resolution === 'hour') return longDay(d.slice(0, 10)) + ', ' + d.slice(11, 16) + ' UTC';
+    return (resolution === 'week' ? 'Week of ' : '') + longDay(d.slice(0, 10));
+  };
+  const lineSeries = (name, i, fmt) => ({
+    label: name, stroke: colour(name, i), width: 1.5, value: shown(fmt),
+    points: { size: 5, fill: colour(name, i) },
+  });
+  const yAxis = (fmt) => ({ size: 64, values: (u, ticks) => ticks.map(fmt) });
+  const fromZero = { range: (u, min, max) => uPlot.rangeNum(0, Math.max(1, max), 0.1, true) };
+  // Day and month, with the hour when ticks are less than a day apart, in UTC or local time.
+  const timeAxis = (timeZone) => ({
+    values: (u, ticks, axis, space, incr) => ticks.map((ts) => {
+      const d = new Date(ts * 1000);
+      const day = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone });
+      return incr < 86400 ? d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone }) + '\n' + day : day;
+    }),
+  });
+
+  // Dragging across the main chart zooms the window to the days under the selection; a double
+  // click goes back to the period shown before the first zoom.
+  let zoomBack = null;
+  const main = lineChart($('chart-main'), (width) => {
+    const fmt = fmtOf(view.metric);
+    return {
+      width, height: 220, tzDate: utc,
+      scales: { x: { time: true }, y: fromZero },
+      series: [
+        { label: 'Period', value: shown(bucketText(series.resolution)) },
+        ...chartData(series, view.metric).names.map((name, i) => lineSeries(name, i, fmt)),
+      ],
+      axes: [timeAxis('UTC'), yAxis(fmt)],
+      cursor: { drag: { x: true, y: false, setScale: false } },
+      hooks: {
+        setSelect: [(u) => {
+          if (u.select.width < 3) return;
+          const lo = u.posToVal(u.select.left, 'x');
+          const hi = u.posToVal(u.select.left + u.select.width, 'x');
+          u.setSelect({ left: 0, top: 0, width: 0, height: 0 }, false);
+          if (!zoomBack) zoomBack = { range: view.range, from: view.from, to: view.to };
+          setWindow(selectionPeriod(series.buckets, series.resolution, lo, hi), true);
+        }],
+        ready: [(u) => u.over.addEventListener('dblclick', zoomOut)],
+      },
+    };
+  });
+
+  function zoomOut() {
+    if (!zoomBack) return;
+    Object.assign(view, zoomBack);
+    zoomBack = null;
+    rangeChanged();
   }
 
   function renderMain() {
     if (!series) return;
-    const groups = series.groups.map((g) => {
-      let running = 0;
-      const raw = g[view.metric];
-      return { name: g.name, values: view.cumulative ? raw.map((v) => (running += v)) : raw };
-    });
-    const caption = (view.cumulative ? 'Cumulative ' : '') + MEASURES[view.metric] + ' per ' + series.resolution + ', by ' + GROUPS[view.group].toLowerCase();
+    const caption = MEASURES[view.metric] + ' per ' + series.resolution + ', by ' + GROUPS[view.group].toLowerCase();
     setText('cap-main', caption.charAt(0).toUpperCase() + caption.slice(1));
-    stackedChart($('chart-main'), series.buckets, groups, $('legend'), (i) => {
-      if (series.resolution !== 'hour') setWindow(bucketPeriod(series.buckets[i], series.resolution), true);
-    });
+    const { names, data } = chartData(series, view.metric);
+    main.set([view.metric, series.resolution, ...names].join('\n'), data);
     windowLabel(series.resolution);
   }
 
@@ -222,25 +244,68 @@
     setText('window-label', span + (resolution ? ' · by ' + resolution : ' · loading…'));
   }
 
+  // The strip and the live chart count requests, or bytes when data sent is the measure.
+  const totalMetric = () => (view.metric === 'bytes' ? 'bytes' : 'requests');
+  // Ticks on the strip are whole days or longer, so its one line of labels always shows the date.
+  const DAY_INCRS = [1, 2, 7, 14, 30, 91, 182, 365].map((d) => d * 86400);
+  // The strip is one line of all-time totals; its uPlot selection is the window. Its x scale runs
+  // from the first bucket's start to the last one's end, so it matches `strip.scale`.
+  const stripChart = lineChart($('chart-strip'), (width) => ({
+    width, height: 80, tzDate: utc, legend: { show: false },
+    scales: { x: { time: true, range: () => [strip.scale.first / 1e3, strip.scale.end / 1e3] }, y: fromZero },
+    series: [{}, { stroke: PALETTE[0], width: 1.5, points: { show: false } }],
+    axes: [{ ...timeAxis('UTC'), size: 30, incrs: DAY_INCRS }, { show: false }],
+    cursor: { drag: { x: false, y: false }, points: { show: false }, y: false },
+    hooks: { ready: [stripPointer], draw: [drawWindow] },
+  }));
+
   function renderStrip() {
     if (!strip) return;
-    const svg = $('chart-strip');
-    const saveMetric = view.metric;
-    view.metric = view.metric === 'bytes' ? 'bytes' : 'requests';
-    stackedChart(svg, strip.series.buckets, [{ name: 'All', values: strip.series.groups.length ? strip.series.groups[0][view.metric] : strip.series.buckets.map(() => 0) }], null);
-    view.metric = saveMetric;
-    const vb = svg.viewBox.baseVal;
-    strip.scale = stripScale(strip.series.buckets, strip.series.resolution, PLOT_LEFT, vb.width - PLOT_LEFT - PLOT_RIGHT);
-    strip.box = el('rect', { class: 'window', y: 0, height: vb.height - 16 });
-    svg.appendChild(strip.box);
-    drawWindow();
+    stripChart.set(totalMetric(), chartData(strip.series, totalMetric()).data.slice(0, 2));
   }
 
-  function drawWindow() {
-    if (!strip) return;
-    const { x0, x1 } = windowSpan(period(), strip.scale);
-    strip.box.setAttribute('x', x0);
-    strip.box.setAttribute('width', Math.max(1, x1 - x0));
+  // Called by the strip's draw hook with the plot being drawn, which is not yet `stripChart.plot`
+  // while it is being made.
+  function drawWindow(u = stripChart.plot) {
+    if (!strip || !u) return;
+    strip.scale = stripScale(strip.series.buckets, strip.series.resolution, 0, u.over.clientWidth);
+    u.setSelect({ ...stripSelect(period(), strip.scale), top: 0, height: u.over.clientHeight }, false);
+  }
+
+  // Dragging on the strip brushes a new window, moves the window or moves one of its ends, as
+  // `dragMode` says for where it starts; a click zooms into the bucket under it. uPlot's own
+  // dragging is kept off, so the window is only ever the period.
+  function stripPointer(u) {
+    const over = u.over;
+    const CURSORS = { brush: 'crosshair', move: 'grab', from: 'ew-resize', to: 'ew-resize' };
+    let drag = null;
+    const xOf = (e) => e.clientX - over.getBoundingClientRect().left;
+    over.addEventListener('pointerdown', (e) => {
+      if (!strip || e.button !== 0) return;
+      e.preventDefault();
+      const x = xOf(e);
+      const p = period();
+      const sel = stripSelect(p, strip.scale);
+      drag = { mode: dragMode(strip.scale, p, x), start: x, span: selectPeriod(strip.scale, sel.left, sel.width), moved: false };
+      over.setPointerCapture(e.pointerId);
+    });
+    over.addEventListener('pointermove', (e) => {
+      if (!strip) return;
+      const x = xOf(e);
+      if (!drag) { over.style.cursor = CURSORS[dragMode(strip.scale, period(), x)]; return; }
+      if (!drag.moved && Math.abs(x - drag.start) < 3) return;
+      drag.moved = true;
+      setWindow(dragWindow(strip.scale, drag, x), false);
+    });
+    over.addEventListener('pointerup', (e) => {
+      if (!drag) return;
+      const d = drag;
+      drag = null;
+      if (d.moved) { loads.now(); return; }
+      const i = strip.scale.bucketAt(xOf(e));
+      setWindow(bucketPeriod(strip.series.buckets[i], strip.series.resolution), true);
+    });
+    over.addEventListener('pointercancel', () => { drag = null; });
   }
 
   // Moves the window to `p` and reloads the page's numbers for it, at once or once dragging stops.
@@ -260,62 +325,27 @@
 
   async function loadStrip() {
     const s = await (await api('/stats/api/series?' + query({ dim: 'total' }, {}))).json();
-    strip = { series: s };
+    strip = { series: s, scale: stripScale(s.buckets, s.resolution, 0, 1) };
     renderStrip();
+    drawWindow();
     windowLabel(series && series.resolution);
   }
 
-  {
-    const svg = $('chart-strip');
-    let drag = null;
-    const xOf = (e) => {
-      const r = svg.getBoundingClientRect();
-      return ((e.clientX - r.left) / r.width) * svg.viewBox.baseVal.width;
+  const live = lineChart($('chart-live'), (width) => {
+    const fmt = fmtOf(totalMetric());
+    const at = (ts) => new Date(ts * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    return {
+      width, height: 110,
+      scales: { x: { time: true }, y: fromZero },
+      series: [{ label: 'Quarter hour from', value: shown(at) }, lineSeries('All', 0, fmt)],
+      axes: [timeAxis(undefined), yAxis(fmt)],
+      cursor: { drag: { x: false, y: false } },
     };
-    svg.addEventListener('pointerdown', (e) => {
-      if (!strip) return;
-      const x = xOf(e);
-      const { x0, x1 } = windowSpan(period(), strip.scale);
-      const span = { from: isoDay(strip.scale.at(x0)), to: isoDay(strip.scale.at(x1) - 1) };
-      drag = { mode: view.range !== 'all' && x >= x0 && x <= x1 ? 'move' : 'brush', start: x, span, moved: false };
-      svg.setPointerCapture(e.pointerId);
-    });
-    svg.addEventListener('pointermove', (e) => {
-      if (!drag) return;
-      const x = xOf(e);
-      if (!drag.moved && Math.abs(x - drag.start) < 3) return;
-      drag.moved = true;
-      setWindow(dragWindow(strip.scale, drag, x), false);
-    });
-    svg.addEventListener('pointerup', (e) => {
-      if (!drag) return;
-      const d = drag;
-      drag = null;
-      if (d.moved) { loads.now(); return; }
-      const i = strip.scale.bucketAt(xOf(e));
-      setWindow(bucketPeriod(strip.series.buckets[i], strip.series.resolution), true);
-    });
-    svg.addEventListener('pointercancel', () => { drag = null; });
-  }
+  });
 
   function renderLive() {
     if (!overview) return;
-    const m = view.metric === 'bytes' ? 'bytes' : 'requests';
-    const bucket = 900;
-    const now = overview.now;
-    const start = Math.floor((now - 24 * 3600) / bucket) * bucket;
-    const n = Math.floor((now - start) / bucket) + 1;
-    const values = new Array(n).fill(0);
-    for (const p of overview.timeline) {
-      const i = Math.floor((p.ts - start) / bucket);
-      if (i >= 0 && i < n) values[i] += p[m];
-    }
-    const labels = values.map((_, i) =>
-      new Date((start + i * bucket) * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }));
-    const saveMetric = view.metric;
-    view.metric = m;
-    stackedChart($('chart-live'), labels, [{ name: 'All', values }], null);
-    view.metric = saveMetric;
+    live.set(totalMetric(), liveData(overview.timeline, overview.now, totalMetric()));
   }
 
   // ---- numbers --------------------------------------------------------------------------------
@@ -591,7 +621,6 @@
   $('from').value = view.from;
   $('to').value = view.to;
   $('custom').hidden = view.range !== 'custom';
-  $('cumulative').checked = view.cumulative;
   for (const b of $('metric').children) b.classList.toggle('on', b.dataset.value === view.metric);
   renderFilters();
 
@@ -607,18 +636,21 @@
     const [dim, ...rest] = $('add-filter').value.split('|');
     if (dim) { view.filter[dim] = rest.join('|'); filtersChanged(); }
   });
-  $('range').addEventListener('change', () => {
-    view.range = $('range').value;
+  function rangeChanged() {
+    $('range').value = view.range;
     $('custom').hidden = view.range !== 'custom';
+    $('from').value = view.from;
+    $('to').value = view.to;
     view.offset = 0;
     open.clear();
     persist();
     drawWindow();
     windowLabel(null);
     loads.now();
-  });
+  }
+  $('range').addEventListener('change', () => { view.range = $('range').value; zoomBack = null; rangeChanged(); });
   for (const id of ['from', 'to']) {
-    $(id).addEventListener('change', () => { view[id] = $(id).value; view.offset = 0; open.clear(); persist(); drawWindow(); windowLabel(null); loads.now(); });
+    $(id).addEventListener('change', () => { view[id] = $(id).value; zoomBack = null; rangeChanged(); });
   }
   $('metric').addEventListener('click', (e) => {
     const value = e.target.dataset && e.target.dataset.value;
@@ -632,7 +664,6 @@
     renderStrip();
     loadTable(loadId);
   });
-  $('cumulative').addEventListener('change', () => { view.cumulative = $('cumulative').checked; persist(); renderMain(); });
   $('export').addEventListener('change', async () => {
     const level = $('export').value;
     $('export').value = '';

@@ -44,9 +44,12 @@ figcaption { font-size: .85rem; color: var(--muted); display: flex; flex-wrap: w
 svg { width: 100%; height: auto; display: block; }
 svg text { font-size: 9px; fill: var(--muted); }
 svg .grid { stroke: var(--line); stroke-dasharray: 2 3; }
-.legend { display: flex; flex-wrap: wrap; gap: .25rem 1rem; padding: .25rem 0 .1rem; font-size: .85rem; color: var(--muted); }
-.legend span { display: inline-flex; align-items: center; gap: .35rem; }
-.legend svg { width: .8rem; height: .8rem; }
+.chart { min-height: 6rem; }
+.chart .uplot { font-family: inherit; color: var(--muted); }
+.chart .u-legend { font-size: .85rem; text-align: left; }
+.chart .u-legend .u-value { color: var(--ink); font-variant-numeric: tabular-nums; }
+.chart .u-over { cursor: crosshair; }
+#chart-main .u-select { background: var(--accent); opacity: .15; }
 .tools { margin: .75rem 0 .4rem; }
 .tools input[type=search] { min-width: 16rem; }
 .tools .pager { margin-left: auto; display: flex; gap: .4rem; }
@@ -65,7 +68,7 @@ tr.item.open td:first-child::before { content: "▾"; }
 tr.files > td { background: #fafbfc; padding: .25rem .6rem .6rem 2rem; }
 tr.files table { border: 0; margin: 0; }
 .title { color: var(--muted); font-size: .85rem; display: block; margin-left: 1rem; }
-svg.strip { cursor: crosshair; touch-action: none; user-select: none; }
-svg.strip .window { fill: var(--accent); fill-opacity: .15; stroke: var(--accent); pointer-events: none; }
-svg rect.zoom { cursor: zoom-in; }
+.chart.strip { min-height: 0; }
+.strip .u-over { touch-action: none; }
+.strip .u-select { background: rgba(27, 108, 168, .15); border: 1px solid var(--accent); box-sizing: border-box; }
 #window-label { color: var(--ink); font-variant-numeric: tabular-nums; }

@@ -6,7 +6,7 @@
 use anyhow::{Context, Result};
 use axum::{
     extract::{Path, Query, State},
-    http::{header, Method, StatusCode},
+    http::{header, HeaderMap, Method, StatusCode},
     response::{IntoResponse, Json, Response},
     routing::get,
     Router,
@@ -15,6 +15,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::{env, net::SocketAddr, path::PathBuf, sync::Arc};
 use strsim::levenshtein;
+use tower_http::compression::CompressionLayer;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -878,9 +879,51 @@ fn build_pagination_links(
     links
 }
 
-/// Generate ETag from content
-fn generate_etag(collections: usize, items: usize) -> String {
-    format!("\"v{}-c{}-i{}\"", STAC_VERSION, collections, items)
+/// The ETag of a response built from `catalog` and nothing else but `parts`: the path ids and
+/// query parameters the body depends on. Weak, because the JSON is the same answer whether it is
+/// sent compressed or not, and its member order is not fixed.
+fn stac_etag(catalog: &StacCatalog, parts: &[&str]) -> String {
+    use std::hash::{DefaultHasher, Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    parts.hash(&mut hasher);
+    format!("W/\"{}-{:016x}\"", catalog.version, hasher.finish())
+}
+
+/// A value fixed for the life of this process and different in the next one
+fn process_nonce() -> u64 {
+    use std::hash::BuildHasher;
+    static NONCE: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    *NONCE.get_or_init(|| std::collections::hash_map::RandomState::new().hash_one(0u8))
+}
+
+/// Whether an `If-None-Match` request header matches `etag`, by weak comparison: `*`, or any
+/// listed tag whose opaque part equals the one of `etag`.
+fn if_none_match(headers: &HeaderMap, etag: &str) -> bool {
+    let opaque = |tag: &str| tag.trim().trim_start_matches("W/").to_string();
+    let ours = opaque(etag);
+    headers
+        .get_all(header::IF_NONE_MATCH)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .flat_map(|value| value.split(','))
+        .any(|tag| tag.trim() == "*" || opaque(tag) == ours)
+}
+
+/// A 304 with no body when the request already holds `etag`, otherwise the body `build` makes.
+/// Both carry the ETag and `cache_control`.
+fn not_modified_or<R: IntoResponse>(
+    request: &HeaderMap,
+    etag: String,
+    cache_control: &'static str,
+    build: impl FnOnce() -> R,
+) -> Response {
+    let not_modified = if_none_match(request, &etag);
+    let headers = [(header::CACHE_CONTROL, cache_control.to_string()), (header::ETAG, etag)];
+    if not_modified {
+        (StatusCode::NOT_MODIFIED, headers).into_response()
+    } else {
+        (headers, build()).into_response()
+    }
 }
 
 // ============================================================================
@@ -966,43 +1009,15 @@ async fn main() -> Result<()> {
         base_url: base_url.clone(),
     };
 
-    let asset_concurrency =
-        asset_routes::concurrency(env::var(asset_routes::CONCURRENCY_VAR).ok().as_deref());
-    info!("Asset-bearing requests in flight at once: {}", asset_concurrency);
+    let asset_limits = asset_routes::Limits::from_env(|name| env::var(name).ok());
+    info!(
+        "Asset-bearing requests in flight at once: {}, each holding its slot at most {}s, waiting for one at most {}s",
+        asset_limits.concurrency,
+        asset_limits.deadline.as_secs(),
+        asset_limits.wait.as_secs()
+    );
 
-    // Build router
-    let app = Router::new()
-        // Landing page
-        .route("/", get(landing_page))
-        .route("/stac", get(landing_page))
-        // Conformance
-        .route("/stac/conformance", get(conformance))
-        // Catalog
-        .route("/stac/catalog.json", get(get_catalog))
-        // Collections
-        .route("/stac/collections", get(list_collections))
-        .route("/stac/collections/:collection_id", get(get_collection))
-        // Search, collection items and item: asset-bearing responses, behind one concurrency limit
-        .merge(asset_routes::router(
-            get(search_items_get).post(search_items_post),
-            get(get_collection_items),
-            get(get_item),
-            asset_concurrency,
-        ))
-        // KML generation (path-based only — no query params to avoid injection/encoding issues).
-        // The last segment is a param (:_kml) rather than a literal because SwissTopo
-        // appends hash params to the URL path (e.g. "kml&bgLayer=...") with no "?" separator.
-        .route("/stac/collections/:collection_id/:_kml", get(generate_kml_collection_path))
-        .route("/stac/collections/:collection_id/items/:item_id/:_kml", get(generate_kml_item_path))
-        // Health check
-        .route("/health", get(health_check))
-        .with_state(state)
-        .layer(
-            CorsLayer::new()
-                .allow_origin(Any)
-                .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-                .allow_headers([header::CONTENT_TYPE, header::ACCEPT]),
-        );
+    let app = stac_router(state, asset_limits);
 
     // Download statistics sit outside the CORS layer above and are registered only when configured.
     let app = stats_routes::mount(app, |name| env::var(name).ok(), stat_items, file_sizes);
@@ -1018,6 +1033,43 @@ async fn main() -> Result<()> {
 
     info!("Server shutdown complete");
     Ok(())
+}
+
+/// Every STAC route, with its CORS layer, its JSON compressed as the client's `Accept-Encoding` asks
+fn stac_router(state: AppState, asset_limits: asset_routes::Limits) -> Router {
+    Router::new()
+        // Landing page
+        .route("/", get(landing_page))
+        .route("/stac", get(landing_page))
+        // Conformance
+        .route("/stac/conformance", get(conformance))
+        // Catalog
+        .route("/stac/catalog.json", get(get_catalog))
+        // Collections
+        .route("/stac/collections", get(list_collections))
+        .route("/stac/collections/:collection_id", get(get_collection))
+        // Search, collection items and item: asset-bearing responses, behind one concurrency limit
+        .merge(asset_routes::router(
+            get(search_items_get).post(search_items_post),
+            get(get_collection_items),
+            get(get_item),
+            asset_limits,
+        ))
+        // KML generation (path-based only — no query params to avoid injection/encoding issues).
+        // The last segment is a param (:_kml) rather than a literal because SwissTopo
+        // appends hash params to the URL path (e.g. "kml&bgLayer=...") with no "?" separator.
+        .route("/stac/collections/:collection_id/:_kml", get(generate_kml_collection_path))
+        .route("/stac/collections/:collection_id/items/:item_id/:_kml", get(generate_kml_item_path))
+        // Health check
+        .route("/health", get(health_check))
+        .with_state(state)
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+                .allow_headers([header::CONTENT_TYPE, header::ACCEPT]),
+        )
+        .layer(CompressionLayer::new().gzip(true).br(true))
 }
 
 async fn shutdown_signal() {
@@ -1146,28 +1198,17 @@ async fn conformance() -> impl IntoResponse {
 }
 
 /// Get root catalog
-async fn get_catalog(State(state): State<AppState>) -> impl IntoResponse {
-    let etag = generate_etag(state.catalog.collections.len(), state.catalog.items.len());
-    (
-        [
-            (header::CACHE_CONTROL, "public, max-age=3600".to_string()),
-            (header::ETAG, etag),
-        ],
-        Json(state.catalog.root.clone()),
-    )
+async fn get_catalog(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
+    let etag = stac_etag(&state.catalog, &[]);
+    not_modified_or(&headers, etag, "public, max-age=3600", || Json(state.catalog.root.clone()))
 }
 
 /// List all collections
-async fn list_collections(State(state): State<AppState>) -> impl IntoResponse {
-    let collections: Vec<_> = state.catalog.collections.values().collect();
-    let total = collections.len();
-
-    let etag = generate_etag(state.catalog.collections.len(), state.catalog.items.len());
-    (
-        [
-            (header::CACHE_CONTROL, "public, max-age=3600".to_string()),
-            (header::ETAG, etag),
-        ],
+async fn list_collections(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
+    let etag = stac_etag(&state.catalog, &[]);
+    not_modified_or(&headers, etag, "public, max-age=3600", || {
+        let collections: Vec<_> = state.catalog.collections.values().collect();
+        let total = collections.len();
         Json(serde_json::json!({
             "collections": collections,
             "numberMatched": total,
@@ -1184,27 +1225,22 @@ async fn list_collections(State(state): State<AppState>) -> impl IntoResponse {
                     "type": "application/json"
                 }
             ]
-        })),
-    )
+        }))
+    })
 }
 
 /// Get a specific collection
 async fn get_collection(
     State(state): State<AppState>,
     Path(collection_id): Path<String>,
+    headers: HeaderMap,
 ) -> impl IntoResponse {
     match state.catalog.collections.get(&collection_id) {
         Some(collection) => {
-            let etag = generate_etag(state.catalog.collections.len(), state.catalog.items.len());
-            (
-                StatusCode::OK,
-                [
-                    (header::CACHE_CONTROL, "public, max-age=3600".to_string()),
-                    (header::ETAG, etag),
-                ],
-                Json(serde_json::to_value(collection).unwrap_or_default()),
-            )
-                .into_response()
+            let etag = stac_etag(&state.catalog, &[&collection_id]);
+            not_modified_or(&headers, etag, "public, max-age=3600", || {
+                Json(serde_json::to_value(collection).unwrap_or_default())
+            })
         }
         None => ApiError::not_found(format!("Collection '{}' not found", collection_id)).into_response(),
     }
@@ -1295,65 +1331,66 @@ async fn get_item(
     State(state): State<AppState>,
     Path((collection_id, item_id)): Path<(String, String)>,
     Query(params): Query<AssetParams>,
+    headers: HeaderMap,
 ) -> impl IntoResponse {
     let item = state.catalog.get_item(&collection_id, &item_id);
 
     match item {
         Some(item) => {
-            let mut json = serde_json::to_value(item).unwrap_or_default();
+            // The asset page is the only part of the body taken from the query. Which assets a
+            // page holds follows the item's asset map order, fixed only within this process.
+            let page = params
+                .asset_limit
+                .map(|limit| format!("{}+{}+{}", limit, params.asset_offset.unwrap_or(0), process_nonce()))
+                .unwrap_or_default();
+            let etag = stac_etag(&state.catalog, &[&collection_id, &item_id, &page]);
+            not_modified_or(&headers, etag, "public, max-age=3600", || {
+                let mut json = serde_json::to_value(item).unwrap_or_default();
 
-            // Paginate assets if limit is specified
-            if let Some(limit) = params.asset_limit {
-                if let Some(obj) = json.as_object_mut() {
-                    if let Some(assets) = obj.get("assets").and_then(|a| a.as_object()) {
-                        let offset = params.asset_offset.unwrap_or(0);
+                // Paginate assets if limit is specified
+                if let Some(limit) = params.asset_limit {
+                    if let Some(obj) = json.as_object_mut() {
+                        if let Some(assets) = obj.get("assets").and_then(|a| a.as_object()) {
+                            let offset = params.asset_offset.unwrap_or(0);
 
-                        // Separate archive from other assets
-                        let archive = assets.get("archive").cloned();
-                        let other_assets: Vec<_> =
-                            assets.iter().filter(|(k, _)| *k != "archive").collect();
+                            // Separate archive from other assets
+                            let archive = assets.get("archive").cloned();
+                            let other_assets: Vec<_> =
+                                assets.iter().filter(|(k, _)| *k != "archive").collect();
 
-                        let total_assets = other_assets.len();
+                            let total_assets = other_assets.len();
 
-                        // Paginate non-archive assets
-                        let paginated: serde_json::Map<String, serde_json::Value> = other_assets
-                            .into_iter()
-                            .skip(offset)
-                            .take(limit)
-                            .map(|(k, v)| (k.clone(), v.clone()))
-                            .collect();
+                            // Paginate non-archive assets
+                            let paginated: serde_json::Map<String, serde_json::Value> = other_assets
+                                .into_iter()
+                                .skip(offset)
+                                .take(limit)
+                                .map(|(k, v)| (k.clone(), v.clone()))
+                                .collect();
 
-                        let has_archive = archive.is_some();
-                        let mut new_assets = serde_json::Map::new();
-                        if let Some(arch) = archive {
-                            new_assets.insert("archive".to_string(), arch);
+                            let has_archive = archive.is_some();
+                            let mut new_assets = serde_json::Map::new();
+                            if let Some(arch) = archive {
+                                new_assets.insert("archive".to_string(), arch);
+                            }
+                            new_assets.extend(paginated);
+
+                            let returned_count = new_assets.len() - if has_archive { 1 } else { 0 };
+                            obj.insert("assets".to_string(), serde_json::Value::Object(new_assets));
+                            obj.insert(
+                                "_assetsMeta".to_string(),
+                                serde_json::json!({
+                                    "total": total_assets,
+                                    "offset": offset,
+                                    "returned": returned_count
+                                }),
+                            );
                         }
-                        new_assets.extend(paginated);
-
-                        let returned_count = new_assets.len() - if has_archive { 1 } else { 0 };
-                        obj.insert("assets".to_string(), serde_json::Value::Object(new_assets));
-                        obj.insert(
-                            "_assetsMeta".to_string(),
-                            serde_json::json!({
-                                "total": total_assets,
-                                "offset": offset,
-                                "returned": returned_count
-                            }),
-                        );
                     }
                 }
-            }
 
-            let etag = format!("\"{}:{}\"", collection_id, item_id);
-            (
-                StatusCode::OK,
-                [
-                    (header::CACHE_CONTROL, "public, max-age=3600".to_string()),
-                    (header::ETAG, etag),
-                ],
-                Json(json),
-            )
-                .into_response()
+                Json(json)
+            })
         }
         None => ApiError::not_found(format!(
             "Item '{}' not found in collection '{}'",
@@ -1739,6 +1776,130 @@ mod tests {
             "collection": "orchards"
         }))
         .unwrap()
+    }
+
+    fn orchard_app() -> Router {
+        let root = serde_json::from_value(serde_json::json!({
+            "type": "Catalog",
+            "stac_version": "1.1.0",
+            "id": "orchards-root",
+            "description": "Fruit trees",
+            "links": []
+        }))
+        .unwrap();
+        let collection: catalog::StacCollection = serde_json::from_value(serde_json::json!({
+            "type": "Collection",
+            "stac_version": "1.1.0",
+            "id": "orchards",
+            "description": "Orchard surveys",
+            "license": "CC0-1.0",
+            "extent": {
+                "spatial": {"bbox": [[-180.0, -90.0, 180.0, 90.0]]},
+                "temporal": {"interval": [["2024-01-01T00:00:00Z", null]]}
+            },
+            "links": []
+        }))
+        .unwrap();
+        let mut pear = item("pear-01");
+        for n in 0..40 {
+            pear.assets.insert(
+                format!("leaf-{n}"),
+                serde_json::from_value(serde_json::json!({"href": format!("/s3/pear-01/leaf-{n}.jpg")})).unwrap(),
+            );
+        }
+        let catalog = StacCatalog::from_parts(
+            root,
+            [("orchards".to_string(), collection)].into(),
+            vec![pear, item("plum-02")],
+            "orchard-version".to_string(),
+        );
+        let state = AppState { catalog: Arc::new(catalog), base_url: "http://orchard.test".into() };
+        stac_router(state, asset_routes::Limits::from_env(|_| None))
+    }
+
+    async fn send(
+        app: &Router,
+        uri: &str,
+        headers: &[(header::HeaderName, &str)],
+    ) -> (StatusCode, axum::http::HeaderMap, Vec<u8>) {
+        use tower::ServiceExt;
+        let mut req = axum::http::Request::builder().uri(uri);
+        for (name, value) in headers {
+            req = req.header(name, *value);
+        }
+        let resp = app.clone().oneshot(req.body(axum::body::Body::empty()).unwrap()).await.unwrap();
+        let (parts, body) = resp.into_parts();
+        let bytes = axum::body::to_bytes(body, usize::MAX).await.unwrap();
+        (parts.status, parts.headers, bytes.to_vec())
+    }
+
+    #[tokio::test]
+    async fn a_search_asked_for_gzip_is_compressed_and_decodes_to_the_plain_answer() {
+        use std::io::Read;
+        let app = orchard_app();
+        let (status, headers, plain) = send(&app, "/stac/search?limit=10", &[]).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(headers.get(header::CONTENT_ENCODING).is_none());
+
+        let (status, headers, zipped) =
+            send(&app, "/stac/search?limit=10", &[(header::ACCEPT_ENCODING, "gzip")]).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(headers[header::CONTENT_ENCODING], "gzip");
+        assert!(zipped.len() < plain.len());
+        let mut decoded = Vec::new();
+        flate2::read::GzDecoder::new(&zipped[..]).read_to_end(&mut decoded).unwrap();
+        assert_eq!(decoded, plain);
+    }
+
+    #[tokio::test]
+    async fn a_get_repeated_with_its_etag_is_not_modified_and_another_query_is_answered() {
+        let app = orchard_app();
+        for uri in [
+            "/stac/catalog.json",
+            "/stac/collections",
+            "/stac/collections/orchards",
+            "/stac/collections/orchards/items/pear-01",
+            "/stac/collections/orchards/items/pear-01?asset_limit=5",
+        ] {
+            let (status, headers, body) = send(&app, uri, &[]).await;
+            assert_eq!(status, StatusCode::OK, "{uri}");
+            assert!(!body.is_empty());
+            let etag = headers[header::ETAG].to_str().unwrap().to_string();
+
+            let (status, headers, body) = send(&app, uri, &[(header::IF_NONE_MATCH, &etag)]).await;
+            assert_eq!(status, StatusCode::NOT_MODIFIED, "{uri}");
+            assert!(body.is_empty(), "{uri}");
+            assert_eq!(headers[header::ETAG], etag.as_str());
+        }
+
+        let (_, headers, _) = send(&app, "/stac/collections/orchards/items/pear-01?asset_limit=5", &[]).await;
+        let etag = headers[header::ETAG].to_str().unwrap().to_string();
+        for other in [
+            "/stac/collections/orchards/items/pear-01",
+            "/stac/collections/orchards/items/pear-01?asset_limit=5&asset_offset=5",
+            "/stac/collections/orchards/items/pear-01?asset_limit=6",
+        ] {
+            let (status, _, body) = send(&app, other, &[(header::IF_NONE_MATCH, &etag)]).await;
+            assert_eq!(status, StatusCode::OK, "{other}");
+            assert!(!body.is_empty());
+        }
+    }
+
+    #[test]
+    fn if_none_match_matches_by_weak_comparison_against_any_listed_tag() {
+        let tag = "W/\"abc\"";
+        let matches = |value: &str| {
+            let mut headers = axum::http::HeaderMap::new();
+            headers.insert(header::IF_NONE_MATCH, value.parse().unwrap());
+            if_none_match(&headers, tag)
+        };
+        assert!(matches("W/\"abc\""));
+        assert!(matches("\"abc\""));
+        assert!(matches("\"x\", W/\"abc\""));
+        assert!(matches("*"));
+        assert!(!matches("\"abcd\""));
+        assert!(!matches("W/\"ab\""));
+        assert!(!if_none_match(&axum::http::HeaderMap::new(), tag));
     }
 
     #[test]

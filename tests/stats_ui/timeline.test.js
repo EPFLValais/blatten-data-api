@@ -46,6 +46,38 @@ test('moving the window keeps its width and stops at the ends of the strip', () 
   assert.deepStrictEqual(plain(pulled), { from: '2026-03-01', to: '2026-03-02' });
 });
 
+test('a strip selection maps to the window and back', () => {
+  const t = load();
+  const s = strip(t);
+  const period = { from: '2026-03-03', to: '2026-03-04' };
+  const select = t.stripSelect(period, s);
+  assert.deepStrictEqual(plain(select), { left: 20, width: 20 });
+  assert.deepStrictEqual(plain(t.selectPeriod(s, select.left, select.width)), period);
+  assert.deepStrictEqual(plain(t.selectPeriod(s, 22, 33)), { from: '2026-03-03', to: '2026-03-06' });
+  assert.deepStrictEqual(plain(t.stripSelect({}, s)), { left: 0, width: 100 });
+});
+
+test('a drag starting on an edge of the window resizes it, inside it moves it, elsewhere brushes', () => {
+  const t = load();
+  const s = strip(t);
+  const period = { from: '2026-03-03', to: '2026-03-05' };
+  assert.strictEqual(t.dragMode(s, period, 71), 'from');
+  assert.strictEqual(t.dragMode(s, period, 99), 'to');
+  assert.strictEqual(t.dragMode(s, period, 85), 'move');
+  assert.strictEqual(t.dragMode(s, period, 120), 'brush');
+  assert.strictEqual(t.dragMode(s, {}, 85), 'brush', 'all time has no window to move');
+});
+
+test('dragging an edge moves only that end, and never past the other', () => {
+  const t = load();
+  const s = strip(t);
+  const span = { from: '2026-03-03', to: '2026-03-05' };
+  assert.deepStrictEqual(plain(t.dragWindow(s, { mode: 'from', start: 70, span }, 52)), { from: '2026-03-01', to: '2026-03-05' });
+  assert.deepStrictEqual(plain(t.dragWindow(s, { mode: 'to', start: 100, span }, 128)), { from: '2026-03-03', to: '2026-03-08' });
+  assert.deepStrictEqual(plain(t.dragWindow(s, { mode: 'from', start: 70, span }, 140)), { from: '2026-03-05', to: '2026-03-05' });
+  assert.deepStrictEqual(plain(t.dragWindow(s, { mode: 'to', start: 100, span }, 10)), { from: '2026-03-03', to: '2026-03-03' });
+});
+
 test('clicking a bar zooms into the days it covers', () => {
   const t = load();
   assert.deepStrictEqual(plain(t.bucketPeriod('2026-03-02', 'week')), { from: '2026-03-02', to: '2026-03-08' });

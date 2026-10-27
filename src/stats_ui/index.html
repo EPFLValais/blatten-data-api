@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>Download statistics</title>
+<link rel="stylesheet" href="/stats/vendor/uPlot.min.css">
 <link rel="stylesheet" href="/stats/app.css">
 </head>
 <body>
@@ -57,12 +58,12 @@
 
   <figure>
     <figcaption>Last 24 hours</figcaption>
-    <svg id="chart-live" viewBox="0 0 900 70" role="img" aria-label="Last 24 hours"></svg>
+    <div id="chart-live" class="chart" role="img" aria-label="Last 24 hours"></div>
   </figure>
 
   <figure>
-    <figcaption><span>All time · drag to choose the period, click a bar to zoom in</span><span id="window-label"></span></figcaption>
-    <svg id="chart-strip" class="strip" viewBox="0 0 900 60" role="img" aria-label="All time, with the chosen period"></svg>
+    <figcaption><span>All time · drag to choose the period, drag it or its edges to change it, click to zoom in</span><span id="window-label"></span></figcaption>
+    <div id="chart-strip" class="chart strip" role="img" aria-label="All time, with the chosen period"></div>
   </figure>
 
   <figure>
@@ -74,11 +75,9 @@
           <button type="button" data-value="bytes">Data sent</button>
           <button type="button" data-value="whole_files">Whole files (est.)</button>
         </span>
-        <label class="check"><input type="checkbox" id="cumulative"> Cumulative</label>
       </span>
     </figcaption>
-    <svg id="chart-main" viewBox="0 0 900 190" role="img" aria-label="Chart over time"></svg>
-    <div id="legend" class="legend"></div>
+    <div id="chart-main" class="chart" role="img" aria-label="Chart over time, drag across it to choose the period and double-click to go back"></div>
   </figure>
 
   <div id="item-tools" class="tools" hidden>
@@ -90,6 +89,8 @@
 </main>
 <script src="/stats/signin.js"></script>
 <script src="/stats/timeline.js"></script>
+<script src="/stats/chart.js"></script>
+<script src="/stats/vendor/uPlot.iife.min.js"></script>
 <script src="/stats/app.js"></script>
 </body>
 </html>

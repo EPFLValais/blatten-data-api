@@ -240,6 +240,9 @@ pub fn router(state: StatsState) -> Router {
             .route("/stats", get(page))
             .route("/stats/signin.js", get(signin_js))
             .route("/stats/timeline.js", get(timeline_js))
+            .route("/stats/chart.js", get(chart_js))
+            .route("/stats/vendor/uPlot.iife.min.js", get(uplot_js))
+            .route("/stats/vendor/uPlot.min.css", get(uplot_css))
             .route("/stats/app.js", get(app_js))
             .route("/stats/app.css", get(app_css))
             .route("/stats/config.json", get(browser_config));
@@ -782,6 +785,19 @@ async fn timeline_js() -> impl IntoResponse {
     ([(header::CONTENT_TYPE, "text/javascript; charset=utf-8")], include_str!("stats_ui/timeline.js"))
 }
 
+async fn chart_js() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "text/javascript; charset=utf-8")], include_str!("stats_ui/chart.js"))
+}
+
+// uPlot, MIT licensed; its licence is kept beside it in `stats_ui/vendor/`.
+async fn uplot_js() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "text/javascript; charset=utf-8")], include_str!("stats_ui/vendor/uPlot.iife.min.js"))
+}
+
+async fn uplot_css() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "text/css; charset=utf-8")], include_str!("stats_ui/vendor/uPlot.min.css"))
+}
+
 async fn app_js() -> impl IntoResponse {
     ([(header::CONTENT_TYPE, "text/javascript; charset=utf-8")], include_str!("stats_ui/app.js"))
 }
@@ -1060,12 +1076,39 @@ mod tests {
             assert!(script[..i].ends_with("api("), "data route requested outside api(): {}", &script[i..i + 40]);
         }
         assert!(script.contains("api('/stats/api/export.csv?"));
-        // The page's other scripts make no requests of their own.
-        for helper in ["/stats/signin.js", "/stats/timeline.js"] {
+        // The page's other scripts, the vendored chart library included, make no requests of their own.
+        for helper in ["/stats/signin.js", "/stats/timeline.js", "/stats/chart.js", "/stats/vendor/uPlot.iife.min.js"] {
+            assert!(page.contains(&format!("<script src=\"{helper}\"></script>")), "the page loads {helper}");
             let (status, code) = get_text(&app, helper).await;
             assert_eq!(status, StatusCode::OK);
             assert!(!code.contains("fetch("), "{helper} fetches");
         }
+    }
+
+    #[tokio::test]
+    async fn the_vendored_chart_library_is_served_with_its_content_types() {
+        let mut s = state();
+        s.keycloak = Some(Arc::new(KeycloakSettings {
+            url: Url::parse("http://127.0.0.1:1/").unwrap(),
+            browser_url: "http://127.0.0.1:1/".to_string(),
+            realm: "orchard".to_string(),
+            client_id: "pears".to_string(),
+            role: "picker".to_string(),
+        }));
+        let app = router(s);
+        for (path, content_type, body) in [
+            ("/stats/vendor/uPlot.iife.min.js", "text/javascript; charset=utf-8", include_str!("stats_ui/vendor/uPlot.iife.min.js")),
+            ("/stats/vendor/uPlot.min.css", "text/css; charset=utf-8", include_str!("stats_ui/vendor/uPlot.min.css")),
+            ("/stats/chart.js", "text/javascript; charset=utf-8", include_str!("stats_ui/chart.js")),
+        ] {
+            let res = app.clone().oneshot(HttpRequest::get(path).body(Body::empty()).unwrap()).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK, "{path}");
+            assert_eq!(res.headers()[header::CONTENT_TYPE], content_type, "{path}");
+            let served = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+            assert_eq!(served, body.as_bytes(), "{path}");
+        }
+        let (_, page) = get_text(&app, "/stats").await;
+        assert!(page.contains("<link rel=\"stylesheet\" href=\"/stats/vendor/uPlot.min.css\">"));
     }
 
     #[tokio::test]

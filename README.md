@@ -169,6 +169,8 @@ Environment variables:
 | `STAC_CATALOG_DIR` | `stac` | Directory containing STAC JSON |
 | `PORT` | `3000` | Server port |
 | `STAC_ASSET_CONCURRENCY` | `4` | Search, collection items and item requests answered at once; more wait for a slot |
+| `STAC_RESPONSE_DEADLINE` | `60` | Seconds one of those requests may hold its slot, building and sending together; a response not sent by then is cut off |
+| `STAC_SLOT_WAIT` | `30` | Seconds a request may wait for a slot before it is answered 503 with `Retry-After` |
 | `RUST_LOG` | `info` | Log level |
 
 ## Adding Manual Coordinates

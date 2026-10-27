@@ -5,7 +5,13 @@
 
 use anyhow::{Context, Result};
 use serde_json::Value;
-use std::{collections::HashMap, fs, io::BufRead, path::Path};
+use std::{
+    collections::HashMap,
+    fs,
+    hash::{DefaultHasher, Hash, Hasher},
+    io::BufRead,
+    path::Path,
+};
 use tracing::{debug, info, warn};
 
 // Re-export stac types we use
@@ -56,6 +62,8 @@ pub struct StacCatalog {
     pub items_index: HashMap<(String, String), usize>,
     /// Items grouped by collection for efficient collection queries
     pub items_by_collection: HashMap<String, Vec<usize>>,
+    /// Changes whenever any loaded catalog, collection or item text does, links included
+    pub version: String,
 }
 
 impl StacCatalog {
@@ -71,6 +79,8 @@ impl StacCatalog {
             .with_context(|| format!("Failed to read {:?}", catalog_path))?;
 
         let catalog_json = substitute_placeholders(&catalog_json, base_url, s3_base_url);
+        let mut version = DefaultHasher::new();
+        catalog_json.hash(&mut version);
 
         let root: StacCatalogRoot =
             serde_json::from_str(&catalog_json).with_context(|| "Failed to parse catalog.json")?;
@@ -82,10 +92,12 @@ impl StacCatalog {
         let mut collections = HashMap::new();
 
         if collections_dir.exists() {
-            for entry in fs::read_dir(&collections_dir)? {
-                let entry = entry?;
-                let path = entry.path();
-
+            // Sorted so the version does not depend on directory order
+            let mut paths = fs::read_dir(&collections_dir)?
+                .map(|entry| entry.map(|e| e.path()))
+                .collect::<std::io::Result<Vec<_>>>()?;
+            paths.sort();
+            for path in paths {
                 // Only load collection files (not items files)
                 if path.extension().map(|e| e == "json").unwrap_or(false)
                     && !path
@@ -98,6 +110,7 @@ impl StacCatalog {
 
                     let json = fs::read_to_string(&path)?;
                     let json = substitute_placeholders(&json, base_url, s3_base_url);
+                    json.hash(&mut version);
 
                     match serde_json::from_str::<StacCollection>(&json) {
                         Ok(collection) => {
@@ -129,6 +142,7 @@ impl StacCatalog {
                 }
 
                 let line = substitute_placeholders(&line, base_url, s3_base_url);
+                line.hash(&mut version);
 
                 match serde_json::from_str::<StacItem>(&line) {
                     Ok(item) => items.push(item),
@@ -143,7 +157,22 @@ impl StacCatalog {
             Vec::new()
         };
 
-        // Build indexes for O(1) lookup
+        let catalog = Self::from_parts(root, collections, items, format!("{:016x}", version.finish()));
+        info!(
+            "Loaded {} items total, indexed {} by collection",
+            catalog.items.len(),
+            catalog.items_index.len()
+        );
+        Ok(catalog)
+    }
+
+    /// A catalog over the given parts, with its item indexes built
+    pub fn from_parts(
+        root: StacCatalogRoot,
+        collections: HashMap<String, StacCollection>,
+        items: Vec<StacItem>,
+        version: String,
+    ) -> Self {
         let mut items_index = HashMap::new();
         let mut items_by_collection: HashMap<String, Vec<usize>> = HashMap::new();
 
@@ -157,19 +186,14 @@ impl StacCatalog {
             }
         }
 
-        info!(
-            "Loaded {} items total, indexed {} by collection",
-            items.len(),
-            items_index.len()
-        );
-
-        Ok(StacCatalog {
+        StacCatalog {
             root,
             collections,
             items,
             items_index,
             items_by_collection,
-        })
+            version,
+        }
     }
 
     /// Get an item by collection and item ID (O(1) lookup)
