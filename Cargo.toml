@@ -23,7 +23,8 @@ generator = ["dep:csv", "dep:gdal", "dep:las", "dep:zip", "dep:regex", "dep:rayo
 # Web framework
 axum = "0.7"
 tokio = { version = "1", features = ["full"] }
-tower = "0.4"
+url = "2"
+tower = { version = "0.4", features = ["limit", "util"] }
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 
 # STAC types (official implementation)
@@ -56,6 +57,10 @@ thiserror = "2"
 # Fuzzy text search
 strsim = "0.11"
 
+# Download statistics: Postgres storage and Keycloak token check
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "migrate", "macros", "chrono"] }
+axum-keycloak-auth = { version = "0.6.0", default-features = false, features = ["rustls-tls"] }
+
 # Generator-specific dependencies (optional)
 csv = { version = "1", optional = true }
 gdal = { git = "https://github.com/georust/gdal", features = ["bindgen"], optional = true }
@@ -72,6 +77,10 @@ serde_yaml = { version = "0.9", optional = true }
 calamine = { version = "0.26", optional = true }
 jsonschema = { version = "0.33", default-features = false, optional = true }
 percent-encoding = { version = "2", optional = true }
+
+[dev-dependencies]
+futures-util = "0.3"
+jsonwebtoken = "9"
 
 [profile.release]
 lto = true

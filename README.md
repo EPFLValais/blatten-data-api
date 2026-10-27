@@ -168,6 +168,7 @@ Environment variables:
 | `STAC_BASE_URL` | `http://localhost:3000` | Base URL for STAC links |
 | `STAC_CATALOG_DIR` | `stac` | Directory containing STAC JSON |
 | `PORT` | `3000` | Server port |
+| `STAC_ASSET_CONCURRENCY` | `4` | Search, collection items and item requests answered at once; more wait for a slot |
 | `RUST_LOG` | `info` | Log level |
 
 ## Adding Manual Coordinates

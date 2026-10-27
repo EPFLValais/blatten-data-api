@@ -19,7 +19,11 @@ use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+mod asset_routes;
 mod catalog;
+mod stats;
+mod stats_routes;
+mod stats_store;
 
 use catalog::{ItemExt, PropertiesDatetimeExt, StacCatalog, StacItem, DEFAULT_LIMIT, MAX_LIMIT, STAC_VERSION, VALID_PROCESSING_LEVELS};
 
@@ -883,10 +887,53 @@ async fn main() -> Result<()> {
         STAC_VERSION
     );
 
+    let stat_items: Vec<stats::ItemInfo> = catalog
+        .items
+        .iter()
+        .filter_map(|i| {
+            let text = |key: &str| {
+                i.get_property(key)
+                    .map(|v| match v {
+                        serde_json::Value::String(s) => s.clone(),
+                        other => other.to_string(),
+                    })
+                    .unwrap_or_else(|| "Unknown".to_string())
+            };
+            Some(stats::ItemInfo {
+                code: i.id.clone(),
+                title: i.properties.title.clone().unwrap_or_else(|| i.id.clone()),
+                files: i.assets.keys().filter(|k| k.as_str() != "archive").count(),
+                facets: stats::Facets {
+                    collection: i.collection.clone()?,
+                    provider: text("blatten:source"),
+                    data_type: text("blatten:product_type"),
+                    dataset: text("blatten:dataset"),
+                    sensor: text("blatten:sensor"),
+                    format: text("blatten:format"),
+                    level: text("blatten:processing_level"),
+                },
+            })
+        })
+        .collect();
+
+    let mut file_sizes: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+    for item in &catalog.items {
+        for asset in item.assets.values() {
+            let size = asset.additional_fields.get("file:size").and_then(|v| v.as_u64());
+            if let (Some(size), Some(path)) = (size, stats::proxy_path(&asset.href)) {
+                file_sizes.insert(path, size);
+            }
+        }
+    }
+
     let state = AppState {
         catalog: Arc::new(catalog),
         base_url: base_url.clone(),
     };
+
+    let asset_concurrency =
+        asset_routes::concurrency(env::var(asset_routes::CONCURRENCY_VAR).ok().as_deref());
+    info!("Asset-bearing requests in flight at once: {}", asset_concurrency);
 
     // Build router
     let app = Router::new()
@@ -900,16 +947,13 @@ async fn main() -> Result<()> {
         // Collections
         .route("/stac/collections", get(list_collections))
         .route("/stac/collections/:collection_id", get(get_collection))
-        .route(
-            "/stac/collections/:collection_id/items",
+        // Search, collection items and item: asset-bearing responses, behind one concurrency limit
+        .merge(asset_routes::router(
+            get(search_items_get).post(search_items_post),
             get(get_collection_items),
-        )
-        .route(
-            "/stac/collections/:collection_id/items/:item_id",
             get(get_item),
-        )
-        // Search
-        .route("/stac/search", get(search_items_get).post(search_items_post))
+            asset_concurrency,
+        ))
         // KML generation (path-based only — no query params to avoid injection/encoding issues).
         // The last segment is a param (:_kml) rather than a literal because SwissTopo
         // appends hash params to the URL path (e.g. "kml&bgLayer=...") with no "?" separator.
@@ -924,6 +968,9 @@ async fn main() -> Result<()> {
                 .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
                 .allow_headers([header::CONTENT_TYPE, header::ACCEPT]),
         );
+
+    // Download statistics sit outside the CORS layer above and are registered only when configured.
+    let app = stats_routes::mount(app, |name| env::var(name).ok(), stat_items, file_sizes);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     info!("Starting STAC API server on {}", addr);

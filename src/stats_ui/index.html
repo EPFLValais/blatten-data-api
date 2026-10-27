@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Download statistics</title>
+<link rel="stylesheet" href="/stats/app.css">
+</head>
+<body>
+<header>
+  <h1>Download statistics</h1>
+  <div class="controls">
+    <span id="live" class="live paused"><span class="dot"></span><span id="live-text">Connecting…</span><button type="button" id="pause" class="link">Pause</button></span>
+    <select id="range" aria-label="Period">
+      <option value="1">Today</option>
+      <option value="7" selected>Last 7 days</option>
+      <option value="30">Last 30 days</option>
+      <option value="all">All time</option>
+      <option value="custom">Custom…</option>
+    </select>
+    <span id="custom" hidden>
+      <input type="date" id="from" aria-label="From">
+      <input type="date" id="to" aria-label="To">
+    </span>
+    <select id="export" aria-label="Export">
+      <option value="">Export CSV…</option>
+      <option value="item">By day and item</option>
+      <option value="file">By file</option>
+    </select>
+  </div>
+</header>
+
+<main>
+  <p id="status" class="notice">Signing in…</p>
+  <p id="stale" class="notice warn" hidden></p>
+
+  <section class="toolbar">
+    <label>Group by <select id="group"></select></label>
+    <label>Filter <select id="add-filter"></select></label>
+    <span id="chips" class="chips"></span>
+  </section>
+
+  <section class="kpis">
+    <div class="kpi"><span class="label">File requests</span><span class="value" id="k-requests">–</span></div>
+    <div class="kpi"><span class="label">Whole files (est.)</span><span class="value" id="k-whole">–</span></div>
+    <div class="kpi"><span class="label">Data sent</span><span class="value" id="k-bytes">–</span></div>
+    <div class="kpi"><span class="label">Files requested</span><span class="value" id="k-files">–</span><span class="sub" id="k-files-sub"></span></div>
+    <div class="kpi"><span class="label">Items requested</span><span class="value" id="k-items">–</span><span class="sub" id="k-items-sub"></span></div>
+    <div class="kpi"><span class="label">Last hour</span><span class="value" id="k-hour">–</span><span class="sub" id="k-hour-sub"></span></div>
+  </section>
+
+  <figure>
+    <figcaption>Last 24 hours</figcaption>
+    <svg id="chart-live" viewBox="0 0 900 70" role="img" aria-label="Last 24 hours"></svg>
+  </figure>
+
+  <figure>
+    <figcaption><span>All time · drag to choose the period, click a bar to zoom in</span><span id="window-label"></span></figcaption>
+    <svg id="chart-strip" class="strip" viewBox="0 0 900 60" role="img" aria-label="All time, with the chosen period"></svg>
+  </figure>
+
+  <figure>
+    <figcaption>
+      <span id="cap-main"></span>
+      <span class="chart-controls">
+        <span class="segmented" id="metric" role="group" aria-label="Measure">
+          <button type="button" data-value="requests" class="on">File requests</button>
+          <button type="button" data-value="bytes">Data sent</button>
+          <button type="button" data-value="whole_files">Whole files (est.)</button>
+        </span>
+        <label class="check"><input type="checkbox" id="cumulative"> Cumulative</label>
+      </span>
+    </figcaption>
+    <svg id="chart-main" viewBox="0 0 900 190" role="img" aria-label="Chart over time"></svg>
+    <div id="legend" class="legend"></div>
+  </figure>
+
+  <div id="item-tools" class="tools" hidden>
+    <input type="search" id="search" placeholder="Search items" aria-label="Search items">
+    <span id="count" class="muted"></span>
+    <span class="pager"><button type="button" id="prev">Previous</button><button type="button" id="next">Next</button></span>
+  </div>
+  <table id="table"></table>
+</main>
+<script src="/stats/signin.js"></script>
+<script src="/stats/timeline.js"></script>
+<script src="/stats/app.js"></script>
+</body>
+</html>

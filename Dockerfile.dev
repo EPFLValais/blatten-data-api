@@ -13,6 +13,7 @@ WORKDIR /app
 
 COPY Cargo.lock Cargo.toml bacon.toml /app/
 COPY ./src/ /app/src/
+COPY ./migrations/ /app/migrations/
 COPY ./stac/ /app/stac/
 
 ENTRYPOINT ["bacon", "--headless", "run"]
