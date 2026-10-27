@@ -108,7 +108,8 @@ impl Store {
     }
 
     /// Add one scrape to the totals of `day` (UTC) read at unix time `now`. Posting the same scrape
-    /// twice adds nothing the second time.
+    /// twice adds nothing the second time. The first scrape into a store that has never ingested
+    /// (no `last_ingest` in `meta`) is a baseline: its readings are saved and nothing is added.
     pub async fn ingest(
         &self,
         day: NaiveDate,
@@ -118,6 +119,10 @@ impl Store {
     ) -> Result<()> {
         let mut tx = self.pool.begin().await?;
         sqlx::query("SELECT pg_advisory_xact_lock($1)").bind(INGEST_LOCK).execute(&mut *tx).await?;
+        let baseline = sqlx::query("SELECT 1 FROM meta WHERE key = 'last_ingest'")
+            .fetch_optional(&mut *tx)
+            .await?
+            .is_none();
 
         // A scrape without a start time is filed under process 0.
         let process = scrape.start_time.map(as_i64).unwrap_or(0);
@@ -140,7 +145,7 @@ impl Store {
                 .collect();
 
         // Only paths whose reading changed are written.
-        let changed = changes(scrape, &saved, sizes);
+        let changed = changes(scrape, &saved, sizes, baseline);
 
         if !changed.added.is_empty() {
             let paths: Vec<String> = changed.added.keys().cloned().collect();
@@ -447,6 +452,16 @@ pub(crate) mod tests {
         store
     }
 
+    /// A migrated store that has already taken its baseline scrape, so the next scrape counts.
+    pub(crate) async fn baselined_store() -> Store {
+        let store = test_store().await;
+        sqlx::query("INSERT INTO meta (key, value) VALUES ('last_ingest', 0)")
+            .execute(&store.pool)
+            .await
+            .expect("baseline");
+        store
+    }
+
     fn day(s: &str) -> NaiveDate {
         NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap()
     }
@@ -466,8 +481,31 @@ pub(crate) mod tests {
 
     #[tokio::test]
     #[ignore = "needs STATS_TEST_DATABASE_URL"]
-    async fn ingest_adds_increments_once_and_survives_restart() {
+    async fn the_first_scrape_into_an_empty_store_is_a_baseline() {
         let store = test_store().await;
+        let d = day("2026-10-22");
+        store.ingest(d, 1, &scrape(100, 5, 50), &none()).await.unwrap();
+        assert!(store.daily(None, None).await.unwrap().is_empty());
+        assert!(store.path_totals(None, None).await.unwrap().is_empty());
+        assert!(store.code_days(None, None).await.unwrap().is_empty());
+        assert!(store.code_buckets(Resolution::Hour, None, None).await.unwrap().is_empty());
+        assert!(store.recent_rows(0).await.unwrap().is_empty());
+        assert_eq!(store.last_ingest().await.unwrap(), Some(1));
+        let held = || async {
+            let t = store.path_totals(None, None).await.unwrap()[0].1;
+            (t.requests, t.bytes)
+        };
+        store.ingest(d, 2, &scrape(100, 8, 80), &none()).await.unwrap();
+        assert_eq!(held().await, (3, 30));
+        // A restart after the baseline counts the new process from zero.
+        store.ingest(d, 3, &scrape(200, 2, 20), &none()).await.unwrap();
+        assert_eq!(held().await, (5, 50));
+    }
+
+    #[tokio::test]
+    #[ignore = "needs STATS_TEST_DATABASE_URL"]
+    async fn ingest_adds_increments_once_and_survives_restart() {
+        let store = baselined_store().await;
         store.ingest(day("2026-10-22"), 1, &scrape(100, 5, 50), &none()).await.unwrap();
         store.ingest(day("2026-10-22"), 2, &scrape(100, 5, 50), &none()).await.unwrap();
         store.ingest(day("2026-10-22"), 3, &scrape(100, 8, 80), &none()).await.unwrap();
@@ -484,7 +522,7 @@ pub(crate) mod tests {
     #[tokio::test]
     #[ignore = "needs STATS_TEST_DATABASE_URL"]
     async fn two_proxy_processes_scraped_in_turn_count_each_reading_once() {
-        let store = test_store().await;
+        let store = baselined_store().await;
         let d = day("2026-10-22");
         store.ingest(d, 1, &scrape(100, 10, 100), &none()).await.unwrap();
         store.ingest(d, 2, &scrape(200, 1, 10), &none()).await.unwrap();
@@ -497,7 +535,7 @@ pub(crate) mod tests {
     #[tokio::test]
     #[ignore = "needs STATS_TEST_DATABASE_URL"]
     async fn an_older_reading_posted_late_is_skipped() {
-        let store = test_store().await;
+        let store = baselined_store().await;
         let d = day("2026-10-22");
         store.ingest(d, 1, &scrape(100, 5, 50), &none()).await.unwrap();
         store.ingest(d, 2, &scrape(100, 9, 90), &none()).await.unwrap();
@@ -510,7 +548,7 @@ pub(crate) mod tests {
     #[tokio::test]
     #[ignore = "needs STATS_TEST_DATABASE_URL"]
     async fn readings_of_a_process_unseen_for_two_days_are_pruned() {
-        let store = test_store().await;
+        let store = baselined_store().await;
         let d = day("2026-10-22");
         store.ingest(d, 1_000_000, &scrape(100, 5, 50), &none()).await.unwrap();
         let mut idle = scrape(300, 1, 1);
@@ -529,7 +567,7 @@ pub(crate) mod tests {
     #[tokio::test]
     #[ignore = "needs STATS_TEST_DATABASE_URL"]
     async fn recent_activity_is_kept_and_pruned() {
-        let store = test_store().await;
+        let store = baselined_store().await;
         let d = day("2026-10-22");
         store.ingest(d, 1_000_000, &scrape(100, 5, 50), &none()).await.unwrap();
         store.ingest(d, 1_000_060, &scrape(100, 9, 90), &none()).await.unwrap();
@@ -547,7 +585,7 @@ pub(crate) mod tests {
     #[tokio::test]
     #[ignore = "needs STATS_TEST_DATABASE_URL"]
     async fn whole_files_and_item_totals_are_stored() {
-        let store = test_store().await;
+        let store = baselined_store().await;
         let sizes = HashMap::from([("/assets/10Aa00/x.tif".to_string(), 1_000u64)]);
         let mut s = scrape(100, 4, 2_500);
         s.paths.insert("/docs/a.pdf".into(), Totals { requests: 1, bytes: 10, ..Default::default() });
@@ -563,7 +601,7 @@ pub(crate) mod tests {
     #[tokio::test]
     #[ignore = "needs STATS_TEST_DATABASE_URL"]
     async fn scrapes_in_one_hour_sum_into_one_hourly_bucket() {
-        let store = test_store().await;
+        let store = baselined_store().await;
         let d = day("2026-10-22");
         let ten = 1_792_663_200; // 2026-10-22 10:00 UTC
         store.ingest(d, ten + 60, &scrape(100, 5, 50), &none()).await.unwrap();
@@ -582,7 +620,7 @@ pub(crate) mod tests {
     #[tokio::test]
     #[ignore = "needs STATS_TEST_DATABASE_URL"]
     async fn daily_totals_sum_into_weeks_starting_monday() {
-        let store = test_store().await;
+        let store = baselined_store().await;
         // 2026-10-18 is a Sunday, 2026-10-19 and 2026-10-25 a Monday and the Sunday after it.
         store.ingest(day("2026-10-18"), 1, &scrape(100, 2, 20), &none()).await.unwrap();
         store.ingest(day("2026-10-19"), 2, &scrape(100, 5, 50), &none()).await.unwrap();
@@ -598,7 +636,7 @@ pub(crate) mod tests {
     #[tokio::test]
     #[ignore = "needs STATS_TEST_DATABASE_URL"]
     async fn totals_at_the_largest_counter_hold_and_later_scrapes_still_count() {
-        let store = test_store().await;
+        let store = baselined_store().await;
         let d = day("2026-10-22");
         let max = MAX_COUNTER;
         let mut s = scrape(100, max, max);
@@ -620,7 +658,7 @@ pub(crate) mod tests {
     #[tokio::test]
     #[ignore = "needs STATS_TEST_DATABASE_URL"]
     async fn values_from_the_metrics_are_data_never_sql() {
-        let store = test_store().await;
+        let store = baselined_store().await;
         let hostile = "/assets/10Aa00/'; DROP TABLE daily; --\" \\ %s $1 ☃.tif";
         let mut s = Scrape { start_time: Some(1), ..Default::default() };
         s.paths.insert(hostile.into(), Totals { requests: 3, bytes: 30, ..Default::default() });
@@ -634,7 +672,7 @@ pub(crate) mod tests {
     #[tokio::test]
     #[ignore = "needs STATS_TEST_DATABASE_URL"]
     async fn two_scrapes_arriving_together_count_once() {
-        let store = test_store().await;
+        let store = baselined_store().await;
         let s = scrape(100, 7, 70);
         let sizes = none();
         let (a, b) = tokio::join!(
@@ -695,7 +733,7 @@ pub(crate) mod tests {
     #[tokio::test]
     #[ignore = "needs STATS_TEST_DATABASE_URL"]
     async fn a_large_scrape_is_applied_in_one_pass() {
-        let store = test_store().await;
+        let store = baselined_store().await;
         let mut s = Scrape { start_time: Some(1), ..Default::default() };
         for i in 0..20_000 {
             s.paths.insert(

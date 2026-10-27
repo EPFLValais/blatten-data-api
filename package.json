@@ -1,0 +1,10 @@
+{
+  "name": "blatten-data-api-stories",
+  "private": true,
+  "scripts": {
+    "story": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
+}

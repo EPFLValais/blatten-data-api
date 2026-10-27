@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use axum::{
     extract::{Path, Query, State},
     http::{header, Method, StatusCode},
-    response::{IntoResponse, Json},
+    response::{IntoResponse, Json, Response},
     routing::get,
     Router,
 };
@@ -685,6 +685,41 @@ fn item_to_json(item: &StacItem, exclude_assets: bool, fields: &FieldsFilter) ->
     json
 }
 
+/// The items of a page, each turned into JSON only as it is written out.
+///
+/// A whole page held as one JSON tree takes about ten times its serialized size, which is
+/// hundreds of megabytes for a 300-item search; written item by item, a response holds its
+/// bytes and one item's tree at a time.
+struct Features<'a> {
+    items: &'a [&'a StacItem],
+    exclude_assets: bool,
+    fields: &'a FieldsFilter,
+}
+
+impl Serialize for Features<'_> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_seq(
+            self.items
+                .iter()
+                .map(|item| item_to_json(item, self.exclude_assets, self.fields)),
+        )
+    }
+}
+
+/// An item search or collection items response, its members in the order clients have seen.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ItemPage<'a> {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    features: Features<'a>,
+    number_matched: usize,
+    number_returned: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    context: Option<serde_json::Value>,
+    links: Vec<serde_json::Value>,
+}
+
 /// Filter an item based on validated search parameters
 fn filter_item(item: &StacItem, params: &ValidatedSearch) -> bool {
     // Bbox filter
@@ -1202,11 +1237,11 @@ async fn get_collection_items(
 
     let total_matched = filtered.len();
 
-    let paginated: Vec<serde_json::Value> = filtered
+    let paginated: Vec<&StacItem> = filtered
         .into_iter()
         .skip(validated.offset)
         .take(validated.limit)
-        .map(|item| item_to_json(item, validated.exclude_assets, &validated.fields))
+        .copied()
         .collect();
 
     let mut links = vec![
@@ -1239,13 +1274,18 @@ async fn get_collection_items(
 
     (
         [(header::CACHE_CONTROL, "public, max-age=300")],
-        Json(serde_json::json!({
-            "type": "FeatureCollection",
-            "features": paginated,
-            "numberMatched": total_matched,
-            "numberReturned": paginated.len(),
-            "links": links
-        })),
+        Json(ItemPage {
+            kind: "FeatureCollection",
+            features: Features {
+                items: &paginated,
+                exclude_assets: validated.exclude_assets,
+                fields: &validated.fields,
+            },
+            number_matched: total_matched,
+            number_returned: paginated.len(),
+            context: None,
+            links,
+        }),
     )
         .into_response()
 }
@@ -1356,7 +1396,7 @@ fn perform_search(
     state: &AppState,
     params: ValidatedSearch,
     is_post: bool,
-) -> impl IntoResponse {
+) -> Response {
     // Filter by collections if specified
     let items_to_search: Vec<&StacItem> = if let Some(ref colls) = params.collections {
         state
@@ -1383,11 +1423,10 @@ fn perform_search(
     let total_matched = filtered.len();
 
     // Paginate
-    let paginated: Vec<serde_json::Value> = filtered
+    let paginated: Vec<&StacItem> = filtered
         .into_iter()
         .skip(params.offset)
         .take(params.limit)
-        .map(|item| item_to_json(item, params.exclude_assets, &params.fields))
         .collect();
 
     let mut links = vec![
@@ -1415,19 +1454,24 @@ fn perform_search(
 
     (
         [(header::CACHE_CONTROL, "private, max-age=60")],
-        Json(serde_json::json!({
-            "type": "FeatureCollection",
-            "features": paginated,
-            "numberMatched": total_matched,
-            "numberReturned": paginated.len(),
-            "context": {
+        Json(ItemPage {
+            kind: "FeatureCollection",
+            features: Features {
+                items: &paginated,
+                exclude_assets: params.exclude_assets,
+                fields: &params.fields,
+            },
+            number_matched: total_matched,
+            number_returned: paginated.len(),
+            context: Some(serde_json::json!({
                 "limit": params.limit,
                 "matched": total_matched,
                 "returned": paginated.len()
-            },
-            "links": links
-        })),
+            })),
+            links,
+        }),
     )
+        .into_response()
 }
 
 /// Health check endpoint
@@ -1677,4 +1721,66 @@ fn kml_polygon_placemark(name: &str, coords: &[(f64, f64)]) -> String {
       </Polygon>
     </Placemark>"#
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn item(id: &str) -> StacItem {
+        serde_json::from_value(serde_json::json!({
+            "type": "Feature",
+            "stac_version": "1.1.0",
+            "id": id,
+            "geometry": null,
+            "properties": {"datetime": "2024-03-01T00:00:00Z", "title": format!("Orchard {id}")},
+            "links": [],
+            "assets": {"photo": {"href": format!("/s3/{id}/pear.jpg"), "title": "pear.jpg"}},
+            "collection": "orchards"
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_page_written_item_by_item_matches_the_page_built_as_one_tree() {
+        let items = [item("pear-01"), item("plum-02")];
+        let refs: Vec<&StacItem> = items.iter().collect();
+        let fields = FieldsFilter::parse_get("id,properties.title,assets");
+        let links = vec![serde_json::json!({"rel": "self", "href": "http://orchard.test/stac/search"})];
+        let context = serde_json::json!({"limit": 2, "matched": 7, "returned": 2});
+
+        for (exclude_assets, fields) in [(false, FieldsFilter::default()), (true, fields)] {
+            let streamed = serde_json::to_string(&ItemPage {
+                kind: "FeatureCollection",
+                features: Features { items: &refs, exclude_assets, fields: &fields },
+                number_matched: 7,
+                number_returned: 2,
+                context: Some(context.clone()),
+                links: links.clone(),
+            })
+            .unwrap();
+            let features: Vec<_> = refs.iter().map(|i| item_to_json(i, exclude_assets, &fields)).collect();
+            let tree = serde_json::to_string(&serde_json::json!({
+                "type": "FeatureCollection",
+                "features": features,
+                "numberMatched": 7,
+                "numberReturned": 2,
+                "context": context,
+                "links": links
+            }))
+            .unwrap();
+            assert_eq!(streamed, tree);
+        }
+
+        let without_context = serde_json::to_value(&ItemPage {
+            kind: "FeatureCollection",
+            features: Features { items: &[], exclude_assets: false, fields: &FieldsFilter::default() },
+            number_matched: 0,
+            number_returned: 0,
+            context: None,
+            links: vec![],
+        })
+        .unwrap();
+        assert!(without_context.get("context").is_none());
+    }
 }

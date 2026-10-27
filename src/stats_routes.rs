@@ -1,22 +1,22 @@
 //! HTTP side of the download statistics.
 //!
-//! `POST /internal/stats/ingest` takes the file proxy's metrics text and is reached only from
-//! inside the cluster, with a shared key. The page at `/stats` is a public shell without data; its
-//! data routes under `/stats/api/` need a Keycloak token for the configured client and role.
-//! Each group of routes exists only when its settings are present and non-empty.
+//! The API reads the file proxy's metrics text itself, from `STATS_SCRAPE_URL` every
+//! `STATS_SCRAPE_INTERVAL` seconds. The page at `/stats` is a public shell without data; its data
+//! routes under `/stats/api/` need a Keycloak token for the configured client and role. The poller
+//! and the routes each exist only when their settings are present and non-empty.
 
 use crate::stats::{
     breakdown, code_key, code_passes, facet_values, file_name_in_item, group_totals, parse_scrape,
-    secrets_equal, series, series_window, setting, summary_rows, to_csv, Dim, Filters, ItemInfo,
+    series, series_window, setting, summary_rows, to_csv, Dim, Filters, ItemInfo,
     Resolution, Totals,
 };
 use crate::stats_store::{database_options, Store};
 use axum::{
-    extract::{DefaultBodyLimit, Path, Query, Request, State},
+    extract::{Path, Query, Request, State},
     http::{header, HeaderValue, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::get,
     Extension, Json, Router,
 };
 use axum_keycloak_auth::{
@@ -28,12 +28,18 @@ use axum_keycloak_auth::decode::{KeycloakToken, ProfileAndEmail};
 use axum_keycloak_auth::role::KeycloakRole;
 use chrono::{NaiveDate, Utc};
 use sqlx::postgres::PgConnectOptions;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 use tracing::{error, info, warn};
 use url::Url;
 
-/// The largest metrics text accepted by the ingest route.
+/// The largest metrics text accepted from the file proxy.
 const INGEST_LIMIT_BYTES: usize = 32 * 1024 * 1024;
+
+/// How long one read of the file proxy's metrics may take, body included.
+const SCRAPE_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Seconds between two reads of the file proxy's metrics when `STATS_SCRAPE_INTERVAL` is unset.
+const DEFAULT_SCRAPE_INTERVAL_SECS: u64 = 60;
 
 /// The most file paths one scrape may carry. The catalog has about 100,000 files, so a larger
 /// scrape is not the proxy's own and is refused whole rather than partly applied.
@@ -50,13 +56,19 @@ pub struct KeycloakSettings {
     pub role: String,
 }
 
+/// Where and how often the API reads the file proxy's metrics.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ScrapeSettings {
+    pub url: Url,
+    pub interval: Duration,
+}
+
 #[derive(Clone)]
 pub struct StatsState {
     pub store: Arc<Store>,
     pub items: Arc<Vec<ItemInfo>>,
     /// Size in bytes of each file, by the path the file proxy reports.
     pub sizes: Arc<HashMap<String, u64>>,
-    pub ingest_key: Option<Arc<String>>,
     pub keycloak: Option<Arc<KeycloakSettings>>,
 }
 
@@ -68,7 +80,8 @@ pub enum StatsSettings {
     Off(String),
     On {
         database: Box<PgConnectOptions>,
-        ingest_key: Option<Arc<String>>,
+        /// `Err` names why the poller is off although `STATS_SCRAPE_URL` is set.
+        scrape: Result<Option<ScrapeSettings>, String>,
         /// `Err` names why the page and data routes are left out although Keycloak is configured.
         keycloak: Result<Option<Arc<KeycloakSettings>>, String>,
     },
@@ -93,7 +106,27 @@ pub fn check_settings(var: impl Fn(&str) -> Option<String>) -> StatsSettings {
         }),
         _ => Ok(None),
     };
-    StatsSettings::On { database, ingest_key: non_empty("STATS_INGEST_KEY").map(Arc::new), keycloak }
+    let scrape = match non_empty("STATS_SCRAPE_URL") {
+        Some(raw_url) => scrape_settings(&raw_url, non_empty("STATS_SCRAPE_INTERVAL").as_deref()).map(Some),
+        None => Ok(None),
+    };
+    StatsSettings::On { database, scrape, keycloak }
+}
+
+/// The poller's settings: an http(s) URL with a host, and a whole number of seconds above zero.
+fn scrape_settings(raw_url: &str, raw_interval: Option<&str>) -> Result<ScrapeSettings, String> {
+    let url = Url::parse(raw_url).map_err(|e| format!("STATS_SCRAPE_URL {raw_url:?} is not a URL: {e}"))?;
+    if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none_or(str::is_empty) {
+        return Err(format!("STATS_SCRAPE_URL {raw_url:?} must be an http(s) URL with a host"));
+    }
+    let secs = match raw_interval {
+        None => DEFAULT_SCRAPE_INTERVAL_SECS,
+        Some(raw) => match raw.parse::<u64>() {
+            Ok(secs) if secs > 0 => secs,
+            _ => return Err(format!("STATS_SCRAPE_INTERVAL {raw:?} must be a whole number of seconds above 0")),
+        },
+    };
+    Ok(ScrapeSettings { url, interval: Duration::from_secs(secs) })
 }
 
 /// Keycloak's address as the auth layer needs it: http or https with a host, so the realm path can
@@ -113,13 +146,13 @@ fn settings_from(
     items: Vec<ItemInfo>,
     sizes: HashMap<String, u64>,
 ) -> Option<StatsState> {
-    let (database, ingest_key, keycloak) = match check_settings(var) {
+    let (database, scrape, keycloak) = match check_settings(var) {
         StatsSettings::Absent => return None,
         StatsSettings::Off(reason) => {
             error!("Statistics are off: {reason}");
             return None;
         }
-        StatsSettings::On { database, ingest_key, keycloak } => (database, ingest_key, keycloak),
+        StatsSettings::On { database, scrape, keycloak } => (database, scrape, keycloak),
     };
     // The pool connects on first use, so the STAC API starts whether or not the database is up.
     let store = Store::lazy_with(*database);
@@ -128,9 +161,6 @@ fn settings_from(
         tokio::spawn(async move { store.migrate_until_ready().await });
     }
 
-    if ingest_key.is_none() {
-        warn!("STATS_INGEST_KEY is not set: the statistics ingest route is not registered");
-    }
     let keycloak = match keycloak {
         Ok(Some(kc)) => Some(kc),
         Ok(None) => {
@@ -143,13 +173,19 @@ fn settings_from(
         }
     };
 
-    Some(StatsState {
-        store: Arc::new(store),
-        items: Arc::new(items),
-        sizes: Arc::new(sizes),
-        ingest_key,
-        keycloak,
-    })
+    let state = StatsState { store: Arc::new(store), items: Arc::new(items), sizes: Arc::new(sizes), keycloak };
+    match scrape {
+        Ok(Some(settings)) => match Scraper::new(settings.url) {
+            Ok(scraper) => {
+                info!("Reading the file proxy's metrics from {} every {}s", scraper.url, settings.interval.as_secs());
+                tokio::spawn(poll(scraper, settings.interval, state.clone()));
+            }
+            Err(e) => error!("Statistics are not read: the HTTP client could not be built: {e:#}"),
+        },
+        Ok(None) => warn!("STATS_SCRAPE_URL is not set: the file proxy's metrics are not read"),
+        Err(reason) => error!("{reason}: the file proxy's metrics are not read"),
+    }
+    Some(state)
 }
 
 /// Add the statistics routes to `app` when the settings read through `var` allow them.
@@ -167,18 +203,6 @@ pub fn mount(
 
 pub fn router(state: StatsState) -> Router {
     let mut router = Router::new();
-
-    if state.ingest_key.is_some() {
-        info!("Statistics ingest route enabled");
-        router = router.merge(
-            Router::new()
-                .route("/internal/stats/ingest", post(ingest))
-                // The key is checked before the handler's body extractor runs, so a caller without
-                // it never has its body read.
-                .route_layer(middleware::from_fn_with_state(state.clone(), require_ingest_key))
-                .layer(DefaultBodyLimit::max(INGEST_LIMIT_BYTES)),
-        );
-    }
 
     if let Some(kc) = state.keycloak.clone() {
         info!("Statistics page enabled for realm {} client {}", kc.realm, kc.client_id);
@@ -204,7 +228,11 @@ pub fn router(state: StatsState) -> Router {
                     .instance(instance)
                     .passthrough_mode(PassthroughMode::Pass)
                     .persist_raw_claims(false)
-                    .expected_audiences(vec!["account".to_string()])
+                    // A shared realm puts in `aud` the clients whose roles the user holds, which
+                    // for a viewer may be this client alone; a local realm puts "account".
+                    .expected_audiences(vec![kc.client_id.clone(), "account".to_string()])
+                    // Matches the role's name in the realm or under any client; `prepare`
+                    // then accepts it only under this client.
                     .required_roles(vec![kc.role.clone()])
                     .build(),
             );
@@ -276,39 +304,72 @@ async fn with_security_headers(req: Request, next: Next, csp: &str) -> Response 
 }
 
 // ----------------------------------------------------------------------------
-// Ingest
+// Reading the file proxy's metrics
 // ----------------------------------------------------------------------------
 
-async fn require_ingest_key(State(state): State<StatsState>, req: Request, next: Next) -> Response {
-    let Some(key) = state.ingest_key.as_ref() else {
-        return StatusCode::NOT_FOUND.into_response();
-    };
-    let given = req
-        .headers()
-        .get(header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "));
-    if !given.is_some_and(|g| secrets_equal(g, key)) {
-        return StatusCode::UNAUTHORIZED.into_response();
-    }
-    next.run(req).await
+/// One HTTP client and the address it reads the metrics from.
+struct Scraper {
+    client: reqwest::Client,
+    url: Url,
+    timeout: Duration,
 }
 
-async fn ingest(State(state): State<StatsState>, body: String) -> StatusCode {
-    if !state.store.is_ready() {
-        return StatusCode::SERVICE_UNAVAILABLE;
+impl Scraper {
+    fn new(url: Url) -> anyhow::Result<Self> {
+        Self::with_timeout(url, SCRAPE_TIMEOUT)
     }
-    let scrape = parse_scrape(&body);
+
+    fn with_timeout(url: Url, timeout: Duration) -> anyhow::Result<Self> {
+        let client = reqwest::Client::builder().timeout(timeout).build()?;
+        Ok(Self { client, url, timeout })
+    }
+
+    /// The metrics text, refused when the answer is not a success, takes longer than the timeout
+    /// or is longer than `INGEST_LIMIT_BYTES`.
+    async fn fetch(&self) -> anyhow::Result<String> {
+        let read = async {
+            let mut res = self.client.get(self.url.clone()).send().await?.error_for_status()?;
+            if res.content_length().is_some_and(|n| n > INGEST_LIMIT_BYTES as u64) {
+                anyhow::bail!("the metrics are longer than {INGEST_LIMIT_BYTES} bytes");
+            }
+            let mut body = Vec::new();
+            while let Some(chunk) = res.chunk().await? {
+                if body.len() + chunk.len() > INGEST_LIMIT_BYTES {
+                    anyhow::bail!("the metrics are longer than {INGEST_LIMIT_BYTES} bytes");
+                }
+                body.extend_from_slice(&chunk);
+            }
+            Ok(String::from_utf8(body)?)
+        };
+        tokio::time::timeout(self.timeout, read)
+            .await
+            .map_err(|_| anyhow::anyhow!("no full answer within {}s", self.timeout.as_secs_f32()))?
+    }
+}
+
+/// Read the metrics once and add them to the store. Reading the same counters again adds nothing,
+/// so several API processes may each read them.
+async fn scrape_once(scraper: &Scraper, state: &StatsState) -> anyhow::Result<()> {
+    if !state.store.is_ready() {
+        anyhow::bail!("the statistics database is not ready");
+    }
+    let scrape = parse_scrape(&scraper.fetch().await?);
     if scrape.paths.len() > MAX_PATHS_PER_SCRAPE {
-        warn!("statistics scrape refused: {} paths", scrape.paths.len());
-        return StatusCode::PAYLOAD_TOO_LARGE;
+        anyhow::bail!("the metrics carry {} paths, more than {MAX_PATHS_PER_SCRAPE}", scrape.paths.len());
     }
     let now = Utc::now();
-    match state.store.ingest(now.date_naive(), now.timestamp(), &scrape, &state.sizes).await {
-        Ok(()) => StatusCode::NO_CONTENT,
-        Err(e) => {
-            error!("statistics ingest failed: {e:#}");
-            StatusCode::INTERNAL_SERVER_ERROR
+    state.store.ingest(now.date_naive(), now.timestamp(), &scrape, &state.sizes).await
+}
+
+/// Read the metrics every `interval`, one read at a time; a failed read is logged and the next
+/// tick tries again.
+async fn poll(scraper: Scraper, interval: Duration, state: StatsState) {
+    let mut ticks = tokio::time::interval(interval);
+    ticks.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    loop {
+        ticks.tick().await;
+        if let Err(e) = scrape_once(&scraper, &state).await {
+            warn!("reading the file proxy's metrics failed: {e:#}");
         }
     }
 }
@@ -340,8 +401,8 @@ impl Params {
     }
 }
 
-/// Refuse a token issued to another client of the realm or without the role in the realm or under
-/// this client, and a malformed period, then read the query string.
+/// Refuse a token issued to another client of the realm or without the role under this client,
+/// and a malformed period, then read the query string.
 fn prepare(
     token: &KeycloakToken<String>,
     state: &StatsState,
@@ -369,11 +430,11 @@ fn prepare(
     Ok(params)
 }
 
-/// Whether the token holds `role` as a realm role or as a role of this client; a role of the same
-/// name under another client of the realm does not count.
+/// Whether the token holds `role` as a role of this client. The realm is shared with other
+/// applications, so a realm role of the same name, or one under another client, does not count.
 fn holds_role(roles: &[KeycloakRole<String>], client_id: &str, role: &str) -> bool {
     roles.iter().any(|r| match r {
-        KeycloakRole::Realm { role: name } => name == role,
+        KeycloakRole::Realm { .. } => false,
         KeycloakRole::Client { client, role: name } => client == client_id && name == role,
     })
 }
@@ -741,6 +802,7 @@ async fn browser_config(State(state): State<StatsState>) -> Response {
     Json(serde_json::json!({
         "authUrl": format!("{base}/auth"),
         "tokenUrl": format!("{base}/token"),
+        "logoutUrl": format!("{base}/logout"),
         "clientId": kc.client_id,
     }))
     .into_response()
@@ -755,12 +817,11 @@ mod tests {
     use tower::ServiceExt;
 
     /// A store that never connects: enough for routes that answer before touching the database.
-    fn state(key: Option<&str>) -> StatsState {
+    fn state() -> StatsState {
         StatsState {
             store: Arc::new(Store::lazy("postgres://nobody:nothing@127.0.0.1:1/none").unwrap()),
             items: Arc::new(vec![]),
             sizes: Arc::new(HashMap::new()),
-            ingest_key: key.map(|k| Arc::new(k.to_string())),
             keycloak: None,
         }
     }
@@ -769,65 +830,19 @@ mod tests {
         http_requests_total{host=\"h\",method=\"GET\",path=\"/assets/10Aa00/a.jpg\",server=\"business\",status_code=\"200\"} 3\n\
         http_response_size_bytes_sum{host=\"h\",method=\"GET\",path=\"/assets/10Aa00/a.jpg\",server=\"business\",status_code=\"200\"} 300\n";
 
-    async fn post(app: &Router, auth: Option<&str>, body: &str) -> StatusCode {
-        let mut req = HttpRequest::post("/internal/stats/ingest");
-        if let Some(a) = auth {
-            req = req.header(header::AUTHORIZATION, a);
-        }
-        app.clone().oneshot(req.body(Body::from(body.to_string())).unwrap()).await.unwrap().status()
-    }
-
-    #[tokio::test]
-    async fn ingest_refuses_a_missing_or_wrong_key_before_the_database() {
-        let app = router(state(Some("secret-key")));
-        assert_eq!(post(&app, None, BODY).await, StatusCode::UNAUTHORIZED);
-        assert_eq!(post(&app, Some("Bearer wrong"), BODY).await, StatusCode::UNAUTHORIZED);
-        assert_eq!(post(&app, Some("secret-key"), BODY).await, StatusCode::UNAUTHORIZED);
-        // A right key with the database not ready is a retryable 503, not a lost scrape.
-        assert_eq!(post(&app, Some("Bearer secret-key"), BODY).await, StatusCode::SERVICE_UNAVAILABLE);
-    }
-
-    #[tokio::test]
-    async fn ingest_refuses_a_missing_key_before_reading_the_body() {
-        use futures_util::StreamExt;
-        use std::sync::atomic::{AtomicBool, Ordering};
-        let app = router(state(Some("secret-key")));
-        let read = Arc::new(AtomicBool::new(false));
-        let flag = read.clone();
-        // A 1 MiB body that never ends: reading it would never finish.
-        let body = futures_util::stream::once(async { Ok::<_, std::io::Error>(axum::body::Bytes::from(vec![b'x'; 1 << 20])) })
-            .chain(futures_util::stream::pending())
-            .inspect(move |_| flag.store(true, Ordering::SeqCst));
-        let req = HttpRequest::post("/internal/stats/ingest").body(Body::from_stream(body)).unwrap();
-        let res = tokio::time::timeout(std::time::Duration::from_secs(5), app.oneshot(req))
-            .await
-            .expect("answered without waiting for the body")
-            .unwrap();
-        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
-        assert!(!read.load(Ordering::SeqCst));
-    }
-
     #[test]
-    fn the_role_counts_in_the_realm_or_under_this_client_only() {
+    fn the_role_counts_under_this_client_only() {
         let realm = |r: &str| KeycloakRole::Realm { role: r.to_string() };
         let client = |c: &str, r: &str| KeycloakRole::Client { client: c.to_string(), role: r.to_string() };
-        assert!(holds_role(&[realm("viewer")], "dash", "viewer"));
+        assert!(!holds_role(&[realm("viewer")], "dash", "viewer"));
         assert!(holds_role(&[client("dash", "viewer")], "dash", "viewer"));
         assert!(!holds_role(&[client("elsewhere", "viewer")], "dash", "viewer"));
         assert!(!holds_role(&[realm("other"), client("dash", "other")], "dash", "viewer"));
     }
 
     #[tokio::test]
-    async fn ingest_refuses_a_body_over_the_limit() {
-        let app = router(state(Some("k")));
-        let big = "x".repeat(INGEST_LIMIT_BYTES + 1024);
-        assert_eq!(post(&app, Some("Bearer k"), &big).await, StatusCode::PAYLOAD_TOO_LARGE);
-    }
-
-    #[tokio::test]
-    async fn without_key_or_keycloak_no_route_exists() {
-        let app = router(state(None));
-        assert_eq!(post(&app, Some("Bearer anything"), BODY).await, StatusCode::NOT_FOUND);
+    async fn without_keycloak_no_route_exists() {
+        let app = router(state());
         for path in ["/stats", "/stats/api/status", "/stats/api/facets", "/stats/api/overview", "/stats/api/items", "/stats/api/items/10Aa00/files", "/stats/api/summary", "/stats/api/export.csv", "/stats/config.json"] {
             let res = app.clone().oneshot(HttpRequest::get(path).body(Body::empty()).unwrap()).await.unwrap();
             assert_eq!(res.status(), StatusCode::NOT_FOUND, "{path}");
@@ -878,7 +893,7 @@ mod tests {
     #[tokio::test]
     async fn bad_statistics_settings_leave_the_rest_of_the_app_up() {
         for settings in [
-            vec![("STATS_DATABASE_URL", BAD_DB), ("STATS_INGEST_KEY", "k")],
+            vec![("STATS_DATABASE_URL", BAD_DB), ("STATS_SCRAPE_URL", "http://proxy:9090/metrics")],
             vec![
                 ("STATS_DATABASE_URL", GOOD_DB),
                 ("KEYCLOAK_URL", "keycloak:8080"),
@@ -892,6 +907,15 @@ mod tests {
             let res = app.oneshot(HttpRequest::get("/stats").body(Body::empty()).unwrap()).await.unwrap();
             assert_eq!(res.status(), StatusCode::NOT_FOUND, "{settings:?}");
         }
+    }
+
+    #[tokio::test]
+    async fn no_ingest_route_exists_even_with_the_old_key_set() {
+        let settings = [("STATS_DATABASE_URL", GOOD_DB), ("STATS_INGEST_KEY", "k")];
+        let app = mount(Router::new(), vars(&settings), vec![], HashMap::new());
+        let req = HttpRequest::post("/internal/stats/ingest").header(header::AUTHORIZATION, "Bearer k");
+        let res = app.oneshot(req.body(Body::from(BODY)).unwrap()).await.unwrap();
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
     }
 
     async fn behind_require_token(status: Option<KeycloakAuthStatus<String, ProfileAndEmail>>) -> StatusCode {
@@ -914,31 +938,84 @@ mod tests {
         assert_eq!(behind_require_token(None).await, StatusCode::INTERNAL_SERVER_ERROR);
     }
 
+    /// A file proxy that answers `/metrics` with `BODY`, `/broken` with a 500, `/stuck` never,
+    /// and `/huge` with more text than one read takes.
+    async fn fake_proxy() -> Url {
+        let app = Router::new()
+            .route("/metrics", get(|| async { BODY }))
+            .route("/broken", get(|| async { StatusCode::INTERNAL_SERVER_ERROR }))
+            .route("/stuck", get(|| std::future::pending::<&'static str>()))
+            .route("/huge", get(|| async { format!("{BODY}{}", "#".repeat(INGEST_LIMIT_BYTES)) }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        Url::parse(&format!("http://{addr}/")).unwrap()
+    }
+
     #[tokio::test]
     #[ignore = "needs STATS_TEST_DATABASE_URL"]
-    async fn ingest_stores_increments_only_with_the_right_key() {
-        let store = crate::stats_store::tests::test_store().await;
-        let app = router(StatsState { store: Arc::new(store.clone()), ..state(Some("secret-key")) });
+    async fn one_read_stores_a_good_answer_and_nothing_else() {
+        let store = crate::stats_store::tests::baselined_store().await;
+        let state = StatsState { store: Arc::new(store.clone()), ..state() };
+        let proxy = fake_proxy().await;
+        let scraper = |path: &str| Scraper::with_timeout(proxy.join(path).unwrap(), Duration::from_secs(1)).unwrap();
         let stored = || async {
             store.path_totals(None, None).await.unwrap().iter().map(|(_, t)| (t.requests, t.bytes)).collect::<Vec<_>>()
         };
 
-        assert_eq!(post(&app, None, BODY).await, StatusCode::UNAUTHORIZED);
-        assert_eq!(post(&app, Some("Bearer wrong"), BODY).await, StatusCode::UNAUTHORIZED);
+        for path in ["broken", "stuck", "huge"] {
+            assert!(scrape_once(&scraper(path), &state).await.is_err(), "{path}");
+        }
         assert_eq!(stored().await, vec![]);
-        assert_eq!(store.last_ingest().await.unwrap(), None);
+        assert_eq!(store.last_ingest().await.unwrap(), Some(0));
 
-        assert_eq!(post(&app, Some("Bearer secret-key"), BODY).await, StatusCode::NO_CONTENT);
+        scrape_once(&scraper("metrics"), &state).await.unwrap();
         assert_eq!(stored().await, vec![(3, 300)]);
-        assert_eq!(post(&app, Some("Bearer secret-key"), BODY).await, StatusCode::NO_CONTENT);
+        scrape_once(&scraper("metrics"), &state).await.unwrap();
         assert_eq!(stored().await, vec![(3, 300)]);
+    }
 
-        // The proxy restarted: its counter reads lower than the saved one and all of it is new.
-        let restarted = BODY.replace("process_start_time_seconds 100", "process_start_time_seconds 200")
-            .replace("} 3\n", "} 1\n")
-            .replace("} 300\n", "} 100\n");
-        assert_eq!(post(&app, Some("Bearer secret-key"), &restarted).await, StatusCode::NO_CONTENT);
-        assert_eq!(stored().await, vec![(4, 400)]);
+    #[tokio::test]
+    #[ignore = "needs STATS_TEST_DATABASE_URL"]
+    async fn the_first_read_into_an_empty_store_counts_nothing() {
+        let store = crate::stats_store::tests::test_store().await;
+        let state = StatsState { store: Arc::new(store.clone()), ..state() };
+        let proxy = fake_proxy().await;
+        let scraper = Scraper::with_timeout(proxy.join("metrics").unwrap(), Duration::from_secs(1)).unwrap();
+        scrape_once(&scraper, &state).await.unwrap();
+        assert!(store.path_totals(None, None).await.unwrap().is_empty());
+        assert!(store.last_ingest().await.unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn a_read_waits_for_the_database_to_be_ready() {
+        let proxy = fake_proxy().await;
+        let scraper = Scraper::new(proxy.join("metrics").unwrap()).unwrap();
+        let err = scrape_once(&scraper, &state()).await.unwrap_err();
+        assert!(err.to_string().contains("not ready"), "{err}");
+    }
+
+    #[test]
+    fn an_unusable_scrape_interval_turns_the_poller_off_with_a_reason() {
+        let scrape = |pairs: &[(&str, &str)]| {
+            let all: Vec<_> = [("STATS_DATABASE_URL", GOOD_DB)].iter().chain(pairs).copied().collect();
+            match check_settings(vars(&all)) {
+                StatsSettings::On { scrape, .. } => scrape,
+                _ => panic!("expected statistics on"),
+            }
+        };
+        let url = ("STATS_SCRAPE_URL", "http://proxy:9090/metrics");
+        for bad in ["0", "abc", "-5", "1.5"] {
+            match scrape(&[url, ("STATS_SCRAPE_INTERVAL", bad)]) {
+                Err(reason) => assert!(reason.contains("STATS_SCRAPE_INTERVAL"), "{bad}: {reason}"),
+                Ok(s) => panic!("{bad}: expected the poller off, got {s:?}"),
+            }
+        }
+        let every = |secs| Ok(Some(ScrapeSettings { url: Url::parse(url.1).unwrap(), interval: Duration::from_secs(secs) }));
+        assert_eq!(scrape(&[url]), every(60));
+        assert_eq!(scrape(&[url, ("STATS_SCRAPE_INTERVAL", "15")]), every(15));
+        assert_eq!(scrape(&[("STATS_SCRAPE_INTERVAL", "15")]), Ok(None));
+        assert!(scrape(&[("STATS_SCRAPE_URL", "proxy:9090/metrics")]).unwrap_err().contains("STATS_SCRAPE_URL"));
     }
 
     async fn get_text(app: &Router, path: &str) -> (StatusCode, String) {
@@ -950,7 +1027,7 @@ mod tests {
 
     #[tokio::test]
     async fn the_page_is_a_shell_and_its_script_reads_data_only_with_a_bearer_token() {
-        let mut s = state(None);
+        let mut s = state();
         s.keycloak = Some(Arc::new(KeycloakSettings {
             url: Url::parse("http://127.0.0.1:1/").unwrap(),
             browser_url: "http://127.0.0.1:1/".to_string(),
@@ -989,6 +1066,26 @@ mod tests {
             assert_eq!(status, StatusCode::OK);
             assert!(!code.contains("fetch("), "{helper} fetches");
         }
+    }
+
+    #[tokio::test]
+    async fn the_browser_config_names_the_realm_endpoints_including_logout() {
+        let mut s = state();
+        s.keycloak = Some(Arc::new(KeycloakSettings {
+            url: Url::parse("http://keycloak:8080/").unwrap(),
+            browser_url: "https://sso.orchard.test/".to_string(),
+            realm: "orchard".to_string(),
+            client_id: "pears".to_string(),
+            role: "picker".to_string(),
+        }));
+        let (status, body) = get_text(&router(s), "/stats/config.json").await;
+        assert_eq!(status, StatusCode::OK);
+        let cfg: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let base = "https://sso.orchard.test/realms/orchard/protocol/openid-connect";
+        assert_eq!(cfg["authUrl"], format!("{base}/auth"));
+        assert_eq!(cfg["tokenUrl"], format!("{base}/token"));
+        assert_eq!(cfg["logoutUrl"], format!("{base}/logout"));
+        assert_eq!(cfg["clientId"], "pears");
     }
 
     const SIGNING_SECRET: &[u8] = b"orchard-test-signing-secret-01234";
@@ -1032,16 +1129,28 @@ mod tests {
         (Url::parse(&base).unwrap(), discovering)
     }
 
+    #[derive(Clone, Copy)]
     struct Claims<'a> {
         expires_in: i64,
-        audience: &'a str,
+        audience: &'a [&'a str],
         client: &'a str,
         realm_roles: &'a [&'a str],
+        /// The client under whose `resource_access` entry `client_roles` are written.
+        roles_client: &'a str,
+        client_roles: &'a [&'a str],
         secret: &'a [u8],
     }
 
     const GOOD: Claims<'static> =
-        Claims { expires_in: 300, audience: "account", client: "pears", realm_roles: &["stats-viewer"], secret: SIGNING_SECRET };
+        Claims {
+        expires_in: 300,
+        audience: &["account"],
+        client: "pears",
+        realm_roles: &[],
+        roles_client: "pears",
+        client_roles: &["stats-viewer"],
+        secret: SIGNING_SECRET,
+    };
 
     fn token(c: Claims) -> String {
         let now = Utc::now().timestamp();
@@ -1055,6 +1164,7 @@ mod tests {
             "typ": "Bearer",
             "azp": c.client,
             "realm_access": { "roles": c.realm_roles },
+            "resource_access": { c.roles_client: { "roles": c.client_roles } },
             "preferred_username": "picker",
             "email": "picker@orchard.test",
             "email_verified": true,
@@ -1075,7 +1185,7 @@ mod tests {
                 client_id: "pears".into(),
                 role: "stats-viewer".into(),
             })),
-            ..state(None)
+            ..state()
         });
         discovering.await.unwrap();
         app
@@ -1097,9 +1207,11 @@ mod tests {
         let refused = [
             ("no token", None, StatusCode::UNAUTHORIZED),
             ("expired", Some(token(Claims { expires_in: -300, ..GOOD })), StatusCode::UNAUTHORIZED),
-            ("another audience", Some(token(Claims { audience: "plums", ..GOOD })), StatusCode::UNAUTHORIZED),
+            ("another audience", Some(token(Claims { audience: &["plums"], ..GOOD })), StatusCode::UNAUTHORIZED),
             ("another signing key", Some(token(Claims { secret: b"some-other-signing-secret-567890", ..GOOD })), StatusCode::UNAUTHORIZED),
-            ("without the role", Some(token(Claims { realm_roles: &["offline_access"], ..GOOD })), StatusCode::FORBIDDEN),
+            ("without the role", Some(token(Claims { client_roles: &["offline_access"], ..GOOD })), StatusCode::FORBIDDEN),
+            ("the role only in the realm", Some(token(Claims { realm_roles: &["stats-viewer"], client_roles: &[], ..GOOD })), StatusCode::FORBIDDEN),
+            ("the role only under another client", Some(token(Claims { roles_client: "plums", ..GOOD })), StatusCode::FORBIDDEN),
             ("issued to another client", Some(token(Claims { client: "plums", ..GOOD })), StatusCode::FORBIDDEN),
         ];
         for path in READ_ROUTES {
@@ -1110,6 +1222,21 @@ mod tests {
             assert_eq!(read(&app, path, Some(&token(GOOD))).await, StatusCode::SERVICE_UNAVAILABLE, "{path}");
         }
         assert_eq!(read(&app, "/stats", None).await, StatusCode::OK);
+    }
+
+    /// On a shared realm a token's audience lists the clients whose roles the user holds, so a
+    /// viewer without the realm's default account roles carries only this client's id.
+    #[tokio::test]
+    async fn read_routes_accept_a_token_whose_audience_is_this_client() {
+        let app = guarded(Store::lazy(GOOD_DB).unwrap()).await;
+        let for_this_client = Claims { audience: &["pears"], ..GOOD };
+        let beside_account = Claims { audience: &["pears", "account"], ..GOOD };
+        let for_another_app = Claims { audience: &["plums"], ..GOOD };
+        for path in READ_ROUTES {
+            assert_eq!(read(&app, path, Some(&token(for_this_client))).await, StatusCode::SERVICE_UNAVAILABLE, "{path}");
+            assert_eq!(read(&app, path, Some(&token(beside_account))).await, StatusCode::SERVICE_UNAVAILABLE, "{path}");
+            assert_eq!(read(&app, path, Some(&token(for_another_app))).await, StatusCode::UNAUTHORIZED, "{path}");
+        }
     }
 
     #[tokio::test]

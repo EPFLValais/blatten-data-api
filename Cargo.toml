@@ -17,14 +17,15 @@ required-features = ["generator"]
 
 [features]
 default = []
-generator = ["dep:csv", "dep:gdal", "dep:las", "dep:zip", "dep:regex", "dep:rayon", "dep:indicatif", "dep:walkdir", "dep:reqwest", "dep:sha2", "dep:xxhash-rust", "dep:serde_yaml", "dep:calamine", "dep:jsonschema", "dep:percent-encoding"]
+generator = ["dep:csv", "dep:gdal", "dep:las", "dep:zip", "dep:regex", "dep:rayon", "dep:indicatif", "dep:walkdir", "reqwest/blocking", "dep:sha2", "dep:xxhash-rust", "dep:serde_yaml", "dep:calamine", "dep:jsonschema", "dep:percent-encoding"]
 
 [dependencies]
 # Web framework
 axum = "0.7"
 tokio = { version = "1", features = ["full"] }
 url = "2"
-tower = { version = "0.4", features = ["limit", "util"] }
+tower = { version = "0.4", features = ["util"] }
+http-body = "1"
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 
 # STAC types (official implementation)
@@ -60,6 +61,8 @@ strsim = "0.11"
 # Download statistics: Postgres storage and Keycloak token check
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "migrate", "macros", "chrono"] }
 axum-keycloak-auth = { version = "0.6.0", default-features = false, features = ["rustls-tls"] }
+# Reading the file proxy's metrics
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 
 # Generator-specific dependencies (optional)
 csv = { version = "1", optional = true }
@@ -70,7 +73,6 @@ regex = { version = "1", optional = true }
 rayon = { version = "1.10", optional = true }
 indicatif = { version = "0.17", optional = true }
 walkdir = { version = "2.4", optional = true }
-reqwest = { version = "0.12", features = ["blocking"], optional = true }
 sha2 = { version = "0.10", optional = true }
 xxhash-rust = { version = "0.8", features = ["xxh64"], optional = true }
 serde_yaml = { version = "0.9", optional = true }

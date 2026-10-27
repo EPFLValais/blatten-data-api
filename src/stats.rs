@@ -4,6 +4,10 @@
 //! The proxy's counters are cumulative and reset when it restarts, so each scrape is turned into an
 //! increment against the last value saved for the same path. A request is a successful GET
 //! (status 200 or 206); HEAD requests and error responses are not counted.
+//!
+//! The first scrape into a store that has never taken one is a baseline: its readings are saved and
+//! nothing is counted, so the proxy's uptime before the store existed is not booked to that day.
+//! Counting starts with the next scrape. A proxy process first seen after that still counts from zero.
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -157,11 +161,13 @@ pub struct Changes {
 
 /// Turn a scrape into increments against one proxy process's last saved (requests, bytes) reading
 /// per path. A reading no higher than the saved one in both counters is that process's older
-/// reading posted late: it adds nothing and is not saved.
+/// reading posted late: it adds nothing and is not saved. A `baseline` scrape adds nothing and saves
+/// every reading.
 pub fn changes(
     scrape: &Scrape,
     saved: &HashMap<String, (u64, u64)>,
     sizes: &HashMap<String, u64>,
+    baseline: bool,
 ) -> Changes {
     let mut out = Changes::default();
     for (path, now) in &scrape.paths {
@@ -172,7 +178,7 @@ pub fn changes(
         let requests = increment(last.map(|l| l.0), now.requests);
         let bytes = increment(last.map(|l| l.1), now.bytes);
         out.save.insert(path.clone(), (now.requests, now.bytes));
-        if requests > 0 || bytes > 0 {
+        if !baseline && (requests > 0 || bytes > 0) {
             let equiv = whole_file_thousandths(bytes, sizes.get(path.as_str()).copied());
             out.added.insert(path.clone(), Totals { requests, bytes, equiv });
         }
@@ -840,16 +846,6 @@ pub fn setting(value: Option<String>) -> Option<String> {
     value.map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
 }
 
-/// Constant-time comparison of two secrets.
-pub fn secrets_equal(a: &str, b: &str) -> bool {
-    let (a, b) = (a.as_bytes(), b.as_bytes());
-    let mut diff = (a.len() != b.len()) as u8;
-    for i in 0..a.len().max(b.len()) {
-        diff |= a.get(i).copied().unwrap_or(0) ^ b.get(i).copied().unwrap_or(0);
-    }
-    diff == 0
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -924,10 +920,21 @@ http_request_duration_seconds_count{method="GET"} 2
     }
 
     #[test]
-    fn first_scrape_counts_every_reading_and_saves_it() {
-        let c = changes(&parse_scrape(METRICS), &HashMap::new(), &HashMap::new());
+    fn a_path_with_no_saved_reading_counts_whole_and_is_saved() {
+        let c = changes(&parse_scrape(METRICS), &HashMap::new(), &HashMap::new(), false);
         assert_eq!(added(&c), vec![("/assets/10Aa00/x.tif", 7, 4300), ("/odd\"path,x", 1, 0)]);
         assert_eq!(c.save["/assets/10Aa00/x.tif"], (7, 4300));
+    }
+
+    #[test]
+    fn a_baseline_scrape_saves_every_reading_and_adds_nothing() {
+        let now = scrape(&[("/assets/30Cc00/kiln.tif", 4, 40), ("/archives/30Cc00.zip", 1, 900)]);
+        let c = changes(&now, &HashMap::new(), &HashMap::new(), true);
+        assert!(c.added.is_empty());
+        assert_eq!(c.save["/assets/30Cc00/kiln.tif"], (4, 40));
+        assert_eq!(c.save["/archives/30Cc00.zip"], (1, 900));
+        let c = changes(&now, &HashMap::new(), &HashMap::new(), false);
+        assert_eq!(added(&c), vec![("/archives/30Cc00.zip", 1, 900), ("/assets/30Cc00/kiln.tif", 4, 40)]);
     }
 
     #[test]
@@ -937,7 +944,7 @@ http_request_duration_seconds_count{method="GET"} 2
             ("/assets/20Bb00/b.tif".to_string(), (2, 50)),
         ]);
         let now = scrape(&[("/assets/20Bb00/a.tif", 5, 700), ("/assets/20Bb00/b.tif", 2, 50)]);
-        let c = changes(&now, &saved, &HashMap::new());
+        let c = changes(&now, &saved, &HashMap::new(), false);
         assert_eq!(added(&c), vec![("/assets/20Bb00/a.tif", 2, 400)]);
         assert_eq!(c.save.len(), 1);
         assert_eq!(c.save["/assets/20Bb00/a.tif"], (5, 700));
@@ -947,7 +954,7 @@ http_request_duration_seconds_count{method="GET"} 2
     fn a_lower_reading_of_the_same_process_adds_and_saves_nothing() {
         let saved = HashMap::from([("/archives/20Bb00.zip".to_string(), (40, 4000))]);
         let now = scrape(&[("/archives/20Bb00.zip", 3, 90)]);
-        let c = changes(&now, &saved, &HashMap::new());
+        let c = changes(&now, &saved, &HashMap::new(), false);
         assert_eq!(c, Changes::default());
     }
 
@@ -955,7 +962,7 @@ http_request_duration_seconds_count{method="GET"} 2
     fn a_series_that_appears_later_counts_from_zero() {
         let saved = HashMap::from([("/assets/20Bb00/a.tif".to_string(), (1, 10))]);
         let now = scrape(&[("/assets/20Bb00/a.tif", 1, 10), ("/assets/20Bb00/new.tif", 2, 20)]);
-        let c = changes(&now, &saved, &HashMap::new());
+        let c = changes(&now, &saved, &HashMap::new(), false);
         assert_eq!(added(&c), vec![("/assets/20Bb00/new.tif", 2, 20)]);
     }
 
@@ -965,7 +972,7 @@ http_request_duration_seconds_count{method="GET"} 2
         let saved = HashMap::from([("/assets/20Bb00/a.tif".to_string(), (1, 100))]);
         let now = scrape(&[("/assets/20Bb00/a.tif", 1, 350)]);
         let sizes = HashMap::from([("/assets/20Bb00/a.tif".to_string(), 500)]);
-        let c = changes(&now, &saved, &sizes);
+        let c = changes(&now, &saved, &sizes, false);
         assert_eq!(
             c.added["/assets/20Bb00/a.tif"],
             Totals { requests: 0, bytes: 250, equiv: 500 }
@@ -1015,8 +1022,7 @@ http_request_duration_seconds_count{method="GET"} 2
 
     #[test]
     fn a_setting_is_trimmed_and_an_empty_one_is_absent() {
-        let key = setting(Some("secret-key\n".to_string())).unwrap();
-        assert!(secrets_equal("secret-key", &key));
+        assert_eq!(setting(Some("secret-key\n".to_string())).as_deref(), Some("secret-key"));
         assert_eq!(setting(Some(" \t\n".to_string())), None);
         assert_eq!(setting(None), None);
     }
@@ -1374,13 +1380,5 @@ http_request_duration_seconds_count{method="GET"} 2
         assert_eq!(csv_cell("=1+1"), "'=1+1");
         assert_eq!(csv_cell("a,b"), "\"a,b\"");
         assert_eq!(csv_cell("plain"), "plain");
-    }
-
-    #[test]
-    fn secrets_compare_exactly() {
-        assert!(secrets_equal("abc", "abc"));
-        assert!(!secrets_equal("abc", "abd"));
-        assert!(!secrets_equal("abc", "abcd"));
-        assert!(!secrets_equal("", "x"));
     }
 }

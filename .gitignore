@@ -7,3 +7,8 @@ stac/manifest.json
 stac/.stac-cache/
 stac/validation_report.json
 stac/collections/*_items.ndjson
+
+# Browser stories
+node_modules/
+test-results/
+playwright-report/

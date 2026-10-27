@@ -10,7 +10,7 @@
 <body>
 <header>
   <h1>Download statistics</h1>
-  <div class="controls">
+  <div class="controls" data-dashboard hidden>
     <span id="live" class="live paused"><span class="dot"></span><span id="live-text">Connecting…</span><button type="button" id="pause" class="link">Pause</button></span>
     <select id="range" aria-label="Period">
       <option value="1">Today</option>
@@ -28,11 +28,16 @@
       <option value="item">By day and item</option>
       <option value="file">By file</option>
     </select>
+    <button type="button" id="signout">Sign out</button>
   </div>
 </header>
 
-<main>
-  <p id="status" class="notice">Signing in…</p>
+<section id="access" class="access">
+  <p id="access-text">Signing in…</p>
+  <button type="button" id="access-signout">Sign out</button>
+</section>
+
+<main data-dashboard hidden>
   <p id="stale" class="notice warn" hidden></p>
 
   <section class="toolbar">

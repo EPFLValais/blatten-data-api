@@ -26,10 +26,12 @@
 
   let token = null;
   let refreshToken = null;
+  let idToken = null; // kept for the sign-out, in memory only
   let refreshTimer = null;
   let clockSkew = 0; // server time minus browser time, in seconds
   let lastIngest = null;
   let paused = false;
+  let signedOut = false;
   let loadId = 0;
   let facets = {};
   let overview = null;
@@ -72,6 +74,7 @@
   function keepTokens(body) {
     token = body.access_token;
     refreshToken = body.refresh_token || null;
+    if (body.id_token) idToken = body.id_token;
     clearTimeout(refreshTimer);
     if (refreshToken) refreshTimer = setTimeout(refresh, Math.max(10, (body.expires_in || 300) - 30) * 1000);
   }
@@ -86,19 +89,30 @@
     try { await tokenRequest({ grant_type: 'refresh_token', refresh_token: refreshToken }); } catch (e) { await login(); }
   }
 
+  function signOut() {
+    const url = signOutUrl(cfg, idToken, redirect);
+    signedOut = paused = true;
+    clearTimeout(refreshTimer);
+    token = refreshToken = idToken = null;
+    forgetSession(sessionStorage);
+    location.assign(url);
+  }
+  $('signout').addEventListener('click', signOut);
+  $('access-signout').addEventListener('click', signOut);
+
   const params = new URLSearchParams(location.search);
   if (!params.has('code')) { await login(); return; }
   {
     const code = params.get('code');
     const ok = params.get('state') && params.get('state') === sessionStorage.getItem('pkce_state');
     history.replaceState(null, '', redirect);
-    if (!ok) { setText('status', 'Sign-in could not be verified. Reload to try again.'); return; }
+    if (!ok) { showAccess(document, 'Sign-in could not be verified. Reload to try again.'); return; }
     try {
       await tokenRequest({
         grant_type: 'authorization_code', code, redirect_uri: redirect,
         code_verifier: sessionStorage.getItem('pkce_verifier') || '',
       });
-    } catch (e) { setText('status', 'Sign-in failed. Reload to try again.'); return; }
+    } catch (e) { showAccess(document, 'Sign-in failed. Reload to try again.'); return; }
     sessionStorage.removeItem('pkce_verifier');
     sessionStorage.removeItem('pkce_state');
   }
@@ -113,13 +127,13 @@
   const guard = signInGuard(sessionStorage, login);
   async function api(path, signal) {
     const res = await fetch(path, { headers: { Authorization: 'Bearer ' + token }, signal });
-    if (res.status === 401) {
-      if (await guard.refused() === 'signing-in') throw new Error('signing in again');
-      setText('status', 'Access refused. Try again later.'); $('status').hidden = false;
-      throw new Error('refused');
-    }
-    guard.accepted();
-    if (res.status === 403) { setText('status', 'This account may not view the statistics.'); $('status').hidden = false; throw new Error('forbidden'); }
+    // A request answered after signing out must not sign in again or write session storage.
+    if (signedOut) throw new Error('signed out');
+    const guarded = res.status === 401 ? await guard.refused() : guard.accepted();
+    const message = accessAfter(res.status, guarded);
+    if (message !== undefined) showAccess(document, message);
+    if (res.status === 401) throw new Error(guarded === 'signing-in' ? 'signing in again' : 'refused');
+    if (res.status === 403) throw new Error('forbidden');
     if (!res.ok) throw new Error('request failed');
     return res;
   }
@@ -319,7 +333,6 @@
     setText('k-hour', num(o.last_hour.requests));
     setText('k-hour-sub', num(o.last_24h.requests) + ' in 24 h');
     renderLive();
-    $('status').hidden = true;
     updateAge();
   }
 
