@@ -68,6 +68,28 @@ test('a drag starting on an edge of the window resizes it, inside it moves it, e
   assert.strictEqual(t.dragMode(s, {}, 85), 'brush', 'all time has no window to move');
 });
 
+test('a press within reach of a handle takes the nearer end, over all time too', () => {
+  const t = load();
+  const s = strip(t);
+  assert.strictEqual(t.dragMode(s, {}, 54), 'from', 'all time ends at the strip, and its ends can be dragged in');
+  assert.strictEqual(t.dragMode(s, {}, 146), 'to');
+  assert.strictEqual(t.dragMode(s, {}, 100), 'brush', 'inside an all-time window a drag still brushes');
+  const day = { from: '2026-03-04', to: '2026-03-04' };
+  assert.strictEqual(t.dragMode(s, day, 84), 'from');
+  assert.strictEqual(t.dragMode(s, day, 86), 'to');
+  assert.strictEqual(t.dragMode(s, day, 75), 'from', 'outside the window, the handle still reaches');
+});
+
+test('the dates under the handles sit under their ends, inside the strip, and merge when they would overlap', () => {
+  const t = load();
+  const w = { from: 40, to: 40, both: 90 };
+  assert.deepStrictEqual(plain(t.endLabels(100, 200, w, 300)), [{ end: 'from', left: 80 }, { end: 'to', left: 180 }]);
+  assert.deepStrictEqual(plain(t.endLabels(0, 300, w, 300)), [{ end: 'from', left: 0 }, { end: 'to', left: 260 }]);
+  assert.deepStrictEqual(plain(t.endLabels(100, 130, w, 300)), [{ end: 'both', left: 70 }]);
+  assert.deepStrictEqual(plain(t.endLabels(285, 300, w, 300)), [{ end: 'both', left: 210 }]);
+  assert.deepStrictEqual(plain(t.endLabels(0, 10, w, 300)), [{ end: 'both', left: 0 }]);
+});
+
 test('dragging an edge moves only that end, and never past the other', () => {
   const t = load();
   const s = strip(t);
@@ -94,6 +116,16 @@ test('the period every request uses is the window once it was dragged', () => {
   Object.assign(view, t.windowView({ from: '2026-03-03', to: '2026-03-06' }));
   assert.deepStrictEqual(plain(t.periodOf(view, now)), { from: '2026-03-03', to: '2026-03-06' });
   assert.deepStrictEqual(plain(t.periodOf({ range: 'all' }, now)), {});
+});
+
+test('a preset period lights its button, and a dragged or saved custom window lights none', () => {
+  const t = load();
+  for (const range of ['1', '7', '30', 'all']) assert.strictEqual(t.litPreset({ range, from: '', to: '' }), range);
+  const view = { range: '30', from: '', to: '' };
+  Object.assign(view, t.windowView({ from: '2026-03-03', to: '2026-03-06' }));
+  assert.strictEqual(t.litPreset(view), null);
+  assert.strictEqual(t.litPreset({ range: 'custom', from: '', to: '' }), null);
+  assert.strictEqual(t.litPreset({ range: '90' }), null);
 });
 
 test('of several quick drags only the last is loaded and applied, and a stale load is aborted', async () => {

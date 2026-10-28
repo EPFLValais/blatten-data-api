@@ -169,16 +169,18 @@
   // Buckets are UTC, so the axes and the values on hover are read in UTC too.
   const utc = (ts) => uPlot.tzDate(new Date(ts * 1e3), 'Etc/UTC');
   const fmtOf = (m) => (m === 'bytes' ? bytes : m === 'whole_files' ? whole : num);
-  const shown = (fmt) => (u, v) => (v === null || v === undefined ? '–' : fmt(v));
   const bucketText = (resolution) => (ts) => {
     const d = new Date(ts * 1000).toISOString();
     if (resolution === 'hour') return longDay(d.slice(0, 10)) + ', ' + d.slice(11, 16) + ' UTC';
     return (resolution === 'week' ? 'Week of ' : '') + longDay(d.slice(0, 10));
   };
   const lineSeries = (name, i, fmt) => ({
-    label: name, stroke: colour(name, i), width: 1.5, value: shown(fmt),
+    label: name, stroke: colour(name, i), width: 1.5,
     points: { size: 5, fill: colour(name, i) },
   });
+  // The values under the pointer are read from the tooltip; the marker on each line at that
+  // bucket is a hollow ring in the line's colour.
+  const hoverPoints = { size: 9, width: 2, fill: '#fff' };
   const yAxis = (fmt) => ({ size: 64, values: (u, ticks) => ticks.map(fmt) });
   const fromZero = { range: (u, min, max) => uPlot.rangeNum(0, Math.max(1, max), 0.1, true) };
   // Day and month, with the hour when ticks are less than a day apart, in UTC or local time.
@@ -196,14 +198,15 @@
   const main = lineChart($('chart-main'), (width) => {
     const fmt = fmtOf(view.metric);
     return {
-      width, height: 220, tzDate: utc,
+      width, height: 220, tzDate: utc, legend: { live: false },
       scales: { x: { time: true }, y: fromZero },
       series: [
-        { label: 'Period', value: shown(bucketText(series.resolution)) },
+        {},
         ...chartData(series, view.metric).names.map((name, i) => lineSeries(name, i, fmt)),
       ],
       axes: [timeAxis('UTC'), yAxis(fmt)],
-      cursor: { drag: { x: true, y: false, setScale: false } },
+      cursor: { drag: { x: true, y: false, setScale: false }, points: hoverPoints },
+      plugins: [tooltipPlugin({ title: bucketText(series.resolution), value: fmt })],
       hooks: {
         setSelect: [(u) => {
           if (u.select.width < 3) return;
@@ -236,11 +239,12 @@
 
   // ---- overview strip and its window ----------------------------------------------------------
   const longDay = (day) => new Date(day + 'T00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  const spanText = (from, to) => (from === to ? longDay(from) : longDay(from) + ' – ' + longDay(to));
   function windowLabel(resolution) {
     const p = period();
     const from = p.from || (strip && strip.scale.firstDay);
     const to = p.to || (strip && strip.scale.lastDay);
-    const span = from && to ? (from === to ? longDay(from) : longDay(from) + ' – ' + longDay(to)) : 'All time';
+    const span = from && to ? spanText(from, to) : 'All time';
     setText('window-label', span + (resolution ? ' · by ' + resolution : ' · loading…'));
   }
 
@@ -270,6 +274,51 @@
     if (!strip || !u) return;
     strip.scale = stripScale(strip.series.buckets, strip.series.resolution, 0, u.over.clientWidth);
     u.setSelect({ ...stripSelect(period(), strip.scale), top: 0, height: u.over.clientHeight }, false);
+    drawEnds(u);
+  }
+
+  // A round handle over each end of the window, and the ends' dates beneath the strip, one label
+  // for both where they would overlap.
+  function drawEnds(u) {
+    const p = period();
+    const { x0, x1 } = windowSpan(p, strip.scale);
+    if (!u.over.querySelector('.strip-handle')) {
+      for (const end of ['from', 'to']) {
+        const h = document.createElement('div');
+        h.className = 'strip-handle';
+        h.dataset.end = end;
+        u.over.appendChild(h);
+      }
+    }
+    const [h0, h1] = u.over.querySelectorAll('.strip-handle');
+    h0.style.left = x0 + 'px';
+    h1.style.left = x1 + 'px';
+
+    const box = $('strip-dates');
+    const from = p.from || strip.scale.firstDay;
+    const to = p.to || strip.scale.lastDay;
+    const texts = { from: longDay(from), to: longDay(to), both: spanText(from, to) };
+    if (box.childElementCount !== 3) {
+      box.replaceChildren(...Object.keys(texts).map((end) => {
+        const span = document.createElement('span');
+        span.dataset.end = end;
+        return span;
+      }));
+    }
+    const labels = {};
+    for (const span of box.children) {
+      span.textContent = texts[span.dataset.end];
+      span.hidden = false;
+      labels[span.dataset.end] = span;
+    }
+    const w = { from: labels.from.offsetWidth, to: labels.to.offsetWidth, both: labels.both.offsetWidth };
+    const offset = u.over.getBoundingClientRect().left - box.getBoundingClientRect().left;
+    const shown = endLabels(offset + x0, offset + x1, w, box.clientWidth);
+    for (const span of box.children) span.hidden = true;
+    for (const l of shown) {
+      labels[l.end].hidden = false;
+      labels[l.end].style.left = l.left + 'px';
+    }
   }
 
   // Dragging on the strip brushes a new window, moves the window or moves one of its ends, as
@@ -314,10 +363,7 @@
     view.offset = 0;
     open.clear();
     persist();
-    $('range').value = 'custom';
-    $('custom').hidden = false;
-    $('from').value = view.from;
-    $('to').value = view.to;
+    light();
     drawWindow();
     windowLabel(null);
     if (immediately) loads.now(); else loads.soon();
@@ -335,11 +381,12 @@
     const fmt = fmtOf(totalMetric());
     const at = (ts) => new Date(ts * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
     return {
-      width, height: 110,
+      width, height: 110, legend: { show: false },
       scales: { x: { time: true }, y: fromZero },
-      series: [{ label: 'Quarter hour from', value: shown(at) }, lineSeries('All', 0, fmt)],
+      series: [{}, lineSeries('All', 0, fmt)],
       axes: [timeAxis(undefined), yAxis(fmt)],
-      cursor: { drag: { x: false, y: false } },
+      cursor: { drag: { x: false, y: false }, points: hoverPoints },
+      plugins: [tooltipPlugin({ title: (ts) => 'Quarter hour from ' + at(ts), value: fmt })],
     };
   });
 
@@ -609,27 +656,37 @@
     URL.revokeObjectURL(url);
   }
 
+  // Lights the period preset, grouping and measure the view has; a custom window lights no preset.
+  function light() {
+    const lit = { range: litPreset(view), group: view.group, metric: view.metric };
+    for (const [id, value] of Object.entries(lit)) {
+      for (const b of $(id).children) b.classList.toggle('on', b.dataset.value === value);
+    }
+  }
+  // A click on one of a segmented control's buttons, with the button's value.
+  const onPick = (id, pick) => $(id).addEventListener('click', (e) => {
+    const value = e.target.dataset && e.target.dataset.value;
+    if (value) pick(value);
+  });
+
   facets = await (await api('/stats/api/facets')).json();
   for (const [key, label] of Object.entries(GROUPS)) {
-    const o = document.createElement('option');
-    o.value = key;
-    o.textContent = label;
-    $('group').appendChild(o);
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.value = key;
+    b.textContent = label;
+    $('group').appendChild(b);
   }
-  $('group').value = view.group;
-  $('range').value = view.range;
-  $('from').value = view.from;
-  $('to').value = view.to;
-  $('custom').hidden = view.range !== 'custom';
-  for (const b of $('metric').children) b.classList.toggle('on', b.dataset.value === view.metric);
+  light();
   renderFilters();
 
-  $('group').addEventListener('change', () => {
-    view.group = $('group').value;
+  onPick('group', (value) => {
+    view.group = value;
     view.offset = 0;
     view.sort = { key: view.metric, dir: 'desc' };
     open.clear();
     persist();
+    light();
     loads.now();
   });
   $('add-filter').addEventListener('change', () => {
@@ -637,38 +694,26 @@
     if (dim) { view.filter[dim] = rest.join('|'); filtersChanged(); }
   });
   function rangeChanged() {
-    $('range').value = view.range;
-    $('custom').hidden = view.range !== 'custom';
-    $('from').value = view.from;
-    $('to').value = view.to;
     view.offset = 0;
     open.clear();
     persist();
+    light();
     drawWindow();
     windowLabel(null);
     loads.now();
   }
-  $('range').addEventListener('change', () => { view.range = $('range').value; zoomBack = null; rangeChanged(); });
-  for (const id of ['from', 'to']) {
-    $(id).addEventListener('change', () => { view[id] = $(id).value; zoomBack = null; rangeChanged(); });
-  }
-  $('metric').addEventListener('click', (e) => {
-    const value = e.target.dataset && e.target.dataset.value;
-    if (!value) return;
+  onPick('range', (value) => { view.range = value; zoomBack = null; rangeChanged(); });
+  onPick('metric', (value) => {
     view.metric = value;
     view.sort = { key: value, dir: 'desc' };
-    for (const b of $('metric').children) b.classList.toggle('on', b === e.target);
     persist();
+    light();
     renderMain();
     renderLive();
     renderStrip();
     loadTable(loadId);
   });
-  $('export').addEventListener('change', async () => {
-    const level = $('export').value;
-    $('export').value = '';
-    if (level) await download(level);
-  });
+  onPick('export', download);
   $('pause').addEventListener('click', () => { paused = !paused; updateAge(); if (!paused) poll(); });
   let searchTimer = null;
   $('search').value = view.q;

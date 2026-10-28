@@ -5,7 +5,7 @@
 
 use anyhow::{Context, Result};
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Path, Query, RawQuery, State},
     http::{header, HeaderMap, Method, StatusCode},
     response::{IntoResponse, Json, Response},
     routing::get,
@@ -656,9 +656,72 @@ impl FieldsFilter {
 // Helper Functions
 // ============================================================================
 
+/// The order of asset keys: by text, with each run of digits compared as a number, so
+/// `dem-2` comes before `dem-10`. Keys equal that way, such as `dem-02` and `dem-2`, fall back to
+/// their plain text order, so the order is total.
+fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+    /// The next run of `s` and the rest: all digits or no digits, and whether it is digits
+    fn next_run(s: &str) -> (&str, bool, &str) {
+        let digits = s.starts_with(|c: char| c.is_ascii_digit());
+        let end = s.find(|c: char| c.is_ascii_digit() != digits).unwrap_or(s.len());
+        (&s[..end], digits, &s[end..])
+    }
+    let (mut x, mut y) = (a, b);
+    while !x.is_empty() && !y.is_empty() {
+        let (x_run, x_digits, x_rest) = next_run(x);
+        let (y_run, y_digits, y_rest) = next_run(y);
+        let order = if x_digits && y_digits {
+            let (x_run, y_run) = (x_run.trim_start_matches('0'), y_run.trim_start_matches('0'));
+            x_run.len().cmp(&y_run.len()).then_with(|| x_run.cmp(y_run))
+        } else {
+            x_run.cmp(y_run)
+        };
+        if order != Ordering::Equal {
+            return order;
+        }
+        (x, y) = (x_rest, y_rest);
+    }
+    x.len().cmp(&y.len()).then_with(|| a.cmp(b))
+}
+
+/// An item as JSON, every response's one way to turn an item into JSON. Its assets are held in a
+/// map whose order differs from process to process, so they are put in `natural_cmp` order here,
+/// which makes asset pages and bodies the same from every process serving the same catalog.
+fn item_value(item: &StacItem) -> serde_json::Value {
+    let mut json = serde_json::to_value(item).unwrap_or_default();
+    if let Some(assets) = json.get_mut("assets").and_then(|a| a.as_object_mut()) {
+        let mut entries: Vec<_> = std::mem::take(assets).into_iter().collect();
+        entries.sort_by(|(a, _), (b, _)| natural_cmp(a, b));
+        assets.extend(entries);
+    }
+    json
+}
+
+/// Keep in an item's `assets` its archive and the `limit` other assets from `offset` on, and
+/// record the page in `_assetsMeta`
+fn page_assets(json: &mut serde_json::Value, limit: usize, offset: usize) {
+    let Some(obj) = json.as_object_mut() else { return };
+    let Some(assets) = obj.get("assets").and_then(|a| a.as_object()) else { return };
+    let archive = assets.get("archive").cloned();
+    let others: Vec<_> = assets.iter().filter(|(k, _)| *k != "archive").collect();
+    let total = others.len();
+    let mut page = serde_json::Map::new();
+    if let Some(archive) = archive {
+        page.insert("archive".to_string(), archive);
+    }
+    page.extend(others.into_iter().skip(offset).take(limit).map(|(k, v)| (k.clone(), v.clone())));
+    let returned = page.len() - usize::from(page.contains_key("archive"));
+    obj.insert("assets".to_string(), serde_json::Value::Object(page));
+    obj.insert(
+        "_assetsMeta".to_string(),
+        serde_json::json!({"total": total, "offset": offset, "returned": returned}),
+    );
+}
+
 /// Strip assets from an item, keeping only the archive asset
 fn strip_non_archive_assets(item: &StacItem) -> serde_json::Value {
-    let mut json = serde_json::to_value(item).unwrap_or_default();
+    let mut json = item_value(item);
     if let Some(obj) = json.as_object_mut() {
         if let Some(assets) = obj.get("assets").and_then(|a| a.as_object()) {
             let archive = assets.get("archive").cloned();
@@ -680,7 +743,7 @@ fn item_to_json(item: &StacItem, exclude_assets: bool, fields: &FieldsFilter) ->
     let mut json = if exclude_assets {
         strip_non_archive_assets(item)
     } else {
-        serde_json::to_value(item).unwrap_or_default()
+        item_value(item)
     };
     fields.apply(&mut json);
     json
@@ -819,63 +882,65 @@ fn filter_item(item: &StacItem, params: &ValidatedSearch) -> bool {
     true
 }
 
-/// Build pagination links
-fn build_pagination_links(
+/// How a page was asked for, which decides the shape of its next and prev links
+#[derive(Clone, Copy)]
+enum PageMethod<'a> {
+    /// A GET with its query string as received
+    Get { query: &'a str },
+    /// A POST, whose links merge the new offset into the request body
+    Post,
+}
+
+/// Build the next and prev links of a page.
+///
+/// A GET link repeats the received query with every parameter kept in its place,
+/// `offset` and `limit` replaced by the new offset and the effective limit, so that
+/// following it returns the next page of the same query.
+fn pagination_links(
     base_url: &str,
     endpoint: &str,
+    method: PageMethod,
     offset: usize,
     limit: usize,
     total_matched: usize,
-    is_post: bool,
 ) -> Vec<serde_json::Value> {
-    let mut links = vec![];
+    let link = |rel: &str, page_offset: usize| match method {
+        PageMethod::Post => serde_json::json!({
+            "rel": rel,
+            "href": format!("{}{}", base_url, endpoint),
+            "type": "application/geo+json",
+            "method": "POST",
+            "merge": true,
+            "body": {
+                "offset": page_offset
+            }
+        }),
+        PageMethod::Get { query } => {
+            let mut serializer = url::form_urlencoded::Serializer::new(String::new());
+            for (key, value) in url::form_urlencoded::parse(query.as_bytes()) {
+                if key != "offset" && key != "limit" {
+                    serializer.append_pair(&key, &value);
+                }
+            }
+            serializer
+                .append_pair("offset", &page_offset.to_string())
+                .append_pair("limit", &limit.to_string());
+            serde_json::json!({
+                "rel": rel,
+                "href": format!("{}{}?{}", base_url, endpoint, serializer.finish()),
+                "type": "application/geo+json"
+            })
+        }
+    };
 
-    // Next link
+    let mut links = vec![];
     let next_offset = offset + limit;
     if next_offset < total_matched {
-        if is_post {
-            links.push(serde_json::json!({
-                "rel": "next",
-                "href": format!("{}{}", base_url, endpoint),
-                "type": "application/geo+json",
-                "method": "POST",
-                "merge": true,
-                "body": {
-                    "offset": next_offset
-                }
-            }));
-        } else {
-            links.push(serde_json::json!({
-                "rel": "next",
-                "href": format!("{}{}?offset={}&limit={}", base_url, endpoint, next_offset, limit),
-                "type": "application/geo+json"
-            }));
-        }
+        links.push(link("next", next_offset));
     }
-
-    // Prev link
     if offset > 0 {
-        let prev_offset = offset.saturating_sub(limit);
-        if is_post {
-            links.push(serde_json::json!({
-                "rel": "prev",
-                "href": format!("{}{}", base_url, endpoint),
-                "type": "application/geo+json",
-                "method": "POST",
-                "merge": true,
-                "body": {
-                    "offset": prev_offset
-                }
-            }));
-        } else {
-            links.push(serde_json::json!({
-                "rel": "prev",
-                "href": format!("{}{}?offset={}&limit={}", base_url, endpoint, prev_offset, limit),
-                "type": "application/geo+json"
-            }));
-        }
+        links.push(link("prev", offset.saturating_sub(limit)));
     }
-
     links
 }
 
@@ -887,13 +952,6 @@ fn stac_etag(catalog: &StacCatalog, parts: &[&str]) -> String {
     let mut hasher = DefaultHasher::new();
     parts.hash(&mut hasher);
     format!("W/\"{}-{:016x}\"", catalog.version, hasher.finish())
-}
-
-/// A value fixed for the life of this process and different in the next one
-fn process_nonce() -> u64 {
-    use std::hash::BuildHasher;
-    static NONCE: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
-    *NONCE.get_or_init(|| std::collections::hash_map::RandomState::new().hash_one(0u8))
 }
 
 /// Whether an `If-None-Match` request header matches `etag`, by weak comparison: `*`, or any
@@ -1251,6 +1309,7 @@ async fn get_collection_items(
     State(state): State<AppState>,
     Path(collection_id): Path<String>,
     Query(params): Query<SearchParams>,
+    RawQuery(query): RawQuery,
 ) -> impl IntoResponse {
     // Validate parameters
     let validated = match ValidatedSearch::from_params(params) {
@@ -1299,13 +1358,13 @@ async fn get_collection_items(
     ];
 
     // Add pagination links
-    links.extend(build_pagination_links(
+    links.extend(pagination_links(
         &state.base_url,
         &format!("/stac/collections/{}/items", collection_id),
+        PageMethod::Get { query: query.as_deref().unwrap_or_default() },
         validated.offset,
         validated.limit,
         total_matched,
-        false,
     ));
 
     (
@@ -1337,58 +1396,17 @@ async fn get_item(
 
     match item {
         Some(item) => {
-            // The asset page is the only part of the body taken from the query. Which assets a
-            // page holds follows the item's asset map order, fixed only within this process.
+            // The asset page is the only part of the body taken from the query.
             let page = params
                 .asset_limit
-                .map(|limit| format!("{}+{}+{}", limit, params.asset_offset.unwrap_or(0), process_nonce()))
+                .map(|limit| format!("{}+{}", limit, params.asset_offset.unwrap_or(0)))
                 .unwrap_or_default();
             let etag = stac_etag(&state.catalog, &[&collection_id, &item_id, &page]);
             not_modified_or(&headers, etag, "public, max-age=3600", || {
-                let mut json = serde_json::to_value(item).unwrap_or_default();
-
-                // Paginate assets if limit is specified
+                let mut json = item_value(item);
                 if let Some(limit) = params.asset_limit {
-                    if let Some(obj) = json.as_object_mut() {
-                        if let Some(assets) = obj.get("assets").and_then(|a| a.as_object()) {
-                            let offset = params.asset_offset.unwrap_or(0);
-
-                            // Separate archive from other assets
-                            let archive = assets.get("archive").cloned();
-                            let other_assets: Vec<_> =
-                                assets.iter().filter(|(k, _)| *k != "archive").collect();
-
-                            let total_assets = other_assets.len();
-
-                            // Paginate non-archive assets
-                            let paginated: serde_json::Map<String, serde_json::Value> = other_assets
-                                .into_iter()
-                                .skip(offset)
-                                .take(limit)
-                                .map(|(k, v)| (k.clone(), v.clone()))
-                                .collect();
-
-                            let has_archive = archive.is_some();
-                            let mut new_assets = serde_json::Map::new();
-                            if let Some(arch) = archive {
-                                new_assets.insert("archive".to_string(), arch);
-                            }
-                            new_assets.extend(paginated);
-
-                            let returned_count = new_assets.len() - if has_archive { 1 } else { 0 };
-                            obj.insert("assets".to_string(), serde_json::Value::Object(new_assets));
-                            obj.insert(
-                                "_assetsMeta".to_string(),
-                                serde_json::json!({
-                                    "total": total_assets,
-                                    "offset": offset,
-                                    "returned": returned_count
-                                }),
-                            );
-                        }
-                    }
+                    page_assets(&mut json, limit, params.asset_offset.unwrap_or(0));
                 }
-
                 Json(json)
             })
         }
@@ -1404,6 +1422,7 @@ async fn get_item(
 async fn search_items_get(
     State(state): State<AppState>,
     Query(params): Query<SearchParams>,
+    RawQuery(query): RawQuery,
 ) -> impl IntoResponse {
     // Validate parameters
     let validated = match ValidatedSearch::from_params(params) {
@@ -1411,7 +1430,8 @@ async fn search_items_get(
         Err(e) => return ApiError::bad_request(e).into_response(),
     };
 
-    perform_search(&state, validated, false).into_response()
+    perform_search(&state, validated, PageMethod::Get { query: query.as_deref().unwrap_or_default() })
+        .into_response()
 }
 
 /// Search items (POST)
@@ -1425,14 +1445,14 @@ async fn search_items_post(
         Err(e) => return ApiError::bad_request(e).into_response(),
     };
 
-    perform_search(&state, validated, true).into_response()
+    perform_search(&state, validated, PageMethod::Post).into_response()
 }
 
 /// Perform search with validated parameters
 fn perform_search(
     state: &AppState,
     params: ValidatedSearch,
-    is_post: bool,
+    method: PageMethod,
 ) -> Response {
     // Filter by collections if specified
     let items_to_search: Vec<&StacItem> = if let Some(ref colls) = params.collections {
@@ -1480,13 +1500,13 @@ fn perform_search(
     ];
 
     // Add pagination links
-    links.extend(build_pagination_links(
+    links.extend(pagination_links(
         &state.base_url,
         "/stac/search",
+        method,
         params.offset,
         params.limit,
         total_matched,
-        is_post,
     ));
 
     (
@@ -1765,12 +1785,16 @@ mod tests {
     use super::*;
 
     fn item(id: &str) -> StacItem {
+        dated_item(id, "2024-03-01T00:00:00Z")
+    }
+
+    fn dated_item(id: &str, datetime: &str) -> StacItem {
         serde_json::from_value(serde_json::json!({
             "type": "Feature",
             "stac_version": "1.1.0",
             "id": id,
             "geometry": null,
-            "properties": {"datetime": "2024-03-01T00:00:00Z", "title": format!("Orchard {id}")},
+            "properties": {"datetime": datetime, "title": format!("Orchard {id}")},
             "links": [],
             "assets": {"photo": {"href": format!("/s3/{id}/pear.jpg"), "title": "pear.jpg"}},
             "collection": "orchards"
@@ -1779,6 +1803,11 @@ mod tests {
     }
 
     fn orchard_app() -> Router {
+        orchard_app_with_leaves((0..40).collect())
+    }
+
+    /// The orchard app, its pear's leaf assets inserted in the order of `leaves`
+    fn orchard_app_with_leaves(leaves: Vec<usize>) -> Router {
         let root = serde_json::from_value(serde_json::json!({
             "type": "Catalog",
             "stac_version": "1.1.0",
@@ -1801,7 +1830,7 @@ mod tests {
         }))
         .unwrap();
         let mut pear = item("pear-01");
-        for n in 0..40 {
+        for n in leaves {
             pear.assets.insert(
                 format!("leaf-{n}"),
                 serde_json::from_value(serde_json::json!({"href": format!("/s3/pear-01/leaf-{n}.jpg")})).unwrap(),
@@ -1810,7 +1839,12 @@ mod tests {
         let catalog = StacCatalog::from_parts(
             root,
             [("orchards".to_string(), collection)].into(),
-            vec![pear, item("plum-02")],
+            vec![
+                dated_item("quince-03", "2019-09-01T00:00:00Z"),
+                dated_item("quince-04", "2019-09-02T00:00:00Z"),
+                pear,
+                item("plum-02"),
+            ],
             "orchard-version".to_string(),
         );
         let state = AppState { catalog: Arc::new(catalog), base_url: "http://orchard.test".into() };
@@ -1885,6 +1919,61 @@ mod tests {
         }
     }
 
+    fn leafy_item(leaves: impl Iterator<Item = usize>) -> StacItem {
+        let mut tree = item("apple-07");
+        for n in leaves {
+            tree.assets.insert(
+                format!("leaf-{n}"),
+                serde_json::from_value(serde_json::json!({"href": format!("/s3/apple-07/leaf-{n}.jpg")})).unwrap(),
+            );
+        }
+        tree
+    }
+
+    #[test]
+    fn an_items_assets_come_out_in_one_order_whatever_order_they_were_inserted_in() {
+        let forward = leafy_item(0..120);
+        let backward = leafy_item((0..120).rev());
+        assert_eq!(
+            serde_json::to_string(&item_value(&forward)).unwrap(),
+            serde_json::to_string(&item_value(&backward)).unwrap()
+        );
+        for offset in 0..=121 {
+            let mut a = item_value(&forward);
+            let mut b = item_value(&backward);
+            page_assets(&mut a, 7, offset);
+            page_assets(&mut b, 7, offset);
+            assert_eq!(serde_json::to_string(&a).unwrap(), serde_json::to_string(&b).unwrap(), "offset {offset}");
+        }
+    }
+
+    #[test]
+    fn asset_keys_are_sorted_with_their_numbers_compared_as_numbers() {
+        let json = item_value(&leafy_item([10, 2, 1, 0, 100, 21].into_iter()));
+        let keys: Vec<_> = json["assets"].as_object().unwrap().keys().cloned().collect();
+        assert_eq!(keys, ["leaf-0", "leaf-1", "leaf-2", "leaf-10", "leaf-21", "leaf-100", "photo"]);
+
+        let mut keys = vec!["dem-2-10", "dem-2-9", "dem-10-0", "dem-02-9", "archive", "dem", "dem-2"];
+        keys.sort_by(|a, b| natural_cmp(a, b));
+        assert_eq!(keys, ["archive", "dem", "dem-2", "dem-02-9", "dem-2-9", "dem-2-10", "dem-10-0"]);
+    }
+
+    #[tokio::test]
+    async fn two_states_built_from_the_same_catalog_answer_with_the_same_asset_pages_and_etags() {
+        let forward = orchard_app_with_leaves((0..40).collect());
+        let backward = orchard_app_with_leaves((0..40).rev().collect());
+        for uri in [
+            "/stac/collections/orchards/items/pear-01",
+            "/stac/collections/orchards/items/pear-01?asset_limit=5",
+            "/stac/collections/orchards/items/pear-01?asset_limit=5&asset_offset=35",
+        ] {
+            let (_, a_headers, a_body) = send(&forward, uri, &[]).await;
+            let (_, b_headers, b_body) = send(&backward, uri, &[]).await;
+            assert_eq!(a_headers[header::ETAG], b_headers[header::ETAG], "{uri}");
+            assert_eq!(a_body, b_body, "{uri}");
+        }
+    }
+
     #[test]
     fn if_none_match_matches_by_weak_comparison_against_any_listed_tag() {
         let tag = "W/\"abc\"";
@@ -1943,5 +2032,82 @@ mod tests {
         })
         .unwrap();
         assert!(without_context.get("context").is_none());
+    }
+
+    fn link_href<'a>(links: &'a [serde_json::Value], rel: &str) -> Option<&'a str> {
+        links.iter().find(|l| l["rel"] == rel).and_then(|l| l["href"].as_str())
+    }
+
+    fn query_pairs(href: &str) -> Vec<(String, String)> {
+        let query = href.split_once('?').map_or("", |(_, q)| q);
+        url::form_urlencoded::parse(query.as_bytes()).into_owned().collect()
+    }
+
+    #[test]
+    fn get_page_links_carry_every_received_parameter_with_only_the_offset_moved() {
+        let query = "collections=orchards%2Cgroves&bbox=7.1,46.2,7.9,46.5&datetime=2024-01-01T00:00:00Z%2F..\
+                     &fields=id,-assets&exclude_assets=true&offset=4&limit=50&shade=dappled";
+        let links = pagination_links(
+            "http://orchard.test",
+            "/stac/search",
+            PageMethod::Get { query },
+            4,
+            2,
+            10,
+        );
+        let expected = |offset: &str| {
+            vec![
+                ("collections".to_string(), "orchards,groves".to_string()),
+                ("bbox".to_string(), "7.1,46.2,7.9,46.5".to_string()),
+                ("datetime".to_string(), "2024-01-01T00:00:00Z/..".to_string()),
+                ("fields".to_string(), "id,-assets".to_string()),
+                ("exclude_assets".to_string(), "true".to_string()),
+                ("shade".to_string(), "dappled".to_string()),
+                ("offset".to_string(), offset.to_string()),
+                ("limit".to_string(), "2".to_string()),
+            ]
+        };
+        let next = link_href(&links, "next").unwrap();
+        assert!(next.starts_with("http://orchard.test/stac/search?"), "{next}");
+        assert_eq!(query_pairs(next), expected("6"));
+        let prev = link_href(&links, "prev").unwrap();
+        assert_eq!(query_pairs(prev), expected("2"));
+
+        let first = pagination_links("http://orchard.test", "/stac/search", PageMethod::Get { query: "" }, 0, 2, 3);
+        assert_eq!(query_pairs(link_href(&first, "next").unwrap()), vec![
+            ("offset".to_string(), "2".to_string()),
+            ("limit".to_string(), "2".to_string()),
+        ]);
+        assert!(link_href(&first, "prev").is_none());
+
+        let last = pagination_links("http://orchard.test", "/stac/search", PageMethod::Get { query: "" }, 2, 2, 3);
+        assert!(link_href(&last, "next").is_none());
+    }
+
+    #[tokio::test]
+    async fn following_next_from_a_filtered_get_keeps_the_filter() {
+        let app = orchard_app();
+        for first in [
+            "/stac/search?datetime=2024-01-01T00:00:00Z%2F..&exclude_assets=true&limit=1",
+            "/stac/collections/orchards/items?datetime=2024-01-01T00:00:00Z%2F..&exclude_assets=true&limit=1",
+        ] {
+            let (status, _, body) = send(&app, first, &[]).await;
+            assert_eq!(status, StatusCode::OK, "{first}");
+            let page: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(page["numberMatched"], 2, "{first}");
+            assert_eq!(page["features"][0]["id"], "pear-01", "{first}");
+
+            let next = link_href(page["links"].as_array().unwrap(), "next").unwrap().to_string();
+            let path = next.strip_prefix("http://orchard.test").unwrap();
+            let (status, _, body) = send(&app, path, &[]).await;
+            assert_eq!(status, StatusCode::OK, "{next}");
+            let page: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(page["numberMatched"], 2, "{next}");
+            let features = page["features"].as_array().unwrap();
+            assert_eq!(features.len(), 1, "{next}");
+            assert_eq!(features[0]["id"], "plum-02", "{next}");
+            assert!(features[0]["assets"].get("photo").is_none(), "{next}");
+            assert!(link_href(page["links"].as_array().unwrap(), "next").is_none(), "{next}");
+        }
     }
 }

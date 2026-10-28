@@ -17,14 +17,15 @@ use axum::{
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::get,
-    Extension, Json, Router,
+    Json, Router,
 };
 use axum_keycloak_auth::{
     instance::{KeycloakAuthInstance, KeycloakConfig},
     layer::KeycloakAuthLayer,
     KeycloakAuthStatus, PassthroughMode,
 };
-use axum_keycloak_auth::decode::{KeycloakToken, ProfileAndEmail};
+use axum_keycloak_auth::decode::{KeycloakToken, RawClaims};
+use axum_keycloak_auth::error::AuthError;
 use axum_keycloak_auth::role::KeycloakRole;
 use chrono::{NaiveDate, Utc};
 use sqlx::postgres::PgConnectOptions;
@@ -55,6 +56,21 @@ pub struct KeycloakSettings {
     pub client_id: String,
     pub role: String,
 }
+
+impl KeycloakSettings {
+    /// The realm's issuer, as written in its tokens: Keycloak names itself by the address the
+    /// token was asked for at, which is the browser's.
+    fn issuer(&self) -> String {
+        format!("{}/realms/{}", self.browser_url.trim_end_matches('/'), self.realm)
+    }
+}
+
+/// The claims of a token the page reads beyond the standard ones: none. A token without the
+/// user's name or address is as good as one with them.
+#[derive(Clone, serde::Deserialize)]
+pub struct Anonymous {}
+
+type Token = KeycloakToken<String, Anonymous>;
 
 /// Where and how often the API reads the file proxy's metrics.
 #[derive(Clone, Debug, PartialEq)]
@@ -206,12 +222,6 @@ pub fn router(state: StatsState) -> Router {
 
     if let Some(kc) = state.keycloak.clone() {
         info!("Statistics page enabled for realm {} client {}", kc.realm, kc.client_id);
-        let instance = KeycloakAuthInstance::new(
-            KeycloakConfig::builder()
-                .server(kc.url.clone())
-                .realm(kc.realm.clone())
-                .build(),
-        );
         let protected = Router::new()
             .route("/stats/api/status", get(status))
             .route("/stats/api/overview", get(overview))
@@ -221,26 +231,14 @@ pub fn router(state: StatsState) -> Router {
             .route("/stats/api/items", get(items_list))
             .route("/stats/api/items/:code/files", get(item_files))
             .route("/stats/api/summary", get(summary))
-            .route("/stats/api/export.csv", get(export_csv))
-            .layer(middleware::from_fn(require_token))
-            .layer(
-                KeycloakAuthLayer::<String>::builder()
-                    .instance(instance)
-                    .passthrough_mode(PassthroughMode::Pass)
-                    .persist_raw_claims(false)
-                    // A shared realm puts in `aud` the clients whose roles the user holds, which
-                    // for a viewer may be this client alone; a local realm puts "account".
-                    .expected_audiences(vec![kc.client_id.clone(), "account".to_string()])
-                    // Matches the role's name in the realm or under any client; `prepare`
-                    // then accepts it only under this client.
-                    .required_roles(vec![kc.role.clone()])
-                    .build(),
-            );
+            .route("/stats/api/export.csv", get(export_csv));
+        let protected = protect(protected, &kc);
         let public = Router::new()
             .route("/stats", get(page))
             .route("/stats/signin.js", get(signin_js))
             .route("/stats/timeline.js", get(timeline_js))
             .route("/stats/chart.js", get(chart_js))
+            .route("/stats/tooltip.js", get(tooltip_js))
             .route("/stats/vendor/uPlot.iife.min.js", get(uplot_js))
             .route("/stats/vendor/uPlot.min.css", get(uplot_css))
             .route("/stats/app.js", get(app_js))
@@ -266,6 +264,35 @@ pub fn router(state: StatsState) -> Router {
         .with_state(state)
 }
 
+/// Put the Keycloak check around each of `routes`. Route layers run for a matched route only, so
+/// the rest of the app, its unknown paths included, never sees the check.
+fn protect<S: Clone + Send + Sync + 'static>(routes: Router<S>, kc: &Arc<KeycloakSettings>) -> Router<S> {
+    let instance = KeycloakAuthInstance::new(
+        KeycloakConfig::builder()
+            .server(kc.url.clone())
+            .realm(kc.realm.clone())
+            .build(),
+    );
+    // `route_layer`, so a path that matches no data route is never checked for a token and
+    // still answers 404.
+    routes
+        .route_layer(middleware::from_fn_with_state(kc.clone(), require_token))
+        .route_layer(
+            KeycloakAuthLayer::<String, Anonymous>::builder()
+                .instance(instance)
+                .passthrough_mode(PassthroughMode::Pass)
+                // `require_token` reads the token type, which the parsed token does not carry.
+                .persist_raw_claims(true)
+                // A shared realm puts in `aud` the clients whose roles the user holds, which
+                // for a viewer may be this client alone; a local realm puts "account".
+                .expected_audiences(vec![kc.client_id.clone(), "account".to_string()])
+                // Matches the role's name in the realm or under any client; `access` then
+                // accepts it only under this client.
+                .required_roles(vec![kc.role.clone()])
+                .build(),
+        )
+}
+
 fn origin_of(url: &str) -> String {
     match url.split_once("://") {
         Some((scheme, rest)) => format!("{scheme}://{}", rest.split('/').next().unwrap_or("")),
@@ -273,24 +300,61 @@ fn origin_of(url: &str) -> String {
     }
 }
 
-/// Answer a refused token as the Keycloak layer would, and log why at warn level. The reason names
-/// the failed check only, never a claim or the user, so a lasting refusal (a rotated signing key,
-/// a wrong audience) can be told apart in the log.
-async fn require_token(mut req: Request, next: Next) -> Response {
-    match req.extensions_mut().remove::<KeycloakAuthStatus<String, ProfileAndEmail>>() {
-        Some(KeycloakAuthStatus::Success(token)) => {
-            req.extensions_mut().insert(token);
-            next.run(req).await
-        }
-        Some(KeycloakAuthStatus::Failure(err)) => {
-            warn!("statistics request refused: {err}");
-            err.as_ref().clone().into_response()
-        }
-        None => {
-            error!("statistics request reached the routes without a Keycloak check");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+/// Let a request reach a data route only with a token `access` accepts. A refusal is its status
+/// with an empty body; why goes to the log at warn level, naming the failed check only, never a
+/// claim or the user, so a lasting refusal (a rotated signing key, a wrong audience) can be told
+/// apart there.
+async fn require_token(State(kc): State<Arc<KeycloakSettings>>, mut req: Request, next: Next) -> Response {
+    let status = req.extensions_mut().remove::<KeycloakAuthStatus<String, Anonymous>>();
+    let raw = req.extensions_mut().remove::<RawClaims>();
+    match access(status, raw.as_ref(), &kc) {
+        Ok(()) => next.run(req).await,
+        Err((code, reason)) => {
+            if code.is_server_error() {
+                error!("statistics request refused: {reason}");
+            } else {
+                warn!("statistics request refused: {reason}");
+            }
+            code.into_response()
         }
     }
+}
+
+/// Whether a request may read the statistics. The Keycloak layer has checked the signature, the
+/// expiry, the audience when there is one and the role's name. Beyond that the token must be an
+/// access token from this realm's issuer, name an audience, be issued to this client and hold the
+/// role under it. A token signed by the realm but missing a claim is refused as unauthorised;
+/// the realm being unreachable stays a server error.
+fn access(
+    status: Option<KeycloakAuthStatus<String, Anonymous>>,
+    raw: Option<&RawClaims>,
+    kc: &KeycloakSettings,
+) -> Result<(), (StatusCode, String)> {
+    let token: Token = match status {
+        Some(KeycloakAuthStatus::Success(token)) => token,
+        Some(KeycloakAuthStatus::Failure(err)) => {
+            let code = match err.as_ref() {
+                AuthError::JsonParse { .. } | AuthError::InvalidToken { .. } => StatusCode::UNAUTHORIZED,
+                e => e.clone().into_response().status(),
+            };
+            return Err((code, err.to_string()));
+        }
+        None => return Err((StatusCode::INTERNAL_SERVER_ERROR, "the request reached the routes without a Keycloak check".into())),
+    };
+    let unauthorised = |reason: &str| Err((StatusCode::UNAUTHORIZED, reason.to_string()));
+    if raw.and_then(|c| c.get("typ")).and_then(|t| t.as_str()) != Some("Bearer") {
+        return unauthorised("not an access token");
+    }
+    if token.issuer != kc.issuer() {
+        return unauthorised("the token is from another issuer");
+    }
+    if token.audience.is_empty() {
+        return unauthorised("the token names no audience");
+    }
+    if token.authorized_party != kc.client_id || !holds_role(&token.roles, &kc.client_id, &kc.role) {
+        return Err((StatusCode::FORBIDDEN, "the token is for another client or lacks the role under this one".into()));
+    }
+    Ok(())
 }
 
 async fn with_security_headers(req: Request, next: Next, csp: &str) -> Response {
@@ -404,21 +468,9 @@ impl Params {
     }
 }
 
-/// Refuse a token issued to another client of the realm or without the role under this client,
-/// and a malformed period, then read the query string.
-fn prepare(
-    token: &KeycloakToken<String>,
-    state: &StatsState,
-    raw: HashMap<String, String>,
-) -> Result<Params, Response> {
-    if !state
-        .keycloak
-        .as_ref()
-        .is_some_and(|kc| token.authorized_party == kc.client_id && holds_role(&token.roles, &kc.client_id, &kc.role))
-    {
-        warn!("statistics request refused: the token was issued to another client");
-        return Err(StatusCode::FORBIDDEN.into_response());
-    }
+/// Refuse a request while the database is not ready and a malformed period, then read the query
+/// string. Access was settled by `require_token` before the route was reached.
+fn prepare(state: &StatsState, raw: HashMap<String, String>) -> Result<Params, Response> {
     if !state.store.is_ready() {
         return Err(StatusCode::SERVICE_UNAVAILABLE.into_response());
     }
@@ -457,10 +509,9 @@ fn totals_json(t: Totals) -> serde_json::Value {
 /// The page polls this cheap route and reloads its data only when the value changes.
 async fn status(
     State(state): State<StatsState>,
-    Extension(token): Extension<KeycloakToken<String>>,
     Query(raw): Query<HashMap<String, String>>,
 ) -> Response {
-    if let Err(r) = prepare(&token, &state, raw) {
+    if let Err(r) = prepare(&state, raw) {
         return r;
     }
     match db(state.store.last_ingest().await) {
@@ -472,10 +523,9 @@ async fn status(
 /// The values each attribute can take, with item counts, for the filter menus.
 async fn facets(
     State(state): State<StatsState>,
-    Extension(token): Extension<KeycloakToken<String>>,
     Query(raw): Query<HashMap<String, String>>,
 ) -> Response {
-    if let Err(r) = prepare(&token, &state, raw) {
+    if let Err(r) = prepare(&state, raw) {
         return r;
     }
     let menus: serde_json::Map<String, serde_json::Value> = facet_values(&state.items)
@@ -493,10 +543,9 @@ async fn facets(
 
 async fn overview(
     State(state): State<StatsState>,
-    Extension(token): Extension<KeycloakToken<String>>,
     Query(raw): Query<HashMap<String, String>>,
 ) -> Response {
-    let p = match prepare(&token, &state, raw) {
+    let p = match prepare(&state, raw) {
         Ok(p) => p,
         Err(r) => return r,
     };
@@ -570,10 +619,9 @@ async fn overview(
 /// Items summed by an attribute, for the table under a chart.
 async fn groups(
     State(state): State<StatsState>,
-    Extension(token): Extension<KeycloakToken<String>>,
     Query(raw): Query<HashMap<String, String>>,
 ) -> Response {
-    let p = match prepare(&token, &state, raw) {
+    let p = match prepare(&state, raw) {
         Ok(p) => p,
         Err(r) => return r,
     };
@@ -592,10 +640,9 @@ async fn groups(
 /// picked from the width of the period when not given.
 async fn series_route(
     State(state): State<StatsState>,
-    Extension(token): Extension<KeycloakToken<String>>,
     Query(raw): Query<HashMap<String, String>>,
 ) -> Response {
-    let p = match prepare(&token, &state, raw) {
+    let p = match prepare(&state, raw) {
         Ok(p) => p,
         Err(r) => return r,
     };
@@ -630,10 +677,9 @@ const MAX_PAGE: usize = 200;
 
 async fn items_list(
     State(state): State<StatsState>,
-    Extension(token): Extension<KeycloakToken<String>>,
     Query(raw): Query<HashMap<String, String>>,
 ) -> Response {
-    let p = match prepare(&token, &state, raw) {
+    let p = match prepare(&state, raw) {
         Ok(p) => p,
         Err(r) => return r,
     };
@@ -674,11 +720,10 @@ async fn items_list(
 
 async fn item_files(
     State(state): State<StatsState>,
-    Extension(token): Extension<KeycloakToken<String>>,
     Path(code): Path<String>,
     Query(raw): Query<HashMap<String, String>>,
 ) -> Response {
-    let p = match prepare(&token, &state, raw) {
+    let p = match prepare(&state, raw) {
         Ok(p) => p,
         Err(r) => return r,
     };
@@ -716,10 +761,9 @@ async fn item_files(
 /// Requests and bytes by day, collection, item and archive or file: the rows of the by-day CSV.
 async fn summary(
     State(state): State<StatsState>,
-    Extension(token): Extension<KeycloakToken<String>>,
     Query(raw): Query<HashMap<String, String>>,
 ) -> Response {
-    let p = match prepare(&token, &state, raw) {
+    let p = match prepare(&state, raw) {
         Ok(p) => p,
         Err(r) => return r,
     };
@@ -732,10 +776,9 @@ async fn summary(
 
 async fn export_csv(
     State(state): State<StatsState>,
-    Extension(token): Extension<KeycloakToken<String>>,
     Query(raw): Query<HashMap<String, String>>,
 ) -> Response {
-    let p = match prepare(&token, &state, raw) {
+    let p = match prepare(&state, raw) {
         Ok(p) => p,
         Err(r) => return r,
     };
@@ -789,6 +832,10 @@ async fn chart_js() -> impl IntoResponse {
     ([(header::CONTENT_TYPE, "text/javascript; charset=utf-8")], include_str!("stats_ui/chart.js"))
 }
 
+async fn tooltip_js() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "text/javascript; charset=utf-8")], include_str!("stats_ui/tooltip.js"))
+}
+
 // uPlot, MIT licensed; its licence is kept beside it in `stats_ui/vendor/`.
 async fn uplot_js() -> impl IntoResponse {
     ([(header::CONTENT_TYPE, "text/javascript; charset=utf-8")], include_str!("stats_ui/vendor/uPlot.iife.min.js"))
@@ -828,7 +875,6 @@ async fn browser_config(State(state): State<StatsState>) -> Response {
 mod tests {
     use super::*;
     use axum::body::Body;
-    use axum_keycloak_auth::error::AuthError;
     use axum::http::Request as HttpRequest;
     use tower::ServiceExt;
 
@@ -934,24 +980,42 @@ mod tests {
         assert_eq!(res.status(), StatusCode::NOT_FOUND);
     }
 
-    async fn behind_require_token(status: Option<KeycloakAuthStatus<String, ProfileAndEmail>>) -> StatusCode {
+    fn orchard() -> Arc<KeycloakSettings> {
+        Arc::new(KeycloakSettings {
+            url: Url::parse("http://127.0.0.1:1/").unwrap(),
+            browser_url: "http://orchard.test".into(),
+            realm: "orchard".into(),
+            client_id: "pears".into(),
+            role: "stats-viewer".into(),
+        })
+    }
+
+    async fn behind_require_token(status: Option<KeycloakAuthStatus<String, Anonymous>>) -> (StatusCode, String) {
         let app = Router::new()
-            .route("/", get(|Extension(_): Extension<KeycloakToken<String>>| async { StatusCode::OK }))
-            .layer(middleware::from_fn(require_token));
+            .route("/", get(|| async { StatusCode::OK }))
+            .layer(middleware::from_fn_with_state(orchard(), require_token));
         let mut req = HttpRequest::get("/").body(Body::empty()).unwrap();
         if let Some(s) = status {
             req.extensions_mut().insert(s);
         }
-        app.oneshot(req).await.unwrap().status()
+        let res = app.oneshot(req).await.unwrap();
+        let status = res.status();
+        let body = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        (status, String::from_utf8_lossy(&body).into_owned())
     }
 
     #[tokio::test]
-    async fn a_refused_token_keeps_the_keycloak_status_and_never_reaches_the_route() {
-        let expired = KeycloakAuthStatus::Failure(Arc::new(AuthError::TokenExpired));
-        assert_eq!(behind_require_token(Some(expired)).await, StatusCode::UNAUTHORIZED);
-        let role = KeycloakAuthStatus::Failure(Arc::new(AuthError::MissingExpectedRole { role: "viewer".into() }));
-        assert_eq!(behind_require_token(Some(role)).await, StatusCode::FORBIDDEN);
-        assert_eq!(behind_require_token(None).await, StatusCode::INTERNAL_SERVER_ERROR);
+    async fn a_refused_token_never_reaches_the_route_and_its_reason_stays_in_the_log() {
+        let failure = |e: AuthError| Some(KeycloakAuthStatus::Failure(Arc::new(e)));
+        let unreadable = AuthError::JsonParse { source: Arc::new(serde_json::from_str::<u8>("x").unwrap_err()) };
+        for (case, status, expected) in [
+            ("expired", failure(AuthError::TokenExpired), StatusCode::UNAUTHORIZED),
+            ("without the role", failure(AuthError::MissingExpectedRole { role: "viewer".into() }), StatusCode::FORBIDDEN),
+            ("signed but missing a claim", failure(unreadable), StatusCode::UNAUTHORIZED),
+            ("not checked at all", None, StatusCode::INTERNAL_SERVER_ERROR),
+        ] {
+            assert_eq!(behind_require_token(status).await, (expected, String::new()), "{case}");
+        }
     }
 
     /// A file proxy that answers `/metrics` with `BODY`, `/broken` with a 500, `/stuck` never,
@@ -1041,17 +1105,22 @@ mod tests {
         (status, String::from_utf8(body.to_vec()).unwrap())
     }
 
-    #[tokio::test]
-    async fn the_page_is_a_shell_and_its_script_reads_data_only_with_a_bearer_token() {
+    /// `state()` with Keycloak at `url`.
+    fn state_with_keycloak(url: &str) -> StatsState {
         let mut s = state();
         s.keycloak = Some(Arc::new(KeycloakSettings {
-            url: Url::parse("http://127.0.0.1:1/").unwrap(),
-            browser_url: "http://127.0.0.1:1/".to_string(),
+            url: Url::parse(url).unwrap(),
+            browser_url: url.to_string(),
             realm: "orchard".to_string(),
             client_id: "pears".to_string(),
             role: "picker".to_string(),
         }));
-        let app = router(s);
+        s
+    }
+
+    #[tokio::test]
+    async fn the_page_is_a_shell_and_its_script_reads_data_only_with_a_bearer_token() {
+        let app = router(state_with_keycloak("http://127.0.0.1:1/"));
 
         // The store never connects, so a page that read any statistics could not answer.
         let (status, page) = get_text(&app, "/stats").await;
@@ -1077,7 +1146,13 @@ mod tests {
         }
         assert!(script.contains("api('/stats/api/export.csv?"));
         // The page's other scripts, the vendored chart library included, make no requests of their own.
-        for helper in ["/stats/signin.js", "/stats/timeline.js", "/stats/chart.js", "/stats/vendor/uPlot.iife.min.js"] {
+        for helper in [
+            "/stats/signin.js",
+            "/stats/timeline.js",
+            "/stats/chart.js",
+            "/stats/tooltip.js",
+            "/stats/vendor/uPlot.iife.min.js",
+        ] {
             assert!(page.contains(&format!("<script src=\"{helper}\"></script>")), "the page loads {helper}");
             let (status, code) = get_text(&app, helper).await;
             assert_eq!(status, StatusCode::OK);
@@ -1100,6 +1175,7 @@ mod tests {
             ("/stats/vendor/uPlot.iife.min.js", "text/javascript; charset=utf-8", include_str!("stats_ui/vendor/uPlot.iife.min.js")),
             ("/stats/vendor/uPlot.min.css", "text/css; charset=utf-8", include_str!("stats_ui/vendor/uPlot.min.css")),
             ("/stats/chart.js", "text/javascript; charset=utf-8", include_str!("stats_ui/chart.js")),
+            ("/stats/tooltip.js", "text/javascript; charset=utf-8", include_str!("stats_ui/tooltip.js")),
         ] {
             let res = app.clone().oneshot(HttpRequest::get(path).body(Body::empty()).unwrap()).await.unwrap();
             assert_eq!(res.status(), StatusCode::OK, "{path}");
@@ -1182,6 +1258,10 @@ mod tests {
         roles_client: &'a str,
         client_roles: &'a [&'a str],
         secret: &'a [u8],
+        typ: &'a str,
+        issuer: &'a str,
+        subject: bool,
+        profile: bool,
     }
 
     const GOOD: Claims<'static> =
@@ -1193,25 +1273,36 @@ mod tests {
         roles_client: "pears",
         client_roles: &["stats-viewer"],
         secret: SIGNING_SECRET,
+        typ: "Bearer",
+        issuer: "http://orchard.test/realms/orchard",
+        subject: true,
+        profile: true,
     };
 
     fn token(c: Claims) -> String {
         let now = Utc::now().timestamp();
-        let claims = serde_json::json!({
+        let mut claims = serde_json::json!({
             "exp": now + c.expires_in,
             "iat": now - 600,
             "jti": "orchard-token",
-            "iss": "http://orchard.test/realms/orchard",
-            "aud": c.audience,
-            "sub": "picker",
-            "typ": "Bearer",
+            "iss": c.issuer,
+            "typ": c.typ,
             "azp": c.client,
             "realm_access": { "roles": c.realm_roles },
             "resource_access": { c.roles_client: { "roles": c.client_roles } },
-            "preferred_username": "picker",
-            "email": "picker@orchard.test",
-            "email_verified": true,
         });
+        // An empty audience is left out, as a token without the claim carries none.
+        if !c.audience.is_empty() {
+            claims["aud"] = serde_json::json!(c.audience);
+        }
+        if c.subject {
+            claims["sub"] = serde_json::json!("picker");
+        }
+        if c.profile {
+            claims["preferred_username"] = serde_json::json!("picker");
+            claims["email"] = serde_json::json!("picker@orchard.test");
+            claims["email_verified"] = serde_json::json!(true);
+        }
         let mut header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::HS256);
         header.kid = Some("orchard".into());
         jsonwebtoken::encode(&header, &claims, &jsonwebtoken::EncodingKey::from_secret(c.secret)).unwrap()
@@ -1242,7 +1333,31 @@ mod tests {
         app.clone().oneshot(req.body(Body::empty()).unwrap()).await.unwrap().status()
     }
 
+    async fn read_body(app: &Router, path: &str, bearer: Option<&str>) -> (StatusCode, String) {
+        let mut req = HttpRequest::get(path);
+        if let Some(t) = bearer {
+            req = req.header(header::AUTHORIZATION, format!("Bearer {t}"));
+        }
+        let res = app.clone().oneshot(req.body(Body::empty()).unwrap()).await.unwrap();
+        let status = res.status();
+        let body = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        (status, String::from_utf8_lossy(&body).into_owned())
+    }
+
     const READ_ROUTES: [&str; 2] = ["/stats/api/summary", "/stats/api/export.csv"];
+
+    /// Every data route the router has.
+    const DATA_ROUTES: [&str; 9] = [
+        "/stats/api/status",
+        "/stats/api/overview",
+        "/stats/api/facets",
+        "/stats/api/groups",
+        "/stats/api/series",
+        "/stats/api/items",
+        "/stats/api/items/13Da01/files",
+        "/stats/api/summary",
+        "/stats/api/export.csv",
+    ];
 
     #[tokio::test]
     async fn read_routes_refuse_every_token_but_a_valid_one_for_this_client_and_role() {
@@ -1256,15 +1371,47 @@ mod tests {
             ("the role only in the realm", Some(token(Claims { realm_roles: &["stats-viewer"], client_roles: &[], ..GOOD })), StatusCode::FORBIDDEN),
             ("the role only under another client", Some(token(Claims { roles_client: "plums", ..GOOD })), StatusCode::FORBIDDEN),
             ("issued to another client", Some(token(Claims { client: "plums", ..GOOD })), StatusCode::FORBIDDEN),
+            ("an ID token", Some(token(Claims { typ: "ID", ..GOOD })), StatusCode::UNAUTHORIZED),
+            ("a refresh token", Some(token(Claims { typ: "Refresh", ..GOOD })), StatusCode::UNAUTHORIZED),
+            ("without an audience", Some(token(Claims { audience: &[], ..GOOD })), StatusCode::UNAUTHORIZED),
+            ("from another issuer", Some(token(Claims { issuer: "http://plums.test/realms/orchard", ..GOOD })), StatusCode::UNAUTHORIZED),
+            ("without a subject", Some(token(Claims { subject: false, ..GOOD })), StatusCode::UNAUTHORIZED),
         ];
-        for path in READ_ROUTES {
+        for path in DATA_ROUTES {
             for (case, bearer, expected) in &refused {
-                assert_eq!(read(&app, path, bearer.as_deref()).await, *expected, "{path}: {case}");
+                assert_eq!(read_body(&app, path, bearer.as_deref()).await, (*expected, String::new()), "{path}: {case}");
             }
             // A good token passes the check and reaches the handler, which waits for the database.
             assert_eq!(read(&app, path, Some(&token(GOOD))).await, StatusCode::SERVICE_UNAVAILABLE, "{path}");
+            // The page needs no name or address from the token.
+            let anonymous = token(Claims { profile: false, ..GOOD });
+            assert_eq!(read(&app, path, Some(&anonymous)).await, StatusCode::SERVICE_UNAVAILABLE, "{path}");
         }
         assert_eq!(read(&app, "/stats", None).await, StatusCode::OK);
+    }
+
+    /// The token check guards the data routes only: the rest of the app, its unknown paths
+    /// included, answers as it would without the statistics.
+    #[tokio::test]
+    async fn paths_outside_the_data_routes_are_not_checked_for_a_token() {
+        let app = Router::new().route("/health", get(|| async { "ok" })).merge(guarded(Store::lazy(GOOD_DB).unwrap()).await);
+        assert_eq!(read(&app, "/health", None).await, StatusCode::OK);
+        assert_eq!(read(&app, "/stac/none", None).await, StatusCode::NOT_FOUND);
+        assert_eq!(read(&app, "/stats/api/none", None).await, StatusCode::NOT_FOUND);
+        assert_eq!(read(&app, "/stats/api/status", None).await, StatusCode::UNAUTHORIZED);
+        assert_eq!(read(&app, "/stats/api/export.csv", None).await, StatusCode::UNAUTHORIZED);
+    }
+
+    /// The client and role are checked once, around every data route, so a route that reads
+    /// nothing of the token still refuses another client's.
+    #[tokio::test]
+    async fn a_data_route_that_reads_no_token_still_refuses_another_client() {
+        let (server, discovering) = fake_realm().await;
+        let kc = Arc::new(KeycloakSettings { url: server, ..(*orchard()).clone() });
+        let app = protect(Router::new().route("/stats/api/new", get(|| async { StatusCode::OK })), &kc);
+        discovering.await.unwrap();
+        assert_eq!(read(&app, "/stats/api/new", Some(&token(Claims { client: "plums", ..GOOD }))).await, StatusCode::FORBIDDEN);
+        assert_eq!(read(&app, "/stats/api/new", Some(&token(GOOD))).await, StatusCode::OK);
     }
 
     /// On a shared realm a token's audience lists the clients whose roles the user holds, so a

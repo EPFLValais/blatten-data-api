@@ -46,15 +46,32 @@ function selectPeriod(s, left, width) {
   return { from, to };
 }
 
-// What a drag starting at `x` does: within EDGE_PX of an end of the window it moves that end,
-// inside the window it moves the window, and elsewhere, or over all time, it brushes a new one.
-const EDGE_PX = 4;
+// What a drag starting at `x` does: within HANDLE_PX of an end of the window, all time included,
+// it moves the nearer end; inside a chosen window it moves the window, and elsewhere, or inside
+// the all-time window, it brushes a new one.
+const HANDLE_PX = 8;
 function dragMode(s, period, x) {
-  if (!period.from && !period.to) return 'brush';
   const { x0, x1 } = windowSpan(period, s);
-  if (Math.abs(x - x0) <= EDGE_PX) return 'from';
-  if (Math.abs(x - x1) <= EDGE_PX) return 'to';
+  const d0 = Math.abs(x - x0);
+  const d1 = Math.abs(x - x1);
+  if (Math.min(d0, d1) <= HANDLE_PX) {
+    if (d0 !== d1) return d0 < d1 ? 'from' : 'to';
+    return x <= (x0 + x1) / 2 ? 'from' : 'to';
+  }
+  if (!period.from && !period.to) return 'brush';
   return x > x0 && x < x1 ? 'move' : 'brush';
+}
+
+// Where the dates under the window's ends go, as left edges in a strip `width` wide: each centred
+// under its end `x0` or `x1` and kept inside the strip, or, where the two would overlap, one label
+// centred under the window. `w` holds the width of the date of each end and of both as one label.
+const LABEL_GAP_PX = 6;
+function endLabels(x0, x1, w, width) {
+  const place = (x, wd) => Math.max(0, Math.min(width - wd, x - wd / 2));
+  const from = place(x0, w.from);
+  const to = place(x1, w.to);
+  if (from + w.from + LABEL_GAP_PX <= to) return [{ end: 'from', left: from }, { end: 'to', left: to }];
+  return [{ end: 'both', left: place((x0 + x1) / 2, w.both) }];
 }
 
 // The period after a drag from `drag.start` to `x`. A brush selects the days under it; a move
@@ -102,6 +119,12 @@ function periodOf(view, now) {
   }
   const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
   return { from: isoDay(today - (Number(view.range) - 1) * DAY_MS), to: isoDay(today) };
+}
+
+// The preset whose button is lit for a view; a dragged or saved custom window lights none.
+const PRESETS = ['1', '7', '30', 'all'];
+function litPreset(view) {
+  return PRESETS.includes(view.range) ? view.range : null;
 }
 
 // Runs `load(signal, ...args)` for the latest call only. `soon` waits until calls have stopped

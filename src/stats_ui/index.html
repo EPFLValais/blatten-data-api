@@ -13,22 +13,10 @@
   <h1>Download statistics</h1>
   <div class="controls" data-dashboard hidden>
     <span id="live" class="live paused"><span class="dot"></span><span id="live-text">Connecting…</span><button type="button" id="pause" class="link">Pause</button></span>
-    <select id="range" aria-label="Period">
-      <option value="1">Today</option>
-      <option value="7" selected>Last 7 days</option>
-      <option value="30">Last 30 days</option>
-      <option value="all">All time</option>
-      <option value="custom">Custom…</option>
-    </select>
-    <span id="custom" hidden>
-      <input type="date" id="from" aria-label="From">
-      <input type="date" id="to" aria-label="To">
+    <span class="segmented" id="export" role="group" aria-label="Export CSV">
+      <button type="button" data-value="item" title="By day and item">CSV by item</button>
+      <button type="button" data-value="file">CSV by file</button>
     </span>
-    <select id="export" aria-label="Export">
-      <option value="">Export CSV…</option>
-      <option value="item">By day and item</option>
-      <option value="file">By file</option>
-    </select>
     <button type="button" id="signout">Sign out</button>
   </div>
 </header>
@@ -42,7 +30,7 @@
   <p id="stale" class="notice warn" hidden></p>
 
   <section class="toolbar">
-    <label>Group by <select id="group"></select></label>
+    <span class="field">Group by <span class="segmented" id="group" role="group" aria-label="Group by"></span></span>
     <label>Filter <select id="add-filter"></select></label>
     <span id="chips" class="chips"></span>
   </section>
@@ -62,8 +50,20 @@
   </figure>
 
   <figure>
-    <figcaption><span>All time · drag to choose the period, drag it or its edges to change it, click to zoom in</span><span id="window-label"></span></figcaption>
+    <figcaption>
+      <span>All time · drag to choose the period, drag it or its handles to change it, click to zoom in</span>
+      <span class="chart-controls">
+        <span id="window-label"></span>
+        <span class="segmented" id="range" role="group" aria-label="Period">
+          <button type="button" data-value="1">Today</button>
+          <button type="button" data-value="7">7 days</button>
+          <button type="button" data-value="30">30 days</button>
+          <button type="button" data-value="all">All</button>
+        </span>
+      </span>
+    </figcaption>
     <div id="chart-strip" class="chart strip" role="img" aria-label="All time, with the chosen period"></div>
+    <div id="strip-dates" class="strip-dates" aria-hidden="true"></div>
   </figure>
 
   <figure>
@@ -71,7 +71,7 @@
       <span id="cap-main"></span>
       <span class="chart-controls">
         <span class="segmented" id="metric" role="group" aria-label="Measure">
-          <button type="button" data-value="requests" class="on">File requests</button>
+          <button type="button" data-value="requests">File requests</button>
           <button type="button" data-value="bytes">Data sent</button>
           <button type="button" data-value="whole_files">Whole files (est.)</button>
         </span>
@@ -90,6 +90,7 @@
 <script src="/stats/signin.js"></script>
 <script src="/stats/timeline.js"></script>
 <script src="/stats/chart.js"></script>
+<script src="/stats/tooltip.js"></script>
 <script src="/stats/vendor/uPlot.iife.min.js"></script>
 <script src="/stats/app.js"></script>
 </body>
