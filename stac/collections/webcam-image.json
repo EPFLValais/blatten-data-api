@@ -82,15 +82,24 @@
     }
   },
   "summaries": {
-    "processing_level": [
-      2,
-      4
+    "blatten:sensor": [
+      "DEFOX Birchgletscher",
+      "FlexCam Birchgletscher",
+      "Interferometric Radar Kleines Nesthorn",
+      "Sensalpin Camera",
+      "Webcam Blatten",
+      "Webcam Geoazimut - Lonza",
+      "Webcam Lonza - View from SW"
     ],
-    "source": [
+    "blatten:source": [
       "DNAGE (Geoazimut)",
       "DNAGE (Guardaval)",
       "Geoprevent",
       "SensAlpin"
+    ],
+    "blatten:processing_level": [
+      2,
+      4
     ]
   },
   "links": [

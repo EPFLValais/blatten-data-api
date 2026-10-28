@@ -79,6 +79,7 @@ serde_yaml = { version = "0.9", optional = true }
 calamine = { version = "0.26", optional = true }
 jsonschema = { version = "0.33", default-features = false, optional = true }
 percent-encoding = { version = "2", optional = true }
+cql2 = "0.6"
 
 [dev-dependencies]
 flate2 = "1"

@@ -40,6 +40,8 @@ docker compose up
 | `GET /stac/collections/{id}` | Get a specific collection |
 | `GET /stac/collections/{id}/items` | List items in a collection |
 | `GET /stac/collections/{id}/items/{item_id}` | Get a specific item |
+| `GET /stac/queryables` | Properties a `filter` may name, as a JSON Schema |
+| `GET /stac/collections/{id}/queryables` | The same, for one collection |
 | `GET /stac/search` | Search items (supports bbox, datetime, collections) |
 | `POST /stac/search` | Search items (JSON body) |
 | `GET /health` | Health check |
@@ -53,6 +55,8 @@ docker compose up
 - `offset`: Pagination offset
 - `source`: Filter by data provider (e.g., "Geoprevent", "Terradata")
 - `processing_level`: Filter by processing level (1-4)
+- `filter`: Basic CQL2 filter on the queryables (`=`, `<>`, `<`, `<=`, `>`, `>=`, `IS NULL`, `AND`, `OR`, `NOT`), on search and collection items
+- `filter-lang`: `cql2-text` (the GET default) or `cql2-json` (the POST default)
 
 ### Example Queries
 
@@ -68,7 +72,81 @@ curl "http://localhost:3000/stac/search?bbox=7.78,46.39,7.85,46.43"
 
 # Search by provider
 curl "http://localhost:3000/stac/search?source=Terradata"
+
+# Search with a CQL2 filter
+curl "http://localhost:3000/stac/search" --get --data-urlencode "filter=blatten:source='Terradata' AND blatten:processing_level >= 3"
 ```
+
+### Queryables and Filter
+
+`GET /stac/queryables` (and `/stac/collections/{id}/queryables`) returns, as a JSON Schema,
+the properties a `filter` may name. A filter naming anything else is answered 400.
+
+| Queryable | Type |
+|-----------|------|
+| `blatten:series` | string: the series a day item belongs to, absent on every other item |
+| `blatten:sensor` | string |
+| `blatten:code` | string: the dataset code, also carried by its day items |
+| `blatten:source` | string |
+| `blatten:processing_level` | integer |
+| `datetime`, `start_datetime`, `end_datetime` | date-time |
+
+`filter` works on `/stac/search` and on `/stac/collections/{id}/items`, and the `next` and
+`prev` links keep it. Pass it URL-encoded:
+
+```bash
+# The days of one series, a page at a time, in date order
+curl "http://localhost:3000/stac/collections/webcam-image/items" --get \
+  --data-urlencode "filter=blatten:series='07Aa00'"
+
+# Every item that is not a day: one entry per dataset, as the collection was before the split
+curl "http://localhost:3000/stac/collections/webcam-image/items" --get \
+  --data-urlencode "filter=blatten:series IS NULL"
+
+# The days of a series within a date range
+curl "http://localhost:3000/stac/search" --get \
+  --data-urlencode "filter=blatten:series='07Aa00' AND start_datetime >= TIMESTAMP('2025-06-01T00:00:00Z') AND end_datetime < TIMESTAMP('2025-06-03T00:00:00Z')"
+
+# The same filter as cql2-json in a POST body
+curl -X POST "http://localhost:3000/stac/search" -H "Content-Type: application/json" \
+  -d '{"filter": {"op": "=", "args": [{"property": "blatten:series"}, "07Aa00"]}}'
+```
+
+### Series and Day Items
+
+A dataset whose item would exceed 100 KB of JSON (long webcam and radar series, thousands of
+files) is written as a series item and its day items:
+
+- The **series item** keeps the dataset code as its id (e.g. `07Aa00`), its collection,
+  geometry, properties and full date range. `blatten:file_count` is still the number of all
+  its files. Its assets are the `archive`, the `manifest` and the files with no date in their
+  name (such as station factsheets). A link `rel: "items"`, titled `Days`, lists its days:
+  `/stac/collections/{collection}/items?filter=blatten:series='{code}'`.
+- A **day item** holds the files of one date: id `{code}_{YYYY-MM-DD}` (e.g.
+  `07Aa00_2025-06-01`), `datetime` null, `start_datetime` and `end_datetime` the first and
+  last file time of the day, `blatten:series` the series id, `blatten:file_count` and
+  `blatten:total_size` the number and total `file:size` of its files, and the series' geometry,
+  `blatten:code`, sensor, source, processing level, format and product type. Its assets are
+  the files of that day, with the same keys, hrefs, sizes and checksums they had on the whole
+  item. A link `rel: "related"`, titled `Series`, points back to the series item. A day that
+  alone exceeds the size is cut, in file-time order, into parts `{code}_{YYYY-MM-DD}_{n}`.
+
+Items are listed in id order, so a series' days come after it, in date order. A `datetime`
+search matches a day by its own time range, and a series by its whole range. Items under the size limit are unchanged and
+have no `blatten:series`.
+
+### Manifest
+
+Each series item has a `manifest` asset (`text/csv`, href `/s3/archives/{code}.manifest.csv`,
+beside the archive) listing every file of the dataset, its days' files included, one row per
+file sorted by path:
+
+| Column | Content |
+|--------|---------|
+| `path` | The file's S3 key under the `/s3` prefix, e.g. `assets/07Aa00/2025-06-01 0000.jpg`; percent-encode it to build the URL |
+| `datetime` | The file's time, read from its name as on its asset, or empty |
+| `size` | Size in bytes, as the asset's `file:size` |
+| `checksum` | SHA-256 multihash in hex, as the asset's `file:checksum` |
 
 ## Data Pipeline
 

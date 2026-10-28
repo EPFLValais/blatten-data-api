@@ -1,0 +1,2818 @@
+{
+  "collections": [
+    {
+      "id": "3d-model",
+      "title": "3D Model",
+      "items": [
+        {
+          "id": "14La01",
+          "title": "14La01 - Kleines Nesthorn (23.05.2025)",
+          "file_count": 22,
+          "archive": {
+            "href": "/s3/archives/14La01.zip",
+            "size": 470846009,
+            "checksum": "12201eac22056801fe053949baeb7a0f686a21605455998f218e1d74f04578766ab0"
+          },
+          "files": {
+            "count": 23,
+            "sha256": "434e391720167f704600108e78627ea5160e359fec782dd9359c53d27d68f678"
+          }
+        },
+        {
+          "id": "14La02",
+          "title": "14La02 - Kleines Nesthorn (29.05.2025)",
+          "file_count": 27,
+          "archive": {
+            "href": "/s3/archives/14La02.zip",
+            "size": 617603582,
+            "checksum": "12201cbace31b2dd51c58510eb9394f557b5157a725d760d8cea712ecd5ac8689754"
+          },
+          "files": {
+            "count": 28,
+            "sha256": "c03155fc29e52abf57379865da007c0e2986b7d3bb8df9e948f5b8df9a0147a8"
+          }
+        },
+        {
+          "id": "14La03",
+          "title": "14La03 - Kleines Nesthorn (10.06.2025)",
+          "file_count": 23,
+          "archive": {
+            "href": "/s3/archives/14La03.zip",
+            "size": 524531945,
+            "checksum": "1220d00c4f3236a63263694d2d417aa530e9da2f93e1fdb2fc8b9469fbd2b49e662e"
+          },
+          "files": {
+            "count": 24,
+            "sha256": "9568e356d04b55a882db01ad2fa931886e1ab1f0042f92b836a4200014b80714"
+          }
+        }
+      ]
+    },
+    {
+      "id": "deformation-analysis",
+      "title": "Deformation Analysis",
+      "items": [
+        {
+          "id": "04Ba00",
+          "title": "04Ba00 - Image - Scale up to 8Px/d (All Frames)",
+          "file_count": 43,
+          "archive": {
+            "href": "/s3/archives/04Ba00.zip",
+            "size": 178501791,
+            "checksum": "1220e4ce0ba123b28976a9cc47b21138db9c9e718b34152f8c80b66435b9e9160e29"
+          },
+          "files": {
+            "count": 44,
+            "sha256": "ee79089f73f0dc4752fb0a963058999e983dbf86fcbb64d2138f3199fc95184d"
+          }
+        },
+        {
+          "id": "04Ba01",
+          "title": "04Ba01 - Image - Scale up to 8Px/d (Phase 3, 2-3x/d)",
+          "file_count": 22,
+          "archive": {
+            "href": "/s3/archives/04Ba01.zip",
+            "size": 90056680,
+            "checksum": "122055e4a1d24726479582053808e0d922ce9528b2d32540a97bf2abddb82cc1a4fc"
+          },
+          "files": {
+            "count": 23,
+            "sha256": "bb6df729a4f1a78ccbb6f48f945505608724669c1f7d2f352751c806d8dffd9a"
+          }
+        },
+        {
+          "id": "04Ba02",
+          "title": "04Ba02 - Image - Scale up to 8Px/d (Phase 3-4, 1d interval)",
+          "file_count": 21,
+          "archive": {
+            "href": "/s3/archives/04Ba02.zip",
+            "size": 89257332,
+            "checksum": "12203e54bd5430f7ea5aa07934910206b2d601d4c5822fc57d0a211d2c5f8e79367c"
+          },
+          "files": {
+            "count": 22,
+            "sha256": "a303425e11736e10a99f21f38fed886c4049e7e0434ec721fa0ff2f9420ced18"
+          }
+        },
+        {
+          "id": "04Bb00",
+          "title": "04Bb00 - Image - Scale up to 12Px/d (All Frames)",
+          "file_count": 19,
+          "archive": {
+            "href": "/s3/archives/04Bb00.zip",
+            "size": 79765058,
+            "checksum": "1220ab35d9a35dae781876ee50b89723b0d89ec2c3256fd287de26c770c88a2e9757"
+          },
+          "files": {
+            "count": 20,
+            "sha256": "b40980b6e265c204e84b7ecfa342c219c5c4a99b1130c0b995ff6cb58c310363"
+          }
+        },
+        {
+          "id": "04Ca00",
+          "title": "04Ca00 - ROI Zones - Velocities per ROI (Whole Period)",
+          "file_count": 1,
+          "archive": {
+            "href": "/s3/archives/04Ca00.zip",
+            "size": 820283,
+            "checksum": "12204b17fdbecbef96644d963bb579d761e1e9a8416de449b15713fdeb115471a0d7"
+          },
+          "files": {
+            "count": 2,
+            "sha256": "7622f2951f28c114fba3c1a8d7fa502b27c12a35ede9c600891e57e097b979e0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "digital-surface-model-dsm",
+      "title": "Digital Surface Model",
+      "items": [
+        {
+          "id": "13Ia01",
+          "title": "13Ia01 - Deposition (30.05. 21:00)",
+          "file_count": 1,
+          "archive": null,
+          "files": {
+            "count": 2,
+            "sha256": "fa240d7730e4d0ea026b0fcdda776824976d30da708ec19afe90c440e1eb004a"
+          }
+        },
+        {
+          "id": "13Ia02",
+          "title": "13Ia02 - Deposition (31.05. 09:00)",
+          "file_count": 1,
+          "archive": null,
+          "files": {
+            "count": 2,
+            "sha256": "103f37d8f844c7cf4c1602f166c06def763366780d0285c5d89fd88a89d39858"
+          }
+        },
+        {
+          "id": "13Ia03",
+          "title": "13Ia03 - Deposition (31.05. 14:00)",
+          "file_count": 1,
+          "archive": null,
+          "files": {
+            "count": 2,
+            "sha256": "bcb585eb738321288989457c9f5fddbfc3e369eaeec3b8035c789b6f0ae195d2"
+          }
+        },
+        {
+          "id": "13Ia04",
+          "title": "13Ia04 - Deposition (01.06. 21:00)",
+          "file_count": 1,
+          "archive": null,
+          "files": {
+            "count": 2,
+            "sha256": "c2131e386eba20dc31c262fcb11d39171bcab748724a1cfa9b042fdd9bdf9813"
+          }
+        },
+        {
+          "id": "13Ia05",
+          "title": "13Ia05 - Deposition (02.06. 17:00)",
+          "file_count": 1,
+          "archive": null,
+          "files": {
+            "count": 2,
+            "sha256": "8208107031fdf91ca42c33fb1b8b1c3f91cfeda27df69592d68bca47dae4627c"
+          }
+        },
+        {
+          "id": "13Ia06",
+          "title": "13Ia06 - Deposition (03.06. 12:00)",
+          "file_count": 1,
+          "archive": null,
+          "files": {
+            "count": 2,
+            "sha256": "0627ea615c96dc82f7950d91a261f4a9c38c3e1f072f186b761959436ae25878"
+          }
+        },
+        {
+          "id": "13Ia07",
+          "title": "13Ia07 - Deposition (04.06. 13:00)",
+          "file_count": 1,
+          "archive": null,
+          "files": {
+            "count": 2,
+            "sha256": "1597670c1834a632dd09670dfc64f1d679fd199d3f45676978940ca32c1e0e69"
+          }
+        },
+        {
+          "id": "13Ia08",
+          "title": "13Ia08 - Deposition (05.06. 13:00)",
+          "file_count": 1,
+          "archive": null,
+          "files": {
+            "count": 2,
+            "sha256": "46321a29b11ffd6f83a64d5cdc6989235282acb5294a2ab8ff8d8c23aa407ba6"
+          }
+        },
+        {
+          "id": "13Ia09",
+          "title": "13Ia09 - Deposition (06.06. 10:00)",
+          "file_count": 1,
+          "archive": null,
+          "files": {
+            "count": 2,
+            "sha256": "c63553b8e55178365e7acd8dd0196a3cb19ed3196d1879553eaa86070514bd8c"
+          }
+        },
+        {
+          "id": "13Ia10",
+          "title": "13Ia10 - Deposition (08.06. 07:00)",
+          "file_count": 1,
+          "archive": null,
+          "files": {
+            "count": 2,
+            "sha256": "020bd5213b3fbad5c1b1df501692eb42d79f254e4672e26531ff8f83a0c1f3f8"
+          }
+        },
+        {
+          "id": "13Ia11",
+          "title": "13Ia11 - Deposition (09.06. 07:00)",
+          "file_count": 1,
+          "archive": null,
+          "files": {
+            "count": 2,
+            "sha256": "2ebf8363d9500dda0b829b9a629581e9afd0940025aea5aab4e89ee3202b646c"
+          }
+        },
+        {
+          "id": "13Ia12",
+          "title": "13Ia12 - Deposition (10.06. 06:00)",
+          "file_count": 1,
+          "archive": null,
+          "files": {
+            "count": 2,
+            "sha256": "2324493c21c32f6bbb193aff201471b4ed128bd7f27749512d07f649d7eb5a1b"
+          }
+        },
+        {
+          "id": "13Ia13",
+          "title": "13Ia13 - Deposition (11.06. 06:00)",
+          "file_count": 1,
+          "archive": null,
+          "files": {
+            "count": 2,
+            "sha256": "a8bf66cdc53e1b2bd0869a3b8cef7a92004e7320363fafd736e95c4b98e21a77"
+          }
+        },
+        {
+          "id": "13Ia14",
+          "title": "13Ia14 - Deposition (12.06. 06:00)",
+          "file_count": 1,
+          "archive": null,
+          "files": {
+            "count": 2,
+            "sha256": "6997fe6d4e3951ef33916ff722833bfdf27ffc3993058743722f7b2809883de9"
+          }
+        },
+        {
+          "id": "13Ia15",
+          "title": "13Ia15 - Deposition (13.06. 06:00)",
+          "file_count": 1,
+          "archive": null,
+          "files": {
+            "count": 2,
+            "sha256": "707d20670858a769d1ec2b72a9c98e9bda1a3ea0b574996f36ade8a7f7aa2561"
+          }
+        },
+        {
+          "id": "13Ia16",
+          "title": "13Ia16 - Deposition (14.06. 06:00)",
+          "file_count": 1,
+          "archive": null,
+          "files": {
+            "count": 2,
+            "sha256": "114cc0599659b80851f8933fb1615acb59faf1a20a4b71808e77db0dd9dab493"
+          }
+        },
+        {
+          "id": "13Ia17",
+          "title": "13Ia17 - Deposition (15.06. 06:00)",
+          "file_count": 8,
+          "archive": {
+            "href": "/s3/archives/13Ia17.zip",
+            "size": 1025014510,
+            "checksum": "1220813b03dcbd16656a92a2e9121d23ffa66f9e717d225539aac6518d0641044e66"
+          },
+          "files": {
+            "count": 9,
+            "sha256": "11fc2ca45d7676de152f5e96e7c8592001ae5e5f162904a2fdab4e90fbb8f027"
+          }
+        },
+        {
+          "id": "13Ia18",
+          "title": "13Ia18 - Deposition (17.06. 06:00)",
+          "file_count": 8,
+          "archive": {
+            "href": "/s3/archives/13Ia18.zip",
+            "size": 1025200609,
+            "checksum": "12200ad84fe4dc7d836e72fb477d78f262671e665b65b93802d33b1713a09d01526f"
+          },
+          "files": {
+            "count": 9,
+            "sha256": "ebda1b35bdd00ab2103dbe7960ccc9259c03f21f7842fd6e30e005e594def04d"
+          }
+        },
+        {
+          "id": "13Ia19",
+          "title": "13Ia19 - Deposition (18.06. 06:00)",
+          "file_count": 8,
+          "archive": {
+            "href": "/s3/archives/13Ia19.zip",
+            "size": 1024474398,
+            "checksum": "1220b3e7558c64387a7ddd50927453e2f53f8ba6be8a9c0ef66aa39c7ecfb42e128f"
+          },
+          "files": {
+            "count": 9,
+            "sha256": "a004dd2696e73d3f416f140b5d903d9a019e84e91858bbb1fedf359db923e7d1"
+          }
+        },
+        {
+          "id": "13Ia20",
+          "title": "13Ia20 - Deposition (19.06. 06:00)",
+          "file_count": 8,
+          "archive": {
+            "href": "/s3/archives/13Ia20.zip",
+            "size": 1025257098,
+            "checksum": "1220b76914848a34e5144635d1a189322cf5f81d9e463de08cfa6943b1cc1bc040cc"
+          },
+          "files": {
+            "count": 9,
+            "sha256": "2334bba5956d287693e5a7eab74a9097e7d32b7baa18ce63cea84077c1f56d45"
+          }
+        },
+        {
+          "id": "13Ia21",
+          "title": "13Ia21 - Deposition (20.06. 06:00)",
+          "file_count": 8,
+          "archive": {
+            "href": "/s3/archives/13Ia21.zip",
+            "size": 1024863124,
+            "checksum": "1220016e6c7de3a41cfd51a7c09e9ea5689f684def17edde2564e3f3bc513b3eb7cc"
+          },
+          "files": {
+            "count": 9,
+            "sha256": "9fb1c17ee1617853410dc8db8402dc2b69aacf30524faa6144943e39d772ef54"
+          }
+        },
+        {
+          "id": "13Ia22",
+          "title": "13Ia22 - Deposition (21.06. 07:00)",
+          "file_count": 8,
+          "archive": {
+            "href": "/s3/archives/13Ia22.zip",
+            "size": 1025429326,
+            "checksum": "12206fc3d6781d1cf3ebdb7d26845fae06d2784be5dca90b64251125aa80e3a79ad3"
+          },
+          "files": {
+            "count": 9,
+            "sha256": "3958392cbbd0e51a9c834f93a6079ef81336eb229e25b61607a5691fff56a996"
+          }
+        },
+        {
+          "id": "13Ib01",
+          "title": "13Ib01 - Rockfall area (24.06. 09:00)",
+          "file_count": 5,
+          "archive": {
+            "href": "/s3/archives/13Ib01.zip",
+            "size": 332960629,
+            "checksum": "1220bf52db5f01b2da8c5057222ddfe8a3902e8b61a36fb93a8acd6406dea95cac74"
+          },
+          "files": {
+            "count": 6,
+            "sha256": "a7795d6f545557fac3d57e83b0b8f58a2f06a503aa8924f7f6d5ff4b34c24c23"
+          }
+        },
+        {
+          "id": "13Ib02",
+          "title": "13Ib02 - Rockfall area (26.06. 09:00)",
+          "file_count": 5,
+          "archive": {
+            "href": "/s3/archives/13Ib02.zip",
+            "size": 332920116,
+            "checksum": "1220bb580c1f15c98235f0d895fdc9c038fe806b016026888a429c07206cf09c6d4a"
+          },
+          "files": {
+            "count": 6,
+            "sha256": "b467e13ce485edcd83f0ee5163970af553f4d3d6997b0f72af53aeea040956ec"
+          }
+        },
+        {
+          "id": "13Ib03",
+          "title": "13Ib03 - Rockfall area (30.06. 07:00)",
+          "file_count": 5,
+          "archive": {
+            "href": "/s3/archives/13Ib03.zip",
+            "size": 333013886,
+            "checksum": "12204dcb4da37d859d5ea191f476bef65e1f38afc2976524536d6cd95a101f744401"
+          },
+          "files": {
+            "count": 6,
+            "sha256": "b120246297e80c2d6b132dac2e3e2bfff2535ca42168293e1a870cdeab8b89b5"
+          }
+        },
+        {
+          "id": "13Ib04",
+          "title": "13Ib04 - Rockfall area (04.07. 14:00)",
+          "file_count": 7,
+          "archive": {
+            "href": "/s3/archives/13Ib04.zip",
+            "size": 346448249,
+            "checksum": "12203e11e87c6e38ca0d9b77182594831dcff48dcad3d9c78910fffe86fdaf8a50da"
+          },
+          "files": {
+            "count": 8,
+            "sha256": "0c517bf5504db2e4b19c6c42dcc5103bba5efd2712ab9d35bd60957dafea8fe3"
+          }
+        },
+        {
+          "id": "13Ib05",
+          "title": "13Ib05 - Rockfall area (09.07. 18:00)",
+          "file_count": 7,
+          "archive": {
+            "href": "/s3/archives/13Ib05.zip",
+            "size": 346594528,
+            "checksum": "12201d943164f6f11d6476e0e20ab2afaf3efd42e2996f3ba4153f4172f74fd258bc"
+          },
+          "files": {
+            "count": 8,
+            "sha256": "7a615ddd232421f396fd8108eab59a7c1ec253f578d8f22d7ff69081cc9c6a1b"
+          }
+        },
+        {
+          "id": "13Ib06",
+          "title": "13Ib06 - Rockfall area (14.07. 15:00)",
+          "file_count": 7,
+          "archive": {
+            "href": "/s3/archives/13Ib06.zip",
+            "size": 346394308,
+            "checksum": "1220825d0f4737342f06b74e14bc37b4cc12cee0a8f8ec7deb745c6bfda1b513328b"
+          },
+          "files": {
+            "count": 8,
+            "sha256": "3a0f7a57b2ce9d8b0a373a808f3c29da05bc51590a838e83d785a21817bc68b7"
+          }
+        },
+        {
+          "id": "13Ib07",
+          "title": "13Ib07 - Rockfall area (23.07. 15:00)",
+          "file_count": 7,
+          "archive": {
+            "href": "/s3/archives/13Ib07.zip",
+            "size": 346704755,
+            "checksum": "1220fec7f6aa73fd31f34512cca9d50671f3f9f200ffd2b8b6e5323a775d5cc44c83"
+          },
+          "files": {
+            "count": 8,
+            "sha256": "de6efae458bb94969c2cff97c070fb990c42b053d463f5eb97bcd4f143f417c2"
+          }
+        },
+        {
+          "id": "13Ib08",
+          "title": "13Ib08 - Rockfall area (28.07. 14:00)",
+          "file_count": 6,
+          "archive": {
+            "href": "/s3/archives/13Ib08.zip",
+            "size": 346805277,
+            "checksum": "12200ec280d0f854454bdb904935e1f427310d56013435aa0ccfe0bcb09be27d7c4b"
+          },
+          "files": {
+            "count": 7,
+            "sha256": "7e606579263660da54ca09430ed485597b2501e00434d3c0eb66ecf98043b4f8"
+          }
+        },
+        {
+          "id": "13Ib09",
+          "title": "13Ib09 - Rockfall area (04.08. 12:00)",
+          "file_count": 6,
+          "archive": {
+            "href": "/s3/archives/13Ib09.zip",
+            "size": 346550508,
+            "checksum": "12201aeed7269a459b1dc3e2bf1b4d6059b64dae69871c0d62a382abef30848bdf57"
+          },
+          "files": {
+            "count": 7,
+            "sha256": "1f6b035b3d7a65062dbdcf308cdfef7c7993a4a35facb1b9558e3b291c5fea2b"
+          }
+        },
+        {
+          "id": "13Ib10",
+          "title": "13Ib10 - Rockfall area (11.08. 13:00)",
+          "file_count": 5,
+          "archive": {
+            "href": "/s3/archives/13Ib10.zip",
+            "size": 357149874,
+            "checksum": "1220f82526601421a68e76cf13076acf16f309ddfab73ccb7c18ff0e4d41b85dd5cc"
+          },
+          "files": {
+            "count": 6,
+            "sha256": "3f0f63fcfdecad338a072cfe283ab4da0102b6f6fa14cd98bc3f461ae304d68a"
+          }
+        },
+        {
+          "id": "13Ib11",
+          "title": "13Ib11 - Rockfall area (18.08.2025 11:00)",
+          "file_count": 5,
+          "archive": {
+            "href": "/s3/archives/13Ib11.zip",
+            "size": 371095813,
+            "checksum": "1220f9224d459f88ad6444dc8bd11511a6ab997eb7a107d9f412f0e07cc6919b2e70"
+          },
+          "files": {
+            "count": 6,
+            "sha256": "f288014facbfb4e45eca4c26cd364f9690380db956baf78af7648b7da9285a11"
+          }
+        },
+        {
+          "id": "13Ib12",
+          "title": "13Ib12 - Rockfall area (27.08.2025 09:00)",
+          "file_count": 5,
+          "archive": {
+            "href": "/s3/archives/13Ib12.zip",
+            "size": 371170842,
+            "checksum": "1220290574cbe2cc6cd12a9a3b14869eda29ceb10b79801ad4b48abb387ebff8f72d"
+          },
+          "files": {
+            "count": 6,
+            "sha256": "ecad50c846c22a3fc3deb0bb1870592ca5bf04473218a65ef3004725d08b9ecb"
+          }
+        },
+        {
+          "id": "13Ib13",
+          "title": "13Ib13 - Rockfall area (03.09.2025 14:00)",
+          "file_count": 5,
+          "archive": {
+            "href": "/s3/archives/13Ib13.zip",
+            "size": 371902712,
+            "checksum": "1220eb17ac99aac8193e6f399b323f1a6ec6037fae5b8b4603124e704e1923e49477"
+          },
+          "files": {
+            "count": 6,
+            "sha256": "96abf6ee221e76305716e70a42f3eb7b0049f01b5f44b32fcd6ef4437ba8c216"
+          }
+        },
+        {
+          "id": "14Ia01",
+          "title": "14Ia01 - Rockfall area (23.05.)",
+          "file_count": 1,
+          "archive": null,
+          "files": {
+            "count": 2,
+            "sha256": "00e7250e554a338a4921612035a31b780a1fbf85ffae31c06880f86acafb7476"
+          }
+        },
+        {
+          "id": "14Ia02",
+          "title": "14Ia02 - Rockfall area (29.05.)",
+          "file_count": 15,
+          "archive": {
+            "href": "/s3/archives/14Ia02.zip",
+            "size": 2023384428,
+            "checksum": "1220ee121783c9ea349a2e67cc359db193fd96244c838918eeb59ef37fe6b1fdc17e"
+          },
+          "files": {
+            "count": 16,
+            "sha256": "913eb0e512a0a757569358600fee7915d91cec4c9d3fcd24ea78f9597d81757a"
+          }
+        },
+        {
+          "id": "14Ia03",
+          "title": "14Ia03 - Rockfall area (10.06.)",
+          "file_count": 9,
+          "archive": {
+            "href": "/s3/archives/14Ia03.zip",
+            "size": 686376050,
+            "checksum": "1220d73872419749fea53d41f8b1aff1c74ef726f20fbc9319e267537c33112e26de"
+          },
+          "files": {
+            "count": 10,
+            "sha256": "e4b71634b3a655225d1befd4ec1c2a18af92adabb225611aa934030ec57a310a"
+          }
+        }
+      ]
+    },
+    {
+      "id": "digital-terrain-model-dtm",
+      "title": "Digital Terrain Model",
+      "items": [
+        {
+          "id": "14Ja01",
+          "title": "14Ja01 - Rockfall area (23.05.)",
+          "file_count": 1,
+          "archive": null,
+          "files": {
+            "count": 2,
+            "sha256": "d356ba56191ddc60d3e2a533ad437027dcd70deb68b43826b688023037e8b91b"
+          }
+        },
+        {
+          "id": "14Ja02",
+          "title": "14Ja02 - Rockfall area (29.05.)",
+          "file_count": 1,
+          "archive": null,
+          "files": {
+            "count": 2,
+            "sha256": "6af5d99aa8b8fead5377abecb07648fb927891e93b30b4a02b3f2646bfbc7524"
+          }
+        },
+        {
+          "id": "14Ja03",
+          "title": "14Ja03 - Rockfall area (10.06.)",
+          "file_count": 1,
+          "archive": null,
+          "files": {
+            "count": 2,
+            "sha256": "23a5b9917e30411c1a7265dbe4e56e83bfe0bc5a644a6b158d308b3163344f15"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gps-data",
+      "title": "GNSS Data",
+      "items": [
+        {
+          "id": "10Ma00",
+          "title": "10Ma00 - Position Weissenried WRI1 (Whole Period)",
+          "file_count": 1,
+          "archive": {
+            "href": "/s3/archives/10Ma00.zip",
+            "size": 792314,
+            "checksum": "1220411533f273ee8bc7aaaa0bbcb19f9866051d169897c915c624ee79fc169a0f1e"
+          },
+          "files": {
+            "count": 2,
+            "sha256": "c88a63873b71021532502800e06b69e3457baa625bf1505268d8e510bd004ca7"
+          }
+        },
+        {
+          "id": "11Ma00",
+          "title": "11Ma00 - Position Kleines Nesthorn NES1 (Whole Period)",
+          "file_count": 1,
+          "archive": {
+            "href": "/s3/archives/11Ma00.zip",
+            "size": 931410,
+            "checksum": "122071aea508340c035236db1cd9732f630f80319b145bb43edea515c1dfea636d0c"
+          },
+          "files": {
+            "count": 2,
+            "sha256": "f863bea59ebb7c1b0a6459d01b39b2513cbfc276c6f5fbbc2599c59db2b1497f"
+          }
+        }
+      ]
+    },
+    {
+      "id": "hydrology",
+      "title": "Hydrology",
+      "items": [
+        {
+          "id": "17Pa00",
+          "title": "17Pa00 - Lake - Water surface level (Whole Period)",
+          "file_count": 1,
+          "archive": {
+            "href": "/s3/archives/17Pa00.zip",
+            "size": 3352357,
+            "checksum": "1220e34933923910fc0cc8480a56cbe429354fef3a9759c4f97c7f9b186022ee2aa5"
+          },
+          "files": {
+            "count": 2,
+            "sha256": "66409f0a571605594a3e4d6aedda0462f6f8a81182b877e93f23d8086d0a3644"
+          }
+        },
+        {
+          "id": "17Pb00",
+          "title": "17Pb00 - Lake - Lake volume (Whole Period)",
+          "file_count": 1,
+          "archive": {
+            "href": "/s3/archives/17Pb00.zip",
+            "size": 3352357,
+            "checksum": "1220e34933923910fc0cc8480a56cbe429354fef3a9759c4f97c7f9b186022ee2aa5"
+          },
+          "files": {
+            "count": 2,
+            "sha256": "31805fcb4eb2756f36b949dcff4db7042d3f8ec15ff9d695e0b6c9d0988f1689"
+          }
+        },
+        {
+          "id": "18Oa01",
+          "title": "18Oa01 - River - Water Height (Valid before Aug 17th)",
+          "file_count": 1,
+          "archive": {
+            "href": "/s3/archives/18Oa01.zip",
+            "size": 5438555,
+            "checksum": "1220bc82cb69254632cf433c293f80385df895b01f41e800fa619ecb05c045c8230c"
+          },
+          "files": {
+            "count": 2,
+            "sha256": "7980a356d6e6e5b6bb8a3d81e9848f6330702be85c305d1ef6157f7fd271f3b3"
+          }
+        },
+        {
+          "id": "18Oa02",
+          "title": "18Oa02 - River - Water Height (Valid since Aug 17th)",
+          "file_count": 1,
+          "archive": {
+            "href": "/s3/archives/18Oa02.zip",
+            "size": 5438555,
+            "checksum": "1220f0324080f0cb0bac8931fa7f47f3dade01c5a41d600fca7e2e6905ebe102a483"
+          },
+          "files": {
+            "count": 2,
+            "sha256": "ea96ae1642a3dfc553eccc16aae52bd9dd690015840d9ddd28145291385790eb"
+          }
+        },
+        {
+          "id": "18Ob01",
+          "title": "18Ob01 - River - Discharge (First calibration (30.05. - 06.06.))",
+          "file_count": 1,
+          "archive": {
+            "href": "/s3/archives/18Ob01.zip",
+            "size": 5438555,
+            "checksum": "1220f0324080f0cb0bac8931fa7f47f3dade01c5a41d600fca7e2e6905ebe102a483"
+          },
+          "files": {
+            "count": 2,
+            "sha256": "6b9fd9685dd8c9541bf0d546acacdd7303c59dfb19f01c03d24b0bf6e47e340a"
+          }
+        },
+        {
+          "id": "18Ob02",
+          "title": "18Ob02 - River - Discharge (Second calibration (06.06. - 19.08.), valid until 17.08.)",
+          "file_count": 1,
+          "archive": {
+            "href": "/s3/archives/18Ob02.zip",
+            "size": 5438555,
+            "checksum": "1220f0324080f0cb0bac8931fa7f47f3dade01c5a41d600fca7e2e6905ebe102a483"
+          },
+          "files": {
+            "count": 2,
+            "sha256": "737d3e8abf59d30cb64819c9913c60651dede7f7b230a2184a7ebc0fe0c7eacd"
+          }
+        },
+        {
+          "id": "18Ob03",
+          "title": "18Ob03 - River - Discharge (Discharge third calibration (19.08. - current), valid from 17.08.)",
+          "file_count": 1,
+          "archive": {
+            "href": "/s3/archives/18Ob03.zip",
+            "size": 5438555,
+            "checksum": "1220f0324080f0cb0bac8931fa7f47f3dade01c5a41d600fca7e2e6905ebe102a483"
+          },
+          "files": {
+            "count": 2,
+            "sha256": "3473256425532995789cd0eeab9fd9b78bfc91f577327807ff1e2dbe9fd15c95"
+          }
+        },
+        {
+          "id": "19Oa00",
+          "title": "19Oa00 - River - Discharge measured (pneumatic) (Whole Period)",
+          "file_count": 1,
+          "archive": {
+            "href": "/s3/archives/19Oa00.zip",
+            "size": 922800,
+            "checksum": "12206a968f6b31dfb9075da3b480fc9c18c0e6a04c277f287d13eff43f8807e96d70"
+          },
+          "files": {
+            "count": 2,
+            "sha256": "9969efa33eee93c121a50f252e8c376d6d7e6502153d0109c78859c4edc6ee58"
+          }
+        },
+        {
+          "id": "19Ob00",
+          "title": "19Ob00 - River - Water level (pneumatic) (Whole Period)",
+          "file_count": 1,
+          "archive": {
+            "href": "/s3/archives/19Ob00.zip",
+            "size": 922800,
+            "checksum": "12206a968f6b31dfb9075da3b480fc9c18c0e6a04c277f287d13eff43f8807e96d70"
+          },
+          "files": {
+            "count": 2,
+            "sha256": "7dce49760df1a7a697b4dbfc8a6adee20734c02139cff10bb1f609c86485fcbc"
+          }
+        },
+        {
+          "id": "20Oa00",
+          "title": "20Oa00 - River - Water Height (Whole Period)",
+          "file_count": 1,
+          "archive": {
+            "href": "/s3/archives/20Oa00.zip",
+            "size": 4857645,
+            "checksum": "12208ba4750a5940d4756fbafc0bc1d6e2d29795e270d005410bc0a6aa3e5beb44da"
+          },
+          "files": {
+            "count": 2,
+            "sha256": "90b376aea3a6f7433171e14a22c00c0bf76bc4d906bf5522e1af53b7a024b958"
+          }
+        },
+        {
+          "id": "20Ob01",
+          "title": "20Ob01 - River - Discharge (First calibration (30.05. - 06.06.))",
+          "file_count": 1,
+          "archive": {
+            "href": "/s3/archives/20Ob01.zip",
+            "size": 4857645,
+            "checksum": "12208ba4750a5940d4756fbafc0bc1d6e2d29795e270d005410bc0a6aa3e5beb44da"
+          },
+          "files": {
+            "count": 2,
+            "sha256": "bf4187fa6ae637b51a5b339adb4560fc77b9d6792dd0b2de031792e08d721304"
+          }
+        },
+        {
+          "id": "20Ob02",
+          "title": "20Ob02 - River - Discharge (Second calibration (06.06. - 27.08.))",
+          "file_count": 1,
+          "archive": {
+            "href": "/s3/archives/20Ob02.zip",
+            "size": 4857645,
+            "checksum": "12208ba4750a5940d4756fbafc0bc1d6e2d29795e270d005410bc0a6aa3e5beb44da"
+          },
+          "files": {
+            "count": 2,
+            "sha256": "9f6588cc02eb16cc170a7500e71b3e88f0a1420698d24fecde5d2451fc3be111"
+          }
+        },
+        {
+          "id": "20Ob03",
+          "title": "20Ob03 - River - Discharge (Discharge third calibration (27.08. - current))",
+          "file_count": 1,
+          "archive": {
+            "href": "/s3/archives/20Ob03.zip",
+            "size": 4857645,
+            "checksum": "12208ba4750a5940d4756fbafc0bc1d6e2d29795e270d005410bc0a6aa3e5beb44da"
+          },
+          "files": {
+            "count": 2,
+            "sha256": "deb02514360022d0188e677a5313b0ce24fe120d0a9aff686a4308ca07ee3d5c"
+          }
+        },
+        {
+          "id": "21Oa00",
+          "title": "21Oa00 - River - Water Height (Whole Period)",
+          "file_count": 1,
+          "archive": {
+            "href": "/s3/archives/21Oa00.zip",
+            "size": 2297804,
+            "checksum": "12203406e01bc1eac95a97a29a227902b21ce8f6a345b1a9011079e29feccdf955d3"
+          },
+          "files": {
+            "count": 2,
+            "sha256": "9046b06ee9c6caea746e873f61476ac24d018acf4fb139d18efe0dcd7079a5c9"
+          }
+        },
+        {
+          "id": "21Ob00",
+          "title": "21Ob00 - River - Water Surface Level (Whole Period)",
+          "file_count": 1,
+          "archive": {
+            "href": "/s3/archives/21Ob00.zip",
+            "size": 2297804,
+            "checksum": "12203406e01bc1eac95a97a29a227902b21ce8f6a345b1a9011079e29feccdf955d3"
+          },
+          "files": {
+            "count": 2,
+            "sha256": "e511cf61c988491fe19314426118735c80c9bb11db82e4c37f8c362b6a58ab60"
+          }
+        },
+        {
+          "id": "21Oc00",
+          "title": "21Oc00 - River - Discharge (Whole Period)",
+          "file_count": 1,
+          "archive": {
+            "href": "/s3/archives/21Oc00.zip",
+            "size": 2297804,
+            "checksum": "12203406e01bc1eac95a97a29a227902b21ce8f6a345b1a9011079e29feccdf955d3"
+          },
+          "files": {
+            "count": 2,
+            "sha256": "2763b4a3597c9a31ab6d415df2b3be9e81254380a6d51c5de8aeb0c01b2d1923"
+          }
+        }
+      ]
+    },
+    {
+      "id": "orthophoto",
+      "title": "Orthophoto",
+      "items": [
+        {
+          "id": "13Da01",
+          "title": "13Da01 - Deposition (30.05. 21:00)",
+          "file_count": 9,
+          "archive": {
+            "href": "/s3/archives/13Da01.zip",
+            "size": 939512482,
+            "checksum": "12209b4651385a32a2b07017e6af76241ba7ec9cddf9b1258265408c49367ab36cc4"
+          },
+          "files": {
+            "count": 10,
+            "sha256": "93a0ff0379079940809523aabf4ed172a89403b30ac54d0d4b7536631274d237"
+          }
+        },
+        {
+          "id": "13Da02",
+          "title": "13Da02 - Deposition (31.05. 09:00)",
+          "file_count": 9,
+          "archive": {
+            "href": "/s3/archives/13Da02.zip",
+            "size": 980791124,
+            "checksum": "122033c3fd42dfec562dcafc74a4fec401cc6c4676512692e1e0ba9ec3bc56c9607b"
+          },
+          "files": {
+            "count": 10,
+            "sha256": "28cd746d8c6289ce65c8660b9afd0d86fa8bd9bcad554106444c75e389e4aa4a"
+          }
+        },
+        {
+          "id": "13Da03",
+          "title": "13Da03 - Deposition (31.05. 14:00)",
+          "file_count": 9,
+          "archive": {
+            "href": "/s3/archives/13Da03.zip",
+            "size": 953218659,
+            "checksum": "12209a6b98906bd41817639324d6c925745a30fc6bb70c90a639918846fa1cfac2cf"
+          },
+          "files": {
+            "count": 10,
+            "sha256": "eb9681905c64391b32dc5b1c82398c6532f0bfd6bd6cd4ff4533faa5881e5c62"
+          }
+        },
+        {
+          "id": "13Da04",
+          "title": "13Da04 - Deposition (01.06. 21:00)",
+          "file_count": 9,
+          "archive": {
+            "href": "/s3/archives/13Da04.zip",
+            "size": 977314812,
+            "checksum": "1220bf8918e55c98c56afba92d0c509bff4222d89dd00778371e0a2e65b032399524"
+          },
+          "files": {
+            "count": 10,
+            "sha256": "1854aedc79034d6c720de6c3dc374d72f2eedd15d99ebc8b3d37fcbf19f94fa4"
+          }
+        },
+        {
+          "id": "13Da05",
+          "title": "13Da05 - Deposition (02.06. 17:00)",
+          "file_count": 9,
+          "archive": {
+            "href": "/s3/archives/13Da05.zip",
+            "size": 1013615725,
+            "checksum": "1220f62337596aa72739e76edaecb91351859f636c6c11eb92703d269291d66c5927"
+          },
+          "files": {
+            "count": 10,
+            "sha256": "929a3c2d538be7d38a6a253866b7f935c5655c1e6aa3536658edfc1e79f76b7b"
+          }
+        },
+        {
+          "id": "13Da06",
+          "title": "13Da06 - Deposition (03.06. 12:00)",
+          "file_count": 9,
+          "archive": {
+            "href": "/s3/archives/13Da06.zip",
+            "size": 1052429915,
+            "checksum": "1220af653077853d700d4b20efeeaa9111063a7eb6cdc91a6ae86a218620e4fe2ae2"
+          },
+          "files": {
+            "count": 10,
+            "sha256": "d53d2268e4337fdb1bcf9e1edda365f8d66bd96062e36c83b12fbaa6b60251a8"
+          }
+        },
+        {
+          "id": "13Da07",
+          "title": "13Da07 - Deposition (04.06. 13:00)",
+          "file_count": 9,
+          "archive": {
+            "href": "/s3/archives/13Da07.zip",
+            "size": 1021473456,
+            "checksum": "1220a427ac6ccd337c9830a46d121e5ccfbe605c111357ba72956b57ce3968974658"
+          },
+          "files": {
+            "count": 10,
+            "sha256": "81296f5a7779d43445a0fdecc8a13445c03309b04837e9a9846f821f40d31deb"
+          }
+        },
+        {
+          "id": "13Da08",
+          "title": "13Da08 - Deposition (05.06. 13:00)",
+          "file_count": 9,
+          "archive": {
+            "href": "/s3/archives/13Da08.zip",
+            "size": 1030820793,
+            "checksum": "1220ad426371b7fb7410fa137a41b2a300cd12a1b59b6ff09570f2f957b2b1baea73"
+          },
+          "files": {
+            "count": 10,
+            "sha256": "3e60a28fcf103ee39e274db2fbb3375f9f06d02254b5dd0967d26b7a38094c0a"
+          }
+        },
+        {
+          "id": "13Da09",
+          "title": "13Da09 - Deposition (06.06. 10:00)",
+          "file_count": 9,
+          "archive": {
+            "href": "/s3/archives/13Da09.zip",
+            "size": 1010572067,
+            "checksum": "1220021c44221f6fab4e0e108e558d86b4acf03fef148dd6c2224d90b83ee3b46fb0"
+          },
+          "files": {
+            "count": 10,
+            "sha256": "7fc3161228a0df65a196513499de516b8baef74f5e22c2ebc730fc9b615a22cf"
+          }
+        },
+        {
+          "id": "13Da10",
+          "title": "13Da10 - Deposition (08.06. 07:00)",
+          "file_count": 9,
+          "archive": {
+            "href": "/s3/archives/13Da10.zip",
+            "size": 970521255,
+            "checksum": "1220d535097e729f8642149f5a611303dccfad383df8518583d081db6ecdbccf49c7"
+          },
+          "files": {
+            "count": 10,
+            "sha256": "3206514ccb2eece8022003020f10796aa07f7c719c0582aba87d97abe56a43ae"
+          }
+        },
+        {
+          "id": "13Da11",
+          "title": "13Da11 - Deposition (09.06. 07:00)",
+          "file_count": 9,
+          "archive": {
+            "href": "/s3/archives/13Da11.zip",
+            "size": 1041507096,
+            "checksum": "12200a96eac6cdc2512ebad209cac7d0abd0ee1c981b41daf4d389a60cf6b9dc69ce"
+          },
+          "files": {
+            "count": 10,
+            "sha256": "8dd0c45fb869b7a3eccff035985661e734e19b01c24c6c9fa8a04bb4cb87a611"
+          }
+        },
+        {
+          "id": "13Da12",
+          "title": "13Da12 - Deposition (10.06. 06:00)",
+          "file_count": 9,
+          "archive": {
+            "href": "/s3/archives/13Da12.zip",
+            "size": 1058453011,
+            "checksum": "1220085c65fdf18f482883a9ba5f4e28195fd211e8d4bf6e379dbe6ba5e1b7e91666"
+          },
+          "files": {
+            "count": 10,
+            "sha256": "8150d9da3a0638bf996915a1b0e68943dca690d3c770ed587f66419d758cf7aa"
+          }
+        },
+        {
+          "id": "13Da13",
+          "title": "13Da13 - Deposition (11.06. 06:00)",
+          "file_count": 9,
+          "archive": {
+            "href": "/s3/archives/13Da13.zip",
+            "size": 1030526253,
+            "checksum": "1220710d243069124e17d1a2f0f479db585b7cd8af1e58ea6280066283cbaa7ec91a"
+          },
+          "files": {
+            "count": 10,
+            "sha256": "36d4449e89f52d860f68269277f3d22663db87a0dd7297b9a1504c183aaccfeb"
+          }
+        },
+        {
+          "id": "13Da14",
+          "title": "13Da14 - Deposition (12.06. 06:00)",
+          "file_count": 9,
+          "archive": {
+            "href": "/s3/archives/13Da14.zip",
+            "size": 1066275339,
+            "checksum": "1220e50c466f047cab689288e7d8cae9d9f5d71fced4c906496d59b8df371ab5072d"
+          },
+          "files": {
+            "count": 10,
+            "sha256": "31ad75069494ef8d48f515e2944cb7458659d56f705cd7f7df66dd3574290e89"
+          }
+        },
+        {
+          "id": "13Da15",
+          "title": "13Da15 - Deposition (13.06. 06:00)",
+          "file_count": 9,
+          "archive": {
+            "href": "/s3/archives/13Da15.zip",
+            "size": 1061621939,
+            "checksum": "12206e5758d4cccc8e2b276bf75ee381cd9f9153eb719a981da1898b9e776f7f2ac8"
+          },
+          "files": {
+            "count": 10,
+            "sha256": "0d887b4eb292eb927f17e43993cecd344c3ae610b71762359dee799d9ae970fd"
+          }
+        },
+        {
+          "id": "13Da16",
+          "title": "13Da16 - Deposition (14.06. 06:00)",
+          "file_count": 9,
+          "archive": {
+            "href": "/s3/archives/13Da16.zip",
+            "size": 1027657364,
+            "checksum": "1220e18f8220817b302ddd41e6de1fb2d53a771eb1ab77ffa23e19ba6f62e3dccf7b"
+          },
+          "files": {
+            "count": 10,
+            "sha256": "52427ca987926d7bca6561ed53e05fad509e750f7bfbf5fae20f76f9262dd2d0"
+          }
+        },
+        {
+          "id": "13Da17",
+          "title": "13Da17 - Deposition (15.06. 06:00)",
+          "file_count": 25,
+          "archive": {
+            "href": "/s3/archives/13Da17.zip",
+            "size": 3993784702,
+            "checksum": "122062d3ff5ab1fafcfdc67fe471517e3884109183c0c9ed140dc5cc88b1715926d9"
+          },
+          "files": {
+            "count": 26,
+            "sha256": "d31a59a4acf432e6d2dc8e56ee868a7d2dc952a281af22cb97fc94a8824cc6e2"
+          }
+        },
+        {
+          "id": "13Da18",
+          "title": "13Da18 - Deposition (17.06. 06:00)",
+          "file_count": 25,
+          "archive": {
+            "href": "/s3/archives/13Da18.zip",
+            "size": 4120382125,
+            "checksum": "1220c62d58470f8bdb111d693446a2254d4fc5885e951dd8660a50923560b731cce1"
+          },
+          "files": {
+            "count": 26,
+            "sha256": "15a4fd5e5a13a937ba331d44bb7f9067b0dd1eb6b0d9fbd6cb58c27eba19a50f"
+          }
+        },
+        {
+          "id": "13Da19",
+          "title": "13Da19 - Deposition (18.06. 06:00)",
+          "file_count": 25,
+          "archive": {
+            "href": "/s3/archives/13Da19.zip",
+            "size": 4191072008,
+            "checksum": "12204d99ae50dfdceae94d1dd1c9f2853129581f06080a947513810add78821c8416"
+          },
+          "files": {
+            "count": 26,
+            "sha256": "97176cdcebe2c9ed5e14a4f2b3447c63bdd407c1b9dea9c954a2925c8a79c3c2"
+          }
+        },
+        {
+          "id": "13Da20",
+          "title": "13Da20 - Deposition (19.06. 06:00)",
+          "file_count": 25,
+          "archive": {
+            "href": "/s3/archives/13Da20.zip",
+            "size": 4167604047,
+            "checksum": "1220c472be06e086e7d355cd070a2abf2238aa72562345404f00688b3897da523b73"
+          },
+          "files": {
+            "count": 26,
+            "sha256": "54a2dba53a81d61d27bea66bbc6151973fbeaf8211a620dd4d744f66ae22d196"
+          }
+        },
+        {
+          "id": "13Da21",
+          "title": "13Da21 - Deposition (20.06. 06:00)",
+          "file_count": 25,
+          "archive": {
+            "href": "/s3/archives/13Da21.zip",
+            "size": 4127094985,
+            "checksum": "12208d57fa180be5f2cdd3cc73cda2eeed0d681b6ceeea21a138b4232d31ed813c6c"
+          },
+          "files": {
+            "count": 26,
+            "sha256": "3e4ffa60fbb434dfdce10e60dda50d5e820801e33a6bcd337d55fdbe66bea8ff"
+          }
+        },
+        {
+          "id": "13Da22",
+          "title": "13Da22 - Deposition (21.06. 07:00)",
+          "file_count": 25,
+          "archive": {
+            "href": "/s3/archives/13Da22.zip",
+            "size": 4178739295,
+            "checksum": "1220a720e6cebe8bd1cbcf308f5b9232b635fd4862f0bd670e988f3ed1f5ce71ec96"
+          },
+          "files": {
+            "count": 26,
+            "sha256": "b04b8daff7eeff3595d432def67ac0293ac41ba1f56c16f4a43106a638640587"
+          }
+        },
+        {
+          "id": "13Db01",
+          "title": "13Db01 - Rockfall area (24.06. 09:00)",
+          "file_count": 60,
+          "archive": {
+            "href": "/s3/archives/13Db01.zip",
+            "size": 5084490815,
+            "checksum": "1220074dfb1576b9f3c4596e42a92e907c35e3268b3985e77a981281874ecfaf23f4"
+          },
+          "files": {
+            "count": 61,
+            "sha256": "e3b43f1ab3cb0f1daf7011120765b6af7268c987b5265e90e313f14844f10e36"
+          }
+        },
+        {
+          "id": "13Db02",
+          "title": "13Db02 - Rockfall area (26.06. 09:00)",
+          "file_count": 31,
+          "archive": {
+            "href": "/s3/archives/13Db02.zip",
+            "size": 5123619137,
+            "checksum": "12202c48831abe30752bdf0e90aae1d59fd46610a91e5da2ce5bb4aa66020a025431"
+          },
+          "files": {
+            "count": 32,
+            "sha256": "d8a9e66cce71d6842acbe30f8710093c0963543e221fd8abd84adb508d68c747"
+          }
+        },
+        {
+          "id": "13Db03",
+          "title": "13Db03 - Rockfall area (30.06. 07:00)",
+          "file_count": 31,
+          "archive": {
+            "href": "/s3/archives/13Db03.zip",
+            "size": 4956079155,
+            "checksum": "12201c96a5df17e11d8e38aaed038d04e7a1d032555ac9da712795a8fcbaa2b2732a"
+          },
+          "files": {
+            "count": 32,
+            "sha256": "cf3e922665f36b68b9545102e94c9f54a911bba9ffc4a9beb72e230a031445c5"
+          }
+        },
+        {
+          "id": "13Db04",
+          "title": "13Db04 - Rockfall area (04.07. 14:00)",
+          "file_count": 32,
+          "archive": {
+            "href": "/s3/archives/13Db04.zip",
+            "size": 5458626008,
+            "checksum": "122040d6cb7ea5e439ba6f92014a8e0527c3123208d73fb3395bb634af5998c2be34"
+          },
+          "files": {
+            "count": 33,
+            "sha256": "011b6e06c854d417d96efd5d09efa5d87b648e365e0e63283c35f2c998488379"
+          }
+        },
+        {
+          "id": "13Db05",
+          "title": "13Db05 - Rockfall area (09.07. 18:00)",
+          "file_count": 32,
+          "archive": {
+            "href": "/s3/archives/13Db05.zip",
+            "size": 5350647890,
+            "checksum": "12203c871bdf9c0cf0ea081dced7ab418ab057caa99fceeeeb7cfc4523bf27c64c48"
+          },
+          "files": {
+            "count": 33,
+            "sha256": "f0af387214cb623b645e1b10e187102011500bcc396e011e73cdbddc5468519a"
+          }
+        },
+        {
+          "id": "13Db06",
+          "title": "13Db06 - Rockfall area (14.07. 15:00)",
+          "file_count": 32,
+          "archive": {
+            "href": "/s3/archives/13Db06.zip",
+            "size": 5311333086,
+            "checksum": "1220b315db3a148b325a33ce4399f7f9fab9830edbcf1c3d54affb26611f88e1bc89"
+          },
+          "files": {
+            "count": 33,
+            "sha256": "8a7676393b85bed18eb5ed6de4589c96ca1ad6aade61beddf6c63e5837ba5e87"
+          }
+        },
+        {
+          "id": "13Db07",
+          "title": "13Db07 - Rockfall area (23.07. 15:00)",
+          "file_count": 32,
+          "archive": {
+            "href": "/s3/archives/13Db07.zip",
+            "size": 5310902421,
+            "checksum": "12206376d2d56c91f534d4b3a0b21b15455295fae3d6cd91e3d665050bd147d56077"
+          },
+          "files": {
+            "count": 33,
+            "sha256": "e6dacfb5ea0b9d335b4985cf00ef7e1745d74986defbc4ca2ac1f79e9c82a0ee"
+          }
+        },
+        {
+          "id": "13Db08",
+          "title": "13Db08 - Rockfall area (28.07. 14:00)",
+          "file_count": 32,
+          "archive": {
+            "href": "/s3/archives/13Db08.zip",
+            "size": 5256990277,
+            "checksum": "12201f438fe25c1ecd9908930d20b5b149186c1c9836a689aab941e37ce1ceb1b7ed"
+          },
+          "files": {
+            "count": 33,
+            "sha256": "3b268cbeb8828360d17f2bce55b50207730f5e695a8c76a9bc1246fd197b040e"
+          }
+        },
+        {
+          "id": "13Db09",
+          "title": "13Db09 - Rockfall area (04.08. 12:00)",
+          "file_count": 32,
+          "archive": {
+            "href": "/s3/archives/13Db09.zip",
+            "size": 5207103073,
+            "checksum": "1220c13912e9888d20c85a778428202fcc3fd9dfdd618c36fe996863e6e2a30ae526"
+          },
+          "files": {
+            "count": 33,
+            "sha256": "9bb70bb51254b1d14eb3b4b04ad0ab31a5124c2f81376cce253fa491efa18ab6"
+          }
+        },
+        {
+          "id": "13Db10",
+          "title": "13Db10 - Rockfall area (11.08. 13:00)",
+          "file_count": 32,
+          "archive": {
+            "href": "/s3/archives/13Db10.zip",
+            "size": 5496092650,
+            "checksum": "1220e5bb5b92ab09eb8022d7fc762c1a4073bc5ea1451c934761f2c1da1e8cbbe118"
+          },
+          "files": {
+            "count": 33,
+            "sha256": "366a49f5cdc99b9b4da2d282e456d80a882b20ef73ff304511b1d87e1007e4b9"
+          }
+        },
+        {
+          "id": "13Db11",
+          "title": "13Db11 - Rockfall area (18.08.2025 11:00)",
+          "file_count": 33,
+          "archive": {
+            "href": "/s3/archives/13Db11.zip",
+            "size": 5891512932,
+            "checksum": "1220407a0f7ef97697bb4cd686f8211f564deba595bd3220d62cb6f3745fbb07b8ae"
+          },
+          "files": {
+            "count": 34,
+            "sha256": "f63406b2f16365294ac0c1e71ec08f3fc4ebf319fbeb6dcf5ecb89b25d56a4e8"
+          }
+        },
+        {
+          "id": "13Db12",
+          "title": "13Db12 - Rockfall area (27.08.2025 09:00)",
+          "file_count": 33,
+          "archive": {
+            "href": "/s3/archives/13Db12.zip",
+            "size": 5597070416,
+            "checksum": "1220ad5fbbf2262f3170af3cdbc1ecebd436869ded81886ee81266f02a87a8cbaf01"
+          },
+          "files": {
+            "count": 34,
+            "sha256": "5fd731538cbb538917acd92ee7de047e0ca70383adee333a93138a4a496374d9"
+          }
+        },
+        {
+          "id": "13Db13",
+          "title": "13Db13 - Rockfall area (03.09.2025 14:00)",
+          "file_count": 33,
+          "archive": {
+            "href": "/s3/archives/13Db13.zip",
+            "size": 5916367527,
+            "checksum": "12200401e539714d8f2cd1bc2e90c1caeb0c5de45347e9de2b81d1c4ff56df801dab"
+          },
+          "files": {
+            "count": 34,
+            "sha256": "1304339bab4ad19c361a385b2e12521bae75ce3253b863f6d244e27b03bf55dc"
+          }
+        },
+        {
+          "id": "14Da01",
+          "title": "14Da01 - Rockfall area (23.05.)",
+          "file_count": 26,
+          "archive": {
+            "href": "/s3/archives/14Da01.zip",
+            "size": 4292064880,
+            "checksum": "12202d5054194d64a131fb8cba50f75fcd809ce11fbd70fca67481a70e8f520215af"
+          },
+          "files": {
+            "count": 27,
+            "sha256": "9982a358027bdc9b18bc58c55013238e0b666c4de0448066b30297b3ca7e761c"
+          }
+        },
+        {
+          "id": "14Da02",
+          "title": "14Da02 - Rockfall area (29.05.)",
+          "file_count": 42,
+          "archive": {
+            "href": "/s3/archives/14Da02.zip",
+            "size": 7669702021,
+            "checksum": "122021425c8ae27f6a40bcc77b46c6f6a9b83ed54c9268f47701468dbc8f5fc64967"
+          },
+          "files": {
+            "count": 43,
+            "sha256": "f5021b4edee928977c9c9acc5a1577f3a35e56a7d70f4b4228c5786543a67feb"
+          }
+        },
+        {
+          "id": "14Da03",
+          "title": "14Da03 - Rockfall area (10.06.)",
+          "file_count": 118,
+          "archive": {
+            "href": "/s3/archives/14Da03.zip",
+            "size": 10946007082,
+            "checksum": "12207549f5d74f43f37ff1af09c57d661a85279ba7c47482df59b42e35dac077b394"
+          },
+          "files": {
+            "count": 119,
+            "sha256": "07a2d097a6275ae0b8b3f48553c3434fdd23e558cf0de29e18e2889161fc77d6"
+          }
+        }
+      ]
+    },
+    {
+      "id": "point-cloud",
+      "title": "Point Cloud",
+      "items": [
+        {
+          "id": "14Ka01",
+          "title": "14Ka01 - Rockfall area (23.05.2025)",
+          "file_count": 53,
+          "archive": {
+            "href": "/s3/archives/14Ka01.zip",
+            "size": 3483306622,
+            "checksum": "1220270c1b7534ae9de3f10ff7dd7bc723dce7b77513546445d4ef2e1622628824d2"
+          },
+          "files": {
+            "count": 54,
+            "sha256": "e4e76bca925a1e7f25349d257e0fd54d9cd8089c49732622ae463e71151e152f"
+          }
+        },
+        {
+          "id": "14Ka02",
+          "title": "14Ka02 - Rockfall area (29.05.2025)",
+          "file_count": 46,
+          "archive": {
+            "href": "/s3/archives/14Ka02.zip",
+            "size": 9667255788,
+            "checksum": "12203dcf598f70efe4bdd85c9ec48213b2043689d2c1b0c647054a437e82da0f02d2"
+          },
+          "files": {
+            "count": 47,
+            "sha256": "406151e6efb659879c13189793463f98e6edec48f80b432e53152636dc0bd115"
+          }
+        },
+        {
+          "id": "14Ka03",
+          "title": "14Ka03 - Rockfall area (10.06.2025)",
+          "file_count": 54,
+          "archive": {
+            "href": "/s3/archives/14Ka03.zip",
+            "size": 13993121233,
+            "checksum": "12209ac0df2d26b7a5812cac00cbcc7c4ec437d407b616f1753e589e4f46bbeeab77"
+          },
+          "files": {
+            "count": 55,
+            "sha256": "ad416901fd99399c4d5fce6d49d46c18605df97d663e351cd5286be5cee4765c"
+          }
+        }
+      ]
+    },
+    {
+      "id": "radar",
+      "title": "Radar",
+      "items": [
+        {
+          "id": "06Ea01",
+          "title": "06Ea01 - DTM - AIM ShiftedPhase (24h average, 1h interval)",
+          "file_count": 275,
+          "archive": {
+            "href": "/s3/archives/06Ea01.zip",
+            "size": 205516996,
+            "checksum": "12208463b6da368b147a287afce499198c0e7692da759fa0bad60dfe3e6213fc2bc2"
+          },
+          "files": {
+            "count": 276,
+            "sha256": "ad7bc8d48ceec8ceb8bf2cce24eb2c6b23c1ec9264876552e2732289689e3605"
+          }
+        },
+        {
+          "id": "06Ea02",
+          "title": "06Ea02 - DTM - AIM ShiftedPhase (24h average, 3h interval)",
+          "file_count": 245,
+          "archive": {
+            "href": "/s3/archives/06Ea02.zip",
+            "size": 86891172,
+            "checksum": "122094a2b49f57715c651ef3a733d1d064459c7755647387c6a05a33881636337ff7"
+          },
+          "files": {
+            "count": 246,
+            "sha256": "18be0878b9241302c34126597c5e83ed580c299bc227dd798fe9996e2a6201ab"
+          }
+        },
+        {
+          "id": "06Ea03",
+          "title": "06Ea03 - DTM - AIM ShiftedPhase (6h average, 1h interval)",
+          "file_count": 274,
+          "archive": {
+            "href": "/s3/archives/06Ea03.zip",
+            "size": 310301953,
+            "checksum": "1220b123a38aac9926fe7b8967d026f3dd049e40e50e83abf545b6a8dccad3e7d432"
+          },
+          "files": {
+            "count": 275,
+            "sha256": "43a15acf0400b224a2b7729cdc5eaf4aac2977c68bcb484d83207a7bc1a03e78"
+          }
+        },
+        {
+          "id": "06Ea04",
+          "title": "06Ea04 - DTM - AIM ShiftedPhase (6h average, 3h interval)",
+          "file_count": 241,
+          "archive": {
+            "href": "/s3/archives/06Ea04.zip",
+            "size": 91795818,
+            "checksum": "1220c21070201f1b3eb7eadf35df8a237e3d5139a03c2bc27ec453f6cd59321613d2"
+          },
+          "files": {
+            "count": 242,
+            "sha256": "a478727d69827500c19a25219dfa5b4fb0d7ca872ecd063b00b126b5a78ee9d4"
+          }
+        },
+        {
+          "id": "06Eb01",
+          "title": "06Eb01 - DTM - AIM UnwrappedPhase (24h average)",
+          "file_count": 224,
+          "archive": {
+            "href": "/s3/archives/06Eb01.zip",
+            "size": 151741649,
+            "checksum": "122097f99b8856f5aa14542f6c26ef45439f9ff3607db6ace729ea70ecdf4133bd17"
+          },
+          "files": {
+            "count": 225,
+            "sha256": "f61d497c66f5a01a989913db0cc6db34995d63dc2729445c11520b7d2d1eff4e"
+          }
+        },
+        {
+          "id": "06Eb02",
+          "title": "06Eb02 - DTM - AIM UnwrappedPhase (6h average)",
+          "file_count": 220,
+          "archive": {
+            "href": "/s3/archives/06Eb02.zip",
+            "size": 147039107,
+            "checksum": "122072a447f3d4b03987c432cf3a65d3b0e2f8a3c47b6eb81980144ee286e1784718"
+          },
+          "files": {
+            "count": 221,
+            "sha256": "4f98e521a343a7d42f3bd35dabb8f27265dd83ffd2ae57219cd4ad3b1e4f8a39"
+          }
+        },
+        {
+          "id": "06Ed01",
+          "title": "06Ed01 - DTM - Guardian (24h average)",
+          "file_count": 260,
+          "archive": {
+            "href": "/s3/archives/06Ed01.zip",
+            "size": 566196164,
+            "checksum": "12204657da881bfc7ad127c70f19e36d8d101ba75933ab9ce8de8c0bbfaf84de0698"
+          },
+          "files": {
+            "count": 261,
+            "sha256": "e8abf70d940ac0b69e94871efdaefd185280732da1e374a4fd60e105ad1c7c70"
+          }
+        },
+        {
+          "id": "06Fa01",
+          "title": "06Fa01 - Map - AIM ShiftedPhase (24h average, 1h interval)",
+          "file_count": 270,
+          "archive": {
+            "href": "/s3/archives/06Fa01.zip",
+            "size": 219283400,
+            "checksum": "1220c846f5ef2458127ba26823be784c91c2dda387d78ac1f2db9f9eb7b98d55f5c3"
+          },
+          "files": {
+            "count": 271,
+            "sha256": "7ff94290690c3b38f2e8b93aab269da71d8bf20b53e1047f6266897c6b55fb7d"
+          }
+        },
+        {
+          "id": "06Fa02",
+          "title": "06Fa02 - Map - AIM ShiftedPhase (24h average, 3h interval)",
+          "file_count": 245,
+          "archive": {
+            "href": "/s3/archives/06Fa02.zip",
+            "size": 191075031,
+            "checksum": "1220628a13fee9136cc0298a2618655929e94674a0298a19d75eb2adbd6347c5a8b2"
+          },
+          "files": {
+            "count": 246,
+            "sha256": "bc2764f3ab0cf806ee985c403b5b0ad4b744a72879ee8d2ba460a63c1751aee9"
+          }
+        },
+        {
+          "id": "06Fa03",
+          "title": "06Fa03 - Map - AIM ShiftedPhase (6h average, 1h interval)",
+          "file_count": 269,
+          "archive": {
+            "href": "/s3/archives/06Fa03.zip",
+            "size": 230169033,
+            "checksum": "12208fa431de1db50cc729b76834f17461ff38d5b87ee82869b874f87111152aa940"
+          },
+          "files": {
+            "count": 270,
+            "sha256": "04d5c7299aad827d787fc1f20c7b08377ee02bf47fad87b1fcb33ba5b0120260"
+          }
+        },
+        {
+          "id": "06Fa04",
+          "title": "06Fa04 - Map - AIM ShiftedPhase (6h average, 3h interval)",
+          "file_count": 241,
+          "archive": {
+            "href": "/s3/archives/06Fa04.zip",
+            "size": 204487011,
+            "checksum": "1220974d8802dfe631d7f650d3c0eb34bd747fea8196e15d6431c231d1df8b85961d"
+          },
+          "files": {
+            "count": 242,
+            "sha256": "957ef65dc2066056de7cb0005ea25c41e0be8b290da3aaae2ef7a4ae2047e713"
+          }
+        },
+        {
+          "id": "06Fb01",
+          "title": "06Fb01 - Map - AIM UnwrappedPhase (24h average)",
+          "file_count": 219,
+          "archive": {
+            "href": "/s3/archives/06Fb01.zip",
+            "size": 172808742,
+            "checksum": "1220129d10bcb32bec40c8874f15baff89cacbc30a933b7d0e8ede534adeb890aa3a"
+          },
+          "files": {
+            "count": 220,
+            "sha256": "4fc7c674535d923f08ca39f9d72de0f88c4bbfa929cdddc0a5cbb883ecd7d6c9"
+          }
+        },
+        {
+          "id": "06Fb02",
+          "title": "06Fb02 - Map - AIM UnwrappedPhase (6h average)",
+          "file_count": 219,
+          "archive": {
+            "href": "/s3/archives/06Fb02.zip",
+            "size": 188702066,
+            "checksum": "12207e1caab2144fb6868ade775a4a51788b96bd95ef8f18d264b09899269c987e8d"
+          },
+          "files": {
+            "count": 220,
+            "sha256": "5c8b4e4d173954f756ed6bca83506952e41fd8e5aca53e2140a91c2b4a3e5d97"
+          }
+        },
+        {
+          "id": "06Fd01",
+          "title": "06Fd01 - Map - Guardian (24h average)",
+          "file_count": 260,
+          "archive": {
+            "href": "/s3/archives/06Fd01.zip",
+            "size": 229370142,
+            "checksum": "1220b4604ec8c65d14998392194cd492697a1d600de146a9f1574bcec89e9136b68d"
+          },
+          "files": {
+            "count": 261,
+            "sha256": "db85454a2978920337788057040b66f4ecdb83287701cd1ffb7213bda89c8e7f"
+          }
+        },
+        {
+          "id": "06Ga01",
+          "title": "06Ga01 - ESRI - AIM ShiftedPhase (24h average, 1h interval)",
+          "file_count": 270,
+          "archive": {
+            "href": "/s3/archives/06Ga01.zip",
+            "size": 5950288820,
+            "checksum": "122047cbcaf762b1ec9c049c7f3a080c554a019b269833642472769df55549669e9c"
+          },
+          "files": {
+            "count": 271,
+            "sha256": "1e17b129b90ebeda99424bf837f78d696c59d0809d972119ec3e463ce3f46586"
+          }
+        },
+        {
+          "id": "06Ga02",
+          "title": "06Ga02 - ESRI - AIM ShiftedPhase (24h average, 3h interval)",
+          "file_count": 248,
+          "archive": {
+            "href": "/s3/archives/06Ga02.zip",
+            "size": 5319521004,
+            "checksum": "122077e3e76057a011f797cf219e45b8f0f1bfd02db3122fcddd4aa1a755792818df"
+          },
+          "files": {
+            "count": 249,
+            "sha256": "ea5fdebfaf514e42cfede9ec27065b21e81efc10a03716622774ff1cacfa521a"
+          }
+        },
+        {
+          "id": "06Ga03",
+          "title": "06Ga03 - ESRI - AIM ShiftedPhase (6h average, 1h interval)",
+          "file_count": 269,
+          "archive": {
+            "href": "/s3/archives/06Ga03.zip",
+            "size": 5928825675,
+            "checksum": "12200f917dbd0668d19ef70bd850e65ada1ed12b934368d0c742f15b91209595f506"
+          },
+          "files": {
+            "count": 270,
+            "sha256": "d902d41c68ca195e6842539bad5db80339c5f768c8e545caed34475b554e6fcb"
+          }
+        },
+        {
+          "id": "06Ga04",
+          "title": "06Ga04 - ESRI - AIM ShiftedPhase (6h average, 3h interval)",
+          "file_count": 242,
+          "archive": {
+            "href": "/s3/archives/06Ga04.zip",
+            "size": 5190835459,
+            "checksum": "1220c69de168bb9ec20d197be928ff35c4b13d7302c10712a9eb12a44723d6351b3a"
+          },
+          "files": {
+            "count": 243,
+            "sha256": "5d705016b7b881d2a278901e258163fb7022926d63b6ba0231ee02e2f957fa1c"
+          }
+        },
+        {
+          "id": "06Gb01",
+          "title": "06Gb01 - ESRI - AIM UnwrappedPhase (24h average)",
+          "file_count": 219,
+          "archive": {
+            "href": "/s3/archives/06Gb01.zip",
+            "size": 4854422418,
+            "checksum": "122022f707e4194a613502df95fa66cac8a31cf75bcdb9288dbf18f726e552729186"
+          },
+          "files": {
+            "count": 220,
+            "sha256": "afbfb736fa238d1467b627bfce8dce01cac55240fee3892c0ac72e1563adf35e"
+          }
+        },
+        {
+          "id": "06Gb02",
+          "title": "06Gb02 - ESRI - AIM UnwrappedPhase (6h average)",
+          "file_count": 219,
+          "archive": {
+            "href": "/s3/archives/06Gb02.zip",
+            "size": 4850364946,
+            "checksum": "122060ee2dabcea85c6d6db87a6144e6b9c52faf2658205c47d628f188fc668ba42c"
+          },
+          "files": {
+            "count": 220,
+            "sha256": "0312cedeb21a985129d8cf5c8e5c6329b072dc728f11629565670a4a690365f0"
+          }
+        },
+        {
+          "id": "06Gd01",
+          "title": "06Gd01 - ESRI - Guardian (24h average)",
+          "file_count": 264,
+          "archive": {
+            "href": "/s3/archives/06Gd01.zip",
+            "size": 4223396247,
+            "checksum": "122031c66c337c348d607ff2b35b0733356e9ec25330d6dd1cea0e19456409dbc304"
+          },
+          "files": {
+            "count": 265,
+            "sha256": "ecee072f07ead4348e1d018d480dd9cf5e44c03a1241f8cb9b83dba0b5ce2b4c"
+          }
+        },
+        {
+          "id": "06Ha01",
+          "title": "06Ha01 - ROI Zones - AIM ShiftedPhase (24h average)",
+          "file_count": 3,
+          "archive": {
+            "href": "/s3/archives/06Ha01.zip",
+            "size": 858339,
+            "checksum": "122034b587556e05d0697c791ff146274f7a2a8c62011a6f33247cbdfcd7212dc57a"
+          },
+          "files": {
+            "count": 4,
+            "sha256": "1e49946e6a4ee11eb92c3ab70205b13050d5b66894cf162cef140b27b5f68d34"
+          }
+        },
+        {
+          "id": "06Ha02",
+          "title": "06Ha02 - ROI Zones - AIM ShiftedPhase (6h average)",
+          "file_count": 3,
+          "archive": {
+            "href": "/s3/archives/06Ha02.zip",
+            "size": 847570,
+            "checksum": "1220dcab860ac8a55464116d6f8e60119c9e90bc4964eb204891d25d9d04a620188e"
+          },
+          "files": {
+            "count": 4,
+            "sha256": "6748ae828e7d1b88b26cb28fc1214e5c5078c172a59a78ac1948aa219caf7adb"
+          }
+        },
+        {
+          "id": "06Hb01",
+          "title": "06Hb01 - ROI Zones - AIM UnwrappedPhase (24h average)",
+          "file_count": 3,
+          "archive": {
+            "href": "/s3/archives/06Hb01.zip",
+            "size": 763426,
+            "checksum": "1220e1cd97daf823a47c15b8f2839f7447f0dae767851159346efe77af4aff2650fc"
+          },
+          "files": {
+            "count": 4,
+            "sha256": "210d4fb4d7641e5e756a82b5a7c8aa99a0b648ecfc29207086565aa4ea0c0020"
+          }
+        },
+        {
+          "id": "06Hd01",
+          "title": "06Hd01 - ROI Zones - Guardian (24h average)",
+          "file_count": 1,
+          "archive": {
+            "href": "/s3/archives/06Hd01.zip",
+            "size": 649006,
+            "checksum": "1220dc90d3b72c3bb7e089a0b8ef5b7bc17e37dce9f49b74dd3c39b71411198101e1"
+          },
+          "files": {
+            "count": 2,
+            "sha256": "53fc96ec89d6502ee9171b65f8366c0e3720ecfe52f2d32f74bca15ff796a994"
+          }
+        },
+        {
+          "id": "06Ua01",
+          "title": "06Ua01 - AIM ShiftedPhase (100 interferograms average)",
+          "file_count": 3882,
+          "archive": {
+            "href": "/s3/archives/06Ua01.zip",
+            "size": 2116933164,
+            "checksum": "12209c895eb39a152b6701b824f8f93d2afba71d48da04e3a54d7d21c2b794f2d158"
+          },
+          "files": {
+            "count": 3883,
+            "sha256": "10ef40ea25c8bd0b408dd15569113ccdc71ec573fef85a78e20c535026ffb004"
+          }
+        },
+        {
+          "id": "06Ub01",
+          "title": "06Ub01 - AIM UnwrappedPhase (100 interferograms average)",
+          "file_count": 875,
+          "archive": {
+            "href": "/s3/archives/06Ub01.zip",
+            "size": 498007472,
+            "checksum": "1220f3e4f52725dfaa15fbb9661228782300adbc28df222a49ff00600060ddb2c4a5"
+          },
+          "files": {
+            "count": 876,
+            "sha256": "827ffff6001505894f1dee5a13970b4c9aacd4357b6d02bc75689a1c27e70f3c"
+          }
+        },
+        {
+          "id": "06Uf00",
+          "title": "06Uf00 - GBIR (All GBIR Interferograms)",
+          "file_count": 1233,
+          "archive": {
+            "href": "/s3/archives/06Uf00.zip",
+            "size": 357611921,
+            "checksum": "1220a71c7b47a1dea0ab1284636ada0eee5b385c5f1c36b714577d61f1896d97f4f9"
+          },
+          "files": {
+            "count": 1234,
+            "sha256": "2584cce5dc2ecc44dfe0ad4576db942c07b1fe6d27e0a5a4772dc2e084de0bce"
+          }
+        },
+        {
+          "id": "06Uf01",
+          "title": "06Uf01 - GBIR (1h interval, pre-collapse)",
+          "file_count": 208,
+          "archive": {
+            "href": "/s3/archives/06Uf01.zip",
+            "size": 58278283,
+            "checksum": "1220ab0517dfb285669a6a70c732b2afa3c8d817c07e3e86e4cbf3d86fbac0319a99"
+          },
+          "files": {
+            "count": 209,
+            "sha256": "50d91aa74f6a08b76e8c7a63a309822f51da62627f30bc20be8e8aeadcd2727e"
+          }
+        },
+        {
+          "id": "06Uf02",
+          "title": "06Uf02 - GBIR (1min interval)",
+          "file_count": 297,
+          "archive": {
+            "href": "/s3/archives/06Uf02.zip",
+            "size": 87935989,
+            "checksum": "1220ecf8dd7d9ce46eddc5d376a2a65d8215c995cc58f2cdf3b355755c5e703aee3f"
+          },
+          "files": {
+            "count": 298,
+            "sha256": "d0e62f740a4da899f5458f035d32b5b9372ad394e5505c892bdb67ccd484b0c2"
+          }
+        },
+        {
+          "id": "06Uf03",
+          "title": "06Uf03 - GBIR (1h interval, post-collapse)",
+          "file_count": 727,
+          "archive": {
+            "href": "/s3/archives/06Uf03.zip",
+            "size": 208736697,
+            "checksum": "122010a61be77aeebb13ce17582f800e01c4411aaa3b4fb2452184e14e1aebc58279"
+          },
+          "files": {
+            "count": 728,
+            "sha256": "667d58b52b5052c94bdc4a3eddc0c9309fe3ed6bc1b8fc512282d57bc13d274b"
+          }
+        },
+        {
+          "id": "06Vf01",
+          "title": "06Vf01 - GBIR (1h interval)",
+          "file_count": 997,
+          "archive": {
+            "href": "/s3/archives/06Vf01.zip",
+            "size": 885270193,
+            "checksum": "122001b0f763c6e97067210dd0c3ebe389d6d6e2db814ca67a2edf83ac29a9ed53bc"
+          },
+          "files": {
+            "count": 998,
+            "sha256": "0fc492e0647c1d6785265d94e8268a2697b881764d9c7a50b218054921f3f340"
+          }
+        }
+      ]
+    },
+    {
+      "id": "thermal-image",
+      "title": "Thermal Image",
+      "items": [
+        {
+          "id": "14Na01",
+          "title": "14Na01 - Deposition (10.06. 09:00)",
+          "file_count": 2,
+          "archive": {
+            "href": "/s3/archives/14Na01.zip",
+            "size": 190801238,
+            "checksum": "1220bfa3aeaf08a63f5795db61c4b7049f23f4900fbae1d3c68700e838921edb42da"
+          },
+          "files": {
+            "count": 3,
+            "sha256": "f4580b3ea09c12241dfec01d1121a261828061447ca45758f9ab6994a5cc6a47"
+          }
+        }
+      ]
+    },
+    {
+      "id": "webcam-image",
+      "title": "Webcam Image",
+      "items": [
+        {
+          "id": "01Aa00",
+          "title": "01Aa00 - Overview (All Frames)",
+          "file_count": 5020,
+          "archive": {
+            "href": "/s3/archives/01Aa00.zip",
+            "size": 9255634092,
+            "checksum": "12208276b5cec3002f85cd8710940869e0b243ee27676bc873fe746f787ddaddfa85"
+          },
+          "files": {
+            "count": 5021,
+            "sha256": "6b0ebfa5088f0db7628dac780f5607b434b0b69f4b843c1467a3fef75e0af377"
+          }
+        },
+        {
+          "id": "01Aa01",
+          "title": "01Aa01 - Overview (Phase 1 - 2x/d)",
+          "file_count": 4079,
+          "archive": {
+            "href": "/s3/archives/01Aa01.zip",
+            "size": 7323207670,
+            "checksum": "1220db5aaf30c534e1ed8c103c6913358027c3e87ac13aa4c8734af6fb5047ea7349"
+          },
+          "files": {
+            "count": 4080,
+            "sha256": "977f0a447a1d70c0c82fbf80c41ea3e89a0cea74a23988e83fc11d81762d83f1"
+          }
+        },
+        {
+          "id": "01Aa02",
+          "title": "01Aa02 - Overview (Phase 2 - 2h interval)",
+          "file_count": 22,
+          "archive": {
+            "href": "/s3/archives/01Aa02.zip",
+            "size": 40383194,
+            "checksum": "1220bdae2dc051350d5824fbd0e7035828d10f2616aef5ab2cab4436564e08474743"
+          },
+          "files": {
+            "count": 23,
+            "sha256": "59d9c599844624a19bad1ffab232c38040c54af5e6632ccfdccb875f8c84d38b"
+          }
+        },
+        {
+          "id": "01Aa03",
+          "title": "01Aa03 - Overview (Phase 2-4 - 30min interval)",
+          "file_count": 918,
+          "archive": {
+            "href": "/s3/archives/01Aa03.zip",
+            "size": 1669282694,
+            "checksum": "12201cb7f074f03398d8fcd401abaf023c85ce41c03103c02808b4423755d3af3eb8"
+          },
+          "files": {
+            "count": 919,
+            "sha256": "ee7ecd6056ca48b7aaddc2beebaa2077016afe4be4fd78c3a55e82962e197c30"
+          }
+        },
+        {
+          "id": "01Ab00",
+          "title": "01Ab00 - Zoom: Upper Birchgletscher (All Frames)",
+          "file_count": 3208,
+          "archive": {
+            "href": "/s3/archives/01Ab00.zip",
+            "size": 5523891053,
+            "checksum": "1220d219597616760f53adb3e102a55a0f6d799319888609bd248fc4c1819c29c7a1"
+          },
+          "files": {
+            "count": 3209,
+            "sha256": "e9c6564996f6497fd582cfc0052b42c61851cda9dfea2c1f95c78a4a72cae44b"
+          }
+        },
+        {
+          "id": "01Ab01",
+          "title": "01Ab01 - Zoom: Upper Birchgletscher (Phase 1 - 2x/d)",
+          "file_count": 2799,
+          "archive": {
+            "href": "/s3/archives/01Ab01.zip",
+            "size": 4789416031,
+            "checksum": "12203b6c33f344de42346c5a0fd1492ed26abeedd40db48d5af3f5cf405f4cacd9cc"
+          },
+          "files": {
+            "count": 2800,
+            "sha256": "6f3a79c47622235c3e35edccc815da971da156aa9728acde475688855a166b77"
+          }
+        },
+        {
+          "id": "01Ab02",
+          "title": "01Ab02 - Zoom: Upper Birchgletscher (Phase 2 - 2h interval)",
+          "file_count": 22,
+          "archive": {
+            "href": "/s3/archives/01Ab02.zip",
+            "size": 38391456,
+            "checksum": "12209818429394e2a3a46ada28003a7c1c8b6c1c10781d94869852e815a9b613cf3c"
+          },
+          "files": {
+            "count": 23,
+            "sha256": "48bf1c2848526d90e54adfc219ac2fca8340888b549e96a1c3bb06c46bdfcbfa"
+          }
+        },
+        {
+          "id": "01Ab03",
+          "title": "01Ab03 - Zoom: Upper Birchgletscher (Phase 2-4 - 30min interval)",
+          "file_count": 12,
+          "archive": {
+            "href": "/s3/archives/01Ab03.zip",
+            "size": 19122768,
+            "checksum": "1220323ae0f1b12062074a448d92ea238afc209a292ff0baddbec854935905b8f63b"
+          },
+          "files": {
+            "count": 13,
+            "sha256": "0fb87a944a8016e2bf6f35c23ea88b31e45a5480db55343a9ea3b5132d4505a3"
+          }
+        },
+        {
+          "id": "01Ab04",
+          "title": "01Ab04 - Zoom: Upper Birchgletscher (Phase 2-4 - 3x/d)",
+          "file_count": 375,
+          "archive": {
+            "href": "/s3/archives/01Ab04.zip",
+            "size": 678899434,
+            "checksum": "122029cd3c2613b7999cfc452ef684598aebcd6f328477c402788f47e0cb02129fae"
+          },
+          "files": {
+            "count": 376,
+            "sha256": "2d7d81ca866c5eceea8e876ed715012328f1e8338a4943fa965eb59b5565f694"
+          }
+        },
+        {
+          "id": "02Aa00",
+          "title": "02Aa00 - Overview (All Frames)",
+          "file_count": 1568,
+          "archive": {
+            "href": "/s3/archives/02Aa00.zip",
+            "size": 588233777,
+            "checksum": "1220fbe2fd6abb89308609eca31aab2ad5fb5cf84ae6a27e485f773ca768c1ab2f0e"
+          },
+          "files": {
+            "count": 1569,
+            "sha256": "b9b393507423af1e978074f291c49c2ca8392d6782e976ded3ad256dbf00fe84"
+          }
+        },
+        {
+          "id": "02Aa01",
+          "title": "02Aa01 - Overview (Phase 1-3, 4-5x/d)",
+          "file_count": 762,
+          "archive": {
+            "href": "/s3/archives/02Aa01.zip",
+            "size": 302151837,
+            "checksum": "1220b480596af004b98a0572c007a87c11364251a9b256766ab78de6b2ec379e8cc3"
+          },
+          "files": {
+            "count": 763,
+            "sha256": "01cd75f591c976dce0fd95a10921241e1fa8d065a1475aa2a78edd12ef8790b9"
+          }
+        },
+        {
+          "id": "02Aa02",
+          "title": "02Aa02 - Overview (Phase 3 - 1h interval)",
+          "file_count": 300,
+          "archive": {
+            "href": "/s3/archives/02Aa02.zip",
+            "size": 117415768,
+            "checksum": "122036a468714ca1a64e0eba6a51642563daa1815dc18cf9a35d444500fa3c7ebf16"
+          },
+          "files": {
+            "count": 301,
+            "sha256": "f70b22cf361fc5cfa4aaf4980aa43fd921818c87430131a97056e21157324032"
+          }
+        },
+        {
+          "id": "02Aa03",
+          "title": "02Aa03 - Overview (Phase 4, 4x/d)",
+          "file_count": 505,
+          "archive": {
+            "href": "/s3/archives/02Aa03.zip",
+            "size": 158442787,
+            "checksum": "12206d326d8765811fa67b2442864d652d3d0f96f6847178b6d93fcfae448114eab0"
+          },
+          "files": {
+            "count": 506,
+            "sha256": "3602c81fff4e6dec8bccfff0be9d370afe2c27f485dd51cb2a26ef2d747d674d"
+          }
+        },
+        {
+          "id": "02Ab00",
+          "title": "02Ab00 - Birchgletscher (All Frames)",
+          "file_count": 1518,
+          "archive": {
+            "href": "/s3/archives/02Ab00.zip",
+            "size": 650745452,
+            "checksum": "122073360568c82f15566c37a1302706b60068da74d900aa6c0503a0cd50b8db51a3"
+          },
+          "files": {
+            "count": 1519,
+            "sha256": "215c8b66450e9fd8980b0a2c546da999e5f7f518490e30bc95f671ae9615914c"
+          }
+        },
+        {
+          "id": "02Ab01",
+          "title": "02Ab01 - Birchgletscher (Phase 1-3, 4-5x/d)",
+          "file_count": 713,
+          "archive": {
+            "href": "/s3/archives/02Ab01.zip",
+            "size": 292008359,
+            "checksum": "12203f230aacb93f142ad6ae605dc1ec9a51de9c758f8b444e969efe79ec10bfdbec"
+          },
+          "files": {
+            "count": 714,
+            "sha256": "0b5744d83b37a488dd5a3e1f2d31885dff7323d6b304d707b7f67811d459f97b"
+          }
+        },
+        {
+          "id": "02Ab02",
+          "title": "02Ab02 - Birchgletscher (Phase 3 - 1h interval)",
+          "file_count": 300,
+          "archive": {
+            "href": "/s3/archives/02Ab02.zip",
+            "size": 149620162,
+            "checksum": "1220a740f8918f11a944be068f8f54a8bc0d2942c7f2d923b91dc99815b9d740fcfd"
+          },
+          "files": {
+            "count": 301,
+            "sha256": "11db4b55ed177fdf3f5042cbd971cd3aa4650dc575beb3f737c48a34ef07c3fb"
+          }
+        },
+        {
+          "id": "02Ab03",
+          "title": "02Ab03 - Birchgletscher (Phase 4 - 4x/d)",
+          "file_count": 505,
+          "archive": {
+            "href": "/s3/archives/02Ab03.zip",
+            "size": 212611297,
+            "checksum": "122033e411c63e91e44671f085767c45ab6dfe5b6d320d8c1d3c9dbab78c134766b8"
+          },
+          "files": {
+            "count": 506,
+            "sha256": "37abaa9d2b287fb74daca23482ee41965e0b322507fcdbf6c08fe64cab3b0c3f"
+          }
+        },
+        {
+          "id": "02Ac00",
+          "title": "02Ac00 - Upper Birchgletscher (All Frames)",
+          "file_count": 1517,
+          "archive": {
+            "href": "/s3/archives/02Ac00.zip",
+            "size": 543988090,
+            "checksum": "1220cac5370f4b8629fefc43d66967b2a9e07b5b2e1ae6e2ed636f19297c750bea6d"
+          },
+          "files": {
+            "count": 1518,
+            "sha256": "2bd959d23e823bbc8ad4d19d2f7887481d35be33679da53efca19e5b32cd6a9a"
+          }
+        },
+        {
+          "id": "02Ac01",
+          "title": "02Ac01 - Upper Birchgletscher (Phase 1-3, 4-5x/d)",
+          "file_count": 713,
+          "archive": {
+            "href": "/s3/archives/02Ac01.zip",
+            "size": 221264508,
+            "checksum": "1220c5b474d1f237f31bf396a466866177a1e13b7095c17c32dfe9f2b3d6deaa83fe"
+          },
+          "files": {
+            "count": 714,
+            "sha256": "359d62f05a6fce50e90b0619b3fdb4327c9eef4f939cb309b3fbe2c840ff1f61"
+          }
+        },
+        {
+          "id": "02Ac02",
+          "title": "02Ac02 - Upper Birchgletscher (Phase 3, 1h interval)",
+          "file_count": 298,
+          "archive": {
+            "href": "/s3/archives/02Ac02.zip",
+            "size": 106344828,
+            "checksum": "1220abcd0b200c707bef00e4289939ea382c9319e522b5def49badb2b9a1926a333a"
+          },
+          "files": {
+            "count": 299,
+            "sha256": "cc6639ea25cd3ba6bfbd75b73132160387a5e3d89bb4b48597556fd24005670f"
+          }
+        },
+        {
+          "id": "02Ac03",
+          "title": "02Ac03 - Upper Birchgletscher (Phase 4 - 4x/d)",
+          "file_count": 505,
+          "archive": {
+            "href": "/s3/archives/02Ac03.zip",
+            "size": 150950856,
+            "checksum": "1220c2adc40a92cb46086a7959e54705621ebabf33088d7915b8e06d802bbcf017e2"
+          },
+          "files": {
+            "count": 506,
+            "sha256": "fae3797f2094b4690c5a08fd420c1d643ca66c224504c6f0416993a2c9fa6ca0"
+          }
+        },
+        {
+          "id": "02Ad00",
+          "title": "02Ad00 - Lower Birchgletscher (All Frames)",
+          "file_count": 1516,
+          "archive": {
+            "href": "/s3/archives/02Ad00.zip",
+            "size": 691874815,
+            "checksum": "12203caa7d4883e7fb362223d63b1bf0dde4401245ae4ec1b16a9b2dd410198a8d7b"
+          },
+          "files": {
+            "count": 1517,
+            "sha256": "b4afa2333e22df0ee94d98002a0203254b8e96ec52070c11a521f236acf2e772"
+          }
+        },
+        {
+          "id": "02Ad01",
+          "title": "02Ad01 - Lower Birchgletscher (Phase 1-3, 4-5x/d)",
+          "file_count": 712,
+          "archive": {
+            "href": "/s3/archives/02Ad01.zip",
+            "size": 225243009,
+            "checksum": "1220c6cc05a2986eecfe73904f6406e3147f897e90b0a04163a4c3783a478a2b44df"
+          },
+          "files": {
+            "count": 713,
+            "sha256": "0fa32964b0a38fbd583dcdf6090b324e60639cd917f44b74aec9d4e7fc3a583c"
+          }
+        },
+        {
+          "id": "02Ad02",
+          "title": "02Ad02 - Lower Birchgletscher (Phase 3, 1h interval)",
+          "file_count": 298,
+          "archive": {
+            "href": "/s3/archives/02Ad02.zip",
+            "size": 149990258,
+            "checksum": "1220b27527d02e42e82dd5d5ac211b49045aaf60e950d4830644c577b563ff4e367b"
+          },
+          "files": {
+            "count": 299,
+            "sha256": "e2f34e2f474619bd2bb829616c8601e92b5ddfdfae279440bfd5db40f99a3989"
+          }
+        },
+        {
+          "id": "02Ad03",
+          "title": "02Ad03 - Lower Birchgletscher (Phase 4 - 4x/d)",
+          "file_count": 505,
+          "archive": {
+            "href": "/s3/archives/02Ad03.zip",
+            "size": 226345286,
+            "checksum": "12208ebfd1cc6bee7e08a73012637716affd87491734e3dbafb6779ff49038ad7e54"
+          },
+          "files": {
+            "count": 506,
+            "sha256": "a7a82e42f76e4e4222daa5c05312a37493130503301471a2afbe41bdd2ad7c62"
+          }
+        },
+        {
+          "id": "02Ae00",
+          "title": "02Ae00 - Nestgletscher (All Frames)",
+          "file_count": 1516,
+          "archive": {
+            "href": "/s3/archives/02Ae00.zip",
+            "size": 666675628,
+            "checksum": "122048a308394da0e556be4366e834f77b6cd1f2fb4dbd6d76177e4ebb39e112e247"
+          },
+          "files": {
+            "count": 1517,
+            "sha256": "4a1d156cfe53854e97a2cfc1f374f363508cd285bbf7e6b65b8cef8746e93e87"
+          }
+        },
+        {
+          "id": "02Ae01",
+          "title": "02Ae01 - Nestgletscher (Phase 1-3, 4-5x/d)",
+          "file_count": 713,
+          "archive": {
+            "href": "/s3/archives/02Ae01.zip",
+            "size": 289709533,
+            "checksum": "12209f1cd7f79c1994039cba088c874a17bc26505f2264a5fd81eb9548f55df6373c"
+          },
+          "files": {
+            "count": 714,
+            "sha256": "b410c050361ec4b854630df37f95e6111b46f19f6e1fdb633b50f853623395eb"
+          }
+        },
+        {
+          "id": "02Ae02",
+          "title": "02Ae02 - Nestgletscher (Phase 3, 1h interval)",
+          "file_count": 298,
+          "archive": {
+            "href": "/s3/archives/02Ae02.zip",
+            "size": 164383061,
+            "checksum": "1220b95b93b25246368cbc936701ce4e6f8685b919e79c365560b28fbd1e0bfa4b4f"
+          },
+          "files": {
+            "count": 299,
+            "sha256": "f7f9f212679ef0a0cd29c2cc9e047c84772ae4dd3434e3391404de6165dc947a"
+          }
+        },
+        {
+          "id": "02Ae03",
+          "title": "02Ae03 - Nestgletscher (Phase 4 - 4x/d)",
+          "file_count": 505,
+          "archive": {
+            "href": "/s3/archives/02Ae03.zip",
+            "size": 216080644,
+            "checksum": "12205edf0697eb267e88a213697f507b8930add5226eb7179b111ad961892e295b09"
+          },
+          "files": {
+            "count": 506,
+            "sha256": "f6690b2cdbb78d9e2275cadfcf1e642b842beb3f65f81b198192864cf0960137"
+          }
+        },
+        {
+          "id": "02Af00",
+          "title": "02Af00 - Kleines Nesthorn (All Frames)",
+          "file_count": 907,
+          "archive": {
+            "href": "/s3/archives/02Af00.zip",
+            "size": 486774366,
+            "checksum": "12202aaa3b980470d1ba2d462453a6da7caf165943b26dcabf269019917cda175513"
+          },
+          "files": {
+            "count": 908,
+            "sha256": "c30e4b1e7c07e5950925d40798ff03be85c5a8269563db3cd55abca26a30729b"
+          }
+        },
+        {
+          "id": "02Af01",
+          "title": "02Af01 - Kleines Nesthorn (Phase 1-3, 4x/d)",
+          "file_count": 103,
+          "archive": {
+            "href": "/s3/archives/02Af01.zip",
+            "size": 42329992,
+            "checksum": "122014ac682a4262eba444fba4b8ee7fe15d15e0f2351b88fac6e3909f98147bbee7"
+          },
+          "files": {
+            "count": 104,
+            "sha256": "4f09cc7c15b2b67930a8b6f14d6f07de784af4db2c931d9c1ddf130d35de404c"
+          }
+        },
+        {
+          "id": "02Af02",
+          "title": "02Af02 - Kleines Nesthorn (Phase 3, 1h interval)",
+          "file_count": 298,
+          "archive": {
+            "href": "/s3/archives/02Af02.zip",
+            "size": 145833012,
+            "checksum": "1220247cce2b37f8bd952171f03ef1e855a06927a4be083cbf82afd05a930d006d0a"
+          },
+          "files": {
+            "count": 299,
+            "sha256": "d4ecacb10e94e9e111214a2cc0879f4846e84054d92d4ff937fc3558e2e29064"
+          }
+        },
+        {
+          "id": "02Af03",
+          "title": "02Af03 - Kleines Nesthorn (Phase 4 - 4x/d)",
+          "file_count": 505,
+          "archive": {
+            "href": "/s3/archives/02Af03.zip",
+            "size": 193372308,
+            "checksum": "12200137dd532fab382109d4f41b26025f6fa8c7a908b1a05294c4dfbaf57bbd924e"
+          },
+          "files": {
+            "count": 506,
+            "sha256": "0c5e1873e187e9ae7344306ab3aa7251c907714700a63c2adc13dc50de56f244"
+          }
+        },
+        {
+          "id": "02Ag00",
+          "title": "02Ag00 - Lower Birchgletscher - Left (All Frames)",
+          "file_count": 868,
+          "archive": {
+            "href": "/s3/archives/02Ag00.zip",
+            "size": 425096255,
+            "checksum": "122047c18a5fe00a77ff71268b4fc3e6c1f3b9bf4c3dda3c0193919b3c8800369279"
+          },
+          "files": {
+            "count": 869,
+            "sha256": "93a67b4f667f912aa25e08b7298f460b5b72dbc52306582a9d2afd415dc8a0b5"
+          }
+        },
+        {
+          "id": "02Ag01",
+          "title": "02Ag01 - Lower Birchgletscher - Left (Phase 2-3, 4x/d)",
+          "file_count": 65,
+          "archive": {
+            "href": "/s3/archives/02Ag01.zip",
+            "size": 33798007,
+            "checksum": "1220ad713eb6f91178db5437f94974dbc68518c73af817d5984d46faafd095592ace"
+          },
+          "files": {
+            "count": 66,
+            "sha256": "db00c59abce3db207812f0703b42fff5a91da5ed971f2d09cc717ad6d1b38c32"
+          }
+        },
+        {
+          "id": "02Ag02",
+          "title": "02Ag02 - Lower Birchgletscher - Left (Phase 3, 1h interval)",
+          "file_count": 298,
+          "archive": {
+            "href": "/s3/archives/02Ag02.zip",
+            "size": 155250001,
+            "checksum": "1220eb55c7c30245f3fe7a8afe209579a82e5db55bbe04d320ba43297b9fbae31d58"
+          },
+          "files": {
+            "count": 299,
+            "sha256": "86d5a5bbd95b02f8b5875c8468b3c6ac790a10de3cc6b624d27a66a24f6de71d"
+          }
+        },
+        {
+          "id": "02Ag03",
+          "title": "02Ag03 - Lower Birchgletscher - Left (Phase 4 - 4x/d)",
+          "file_count": 505,
+          "archive": {
+            "href": "/s3/archives/02Ag03.zip",
+            "size": 239585049,
+            "checksum": "122079f858bc572192d391c499b3af031e442f698957330960b941caf006bd3e43e4"
+          },
+          "files": {
+            "count": 506,
+            "sha256": "a3c1a0fab5bd5622a1020bb8ddaceb7eb30120be2445e40e56f5bb44a5225fff"
+          }
+        },
+        {
+          "id": "02Ah00",
+          "title": "02Ah00 - Birchbach - Channel (All Frames)",
+          "file_count": 869,
+          "archive": {
+            "href": "/s3/archives/02Ah00.zip",
+            "size": 382694565,
+            "checksum": "12207c6a6d2b516dc5fd96cf600ce0f2c7965e08bde8e74d7c93c14ff519857e1885"
+          },
+          "files": {
+            "count": 870,
+            "sha256": "0d9f1365f39a64f31b5619655600f0d0203f0398d73c2bf17b8f610c610e6b6d"
+          }
+        },
+        {
+          "id": "02Ah01",
+          "title": "02Ah01 - Birchbach - Channel (Phase 2-3, 4x/d)",
+          "file_count": 63,
+          "archive": {
+            "href": "/s3/archives/02Ah01.zip",
+            "size": 31625045,
+            "checksum": "122042ecbf35f18c9df6aedc9958ea8d9f67e02c6e27a77f207e2f44f76d7a8f7eaa"
+          },
+          "files": {
+            "count": 64,
+            "sha256": "35b9af81922784eea89e1e5bf47ebce4207e4203bc62aad6214069cc717338ef"
+          }
+        },
+        {
+          "id": "02Ah02",
+          "title": "02Ah02 - Birchbach - Channel (Phase 3, 1h interval)",
+          "file_count": 300,
+          "archive": {
+            "href": "/s3/archives/02Ah02.zip",
+            "size": 143376403,
+            "checksum": "1220507427993e8dcabf445720b22f25ccbb8456386f72fdae7e5ba2da778621190e"
+          },
+          "files": {
+            "count": 301,
+            "sha256": "b093e475adf64e4af0ad650272b0a8b8a8166e4507e3db7ed4f8945737507e04"
+          }
+        },
+        {
+          "id": "02Ah03",
+          "title": "02Ah03 - Birchbach - Channel (Phase 4 - 4x/d)",
+          "file_count": 506,
+          "archive": {
+            "href": "/s3/archives/02Ah03.zip",
+            "size": 211243803,
+            "checksum": "12202fbfca4411f83c1ab6aaca029f2ea8cbc6e5fe81b6abd9ebd14ca46a0a4c61f8"
+          },
+          "files": {
+            "count": 507,
+            "sha256": "4fc2f2f1f6c2e6d6316d0c37b01edffc69b12dd17e5edac729b36b8ebc0d1056"
+          }
+        },
+        {
+          "id": "02Ai00",
+          "title": "02Ai00 - Kleines Nesthorn - Central (All Frames)",
+          "file_count": 742,
+          "archive": {
+            "href": "/s3/archives/02Ai00.zip",
+            "size": 321399237,
+            "checksum": "12202b7796077be4f935070c33ab84807dc7783448584c22fcb37303dc5dbdc9c95f"
+          },
+          "files": {
+            "count": 743,
+            "sha256": "4a7c3749b014e20e66f0a5fbb9fdf4616dfcc7f75db830b973bedda774d1d614"
+          }
+        },
+        {
+          "id": "02Ai01",
+          "title": "02Ai01 - Kleines Nesthorn - Central (Phase 3, 1h interval)",
+          "file_count": 237,
+          "archive": {
+            "href": "/s3/archives/02Ai01.zip",
+            "size": 117960418,
+            "checksum": "12202bba3f773337afbd215587115dbd8a64b5e20ed1bb8bc1db1bd36243d6b4bb3b"
+          },
+          "files": {
+            "count": 238,
+            "sha256": "2163e7ee3b3b1748bc86d465398039b8253970aafdcb46dfcea8c52e731a3715"
+          }
+        },
+        {
+          "id": "02Ai02",
+          "title": "02Ai02 - Kleines Nesthorn - Central (Phase 4 - 4x/d)",
+          "file_count": 505,
+          "archive": {
+            "href": "/s3/archives/02Ai02.zip",
+            "size": 205172716,
+            "checksum": "1220f76fda74070619347ee01450eca36c50a7b7801eafff9d176b3aa292de2f3623"
+          },
+          "files": {
+            "count": 506,
+            "sha256": "9a0bdc8839aaefca04d78f76861a62415de1145b012bbf83e234186db7d84e50"
+          }
+        },
+        {
+          "id": "02Aj00",
+          "title": "02Aj00 - Nestgletscher - Middle (All Frames)",
+          "file_count": 743,
+          "archive": {
+            "href": "/s3/archives/02Aj00.zip",
+            "size": 344416231,
+            "checksum": "12200c12e9d84197e5da674754e6d1352548f320f3885a7e2e59e6c000fb0b2a7c00"
+          },
+          "files": {
+            "count": 744,
+            "sha256": "8daa8db5252d42f133c0a5b9be833d0c6c1dcddd7f9259fd2aa01bcc763085f9"
+          }
+        },
+        {
+          "id": "02Aj01",
+          "title": "02Aj01 - Nestgletscher - Middle (Phase 3, 1h interval)",
+          "file_count": 238,
+          "archive": {
+            "href": "/s3/archives/02Aj01.zip",
+            "size": 126602045,
+            "checksum": "122041ecf1bfeec3c24f1f12309fd0a5923ee4cf7957ef2d32c85a58d9e974641d8b"
+          },
+          "files": {
+            "count": 239,
+            "sha256": "5647727b5cf100f449620de67e066f11a8b2b910f9ba017e5c21a8a19e546019"
+          }
+        },
+        {
+          "id": "02Aj02",
+          "title": "02Aj02 - Nestgletscher - Middle (Phase 4 - 4x/d)",
+          "file_count": 505,
+          "archive": {
+            "href": "/s3/archives/02Aj02.zip",
+            "size": 219553953,
+            "checksum": "12206e4c14804bbb3610f3e7fa6293a1eedf6b422aa50790cd62d415371bc7843e5a"
+          },
+          "files": {
+            "count": 506,
+            "sha256": "1b9c79a1802c3b2521ac2910c7b592e823d577545bdaa601d8ccb454317c3536"
+          }
+        },
+        {
+          "id": "04Aa00",
+          "title": "04Aa00 - HDR (automatic), compressed (All Frames)",
+          "file_count": 1464,
+          "archive": {
+            "href": "/s3/archives/04Aa00.zip",
+            "size": 14309292098,
+            "checksum": "122017ae0bc7fabba0f2c06c1919f7aebe94392fa50ee6c8157a6b29e1b40949e413"
+          },
+          "files": {
+            "count": 1465,
+            "sha256": "6bb229f1e348375a194a5ae51711b60a721fc9220180b7f0a3e722e82a5ab14e"
+          }
+        },
+        {
+          "id": "04Aa01",
+          "title": "04Aa01 - HDR (automatic), compressed (Phase 2, 1h interval)",
+          "file_count": 22,
+          "archive": {
+            "href": "/s3/archives/04Aa01.zip",
+            "size": 216912250,
+            "checksum": "1220daa2843163ee3ef914147208f41026830996720db0c887740154bf1410ea1b6d"
+          },
+          "files": {
+            "count": 23,
+            "sha256": "74645212dba7d0301539eeb7a49c7c65e847a4ceea38ae5c73a52e9b26ffa1cc"
+          }
+        },
+        {
+          "id": "04Aa02",
+          "title": "04Aa02 - HDR (automatic), compressed (Phase 3, 15min interval)",
+          "file_count": 1441,
+          "archive": {
+            "href": "/s3/archives/04Aa02.zip",
+            "size": 13952886375,
+            "checksum": "1220cc75ac506bb4d66dd0b3ac562cf17107a14219a9eb83607f6024521a0a183d49"
+          },
+          "files": {
+            "count": 1442,
+            "sha256": "cb5e603a035af1aedf1833588a9a74f54895f7e9e2aae2009c9af8b693d1db44"
+          }
+        },
+        {
+          "id": "04Ab00",
+          "title": "04Ab00 - HDR (automatic), full Resolution (All Frames)",
+          "file_count": 1082,
+          "archive": {
+            "href": "/s3/archives/04Ab00.zip",
+            "size": 82367361185,
+            "checksum": "1220e7dcb2bb9e9ed4cbbf3af7b770408b0cfdf63989fefff2a256bfe27046156d98"
+          },
+          "files": {
+            "count": 1083,
+            "sha256": "609fe5fab5a4254ea92a4603831a2eb272224146ea5db716416f168dd3d289d9"
+          }
+        },
+        {
+          "id": "04Ab01",
+          "title": "04Ab01 - HDR (automatic), full Resolution (Phase 2, 1h interval)",
+          "file_count": 19,
+          "archive": {
+            "href": "/s3/archives/04Ab01.zip",
+            "size": 1470452055,
+            "checksum": "1220ce0ff91aaaa57c649f218c4cd57f4900671acfdef36cdba871ddf5c284b4fe3b"
+          },
+          "files": {
+            "count": 20,
+            "sha256": "233dfe515430c3eee5b203eea76f73ad237684a0406743dfb8699cfd58984f51"
+          }
+        },
+        {
+          "id": "04Ab02",
+          "title": "04Ab02 - HDR (automatic), full Resolution (Phase 3, 15min interval)",
+          "file_count": 1063,
+          "archive": {
+            "href": "/s3/archives/04Ab02.zip",
+            "size": 80897639787,
+            "checksum": "1220652188c8c757a095c4e7d6f9bf26aa9d3e5a68a3cfd4e5823b3e28e51e3b3abd"
+          },
+          "files": {
+            "count": 1064,
+            "sha256": "92f9a078de258bb44c4fba2acb3ac099c4f400bb06c90066b4fec3f5ae20f2dd"
+          }
+        },
+        {
+          "id": "04Ac00",
+          "title": "04Ac00 - LDR (manually triggered) (All Frames)",
+          "file_count": 59,
+          "archive": {
+            "href": "/s3/archives/04Ac00.zip",
+            "size": 221085345,
+            "checksum": "1220a9faf2cbea199d5f96a3ea72c45554086ebebe608253e9783498a01cf94e9ea1"
+          },
+          "files": {
+            "count": 60,
+            "sha256": "464a0ac5047b2b0ed4bdce986bb0b29baba0f8f2bcb30c2130397d766404e1aa"
+          }
+        },
+        {
+          "id": "04Ad00",
+          "title": "04Ad00 - Conversion Factors Px --> metric (Fixed)",
+          "file_count": 7,
+          "archive": {
+            "href": "/s3/archives/04Ad00.zip",
+            "size": 716177174,
+            "checksum": "12205239f344e1b6a29dea288b275697c9706a2432a7240e7d9366a6b3fbb14a43d0"
+          },
+          "files": {
+            "count": 8,
+            "sha256": "e738a17876b93613d9041b6dfc82f628c0beab65c9ea67cd789e40c2a1b677bd"
+          }
+        },
+        {
+          "id": "06Aa00",
+          "title": "06Aa00 - Kleines Nesthorn - Overview (All Frames)",
+          "file_count": 1006,
+          "archive": {
+            "href": "/s3/archives/06Aa00.zip",
+            "size": 223532506,
+            "checksum": "12201528bec541b81baaae72bc511aafedac442d30feb60d41cc029b4e04bc4a5adc"
+          },
+          "files": {
+            "count": 1007,
+            "sha256": "8d21e91415135df1829126bebd172fa7ed4a2d7d646769eeed5b123e2aa84a50"
+          }
+        },
+        {
+          "id": "07Aa00",
+          "title": "07Aa00 - Deposition Weeschtu Mattä (All Frames)",
+          "file_count": 16552,
+          "archive": {
+            "href": "/s3/archives/07Aa00.zip",
+            "size": 11860821706,
+            "checksum": "1220e4aa9f902b24133731cba68caad82e34081ca34705995aa9de505bc45d33d525"
+          },
+          "files": {
+            "count": 16553,
+            "sha256": "717878239cb8b0c4d8c48e7dbe8432c31c1651de5511b08fed5aaa9b2537e437"
+          }
+        },
+        {
+          "id": "08Aa00",
+          "title": "08Aa00 - Deposition Birchmattä Blatten (All Frames)",
+          "file_count": 3261,
+          "archive": {
+            "href": "/s3/archives/08Aa00.zip",
+            "size": 6338790166,
+            "checksum": "1220c19d8130d40177602d88babf6f101f4270e97cafbe10ca6a1decfadd0834a1ed"
+          },
+          "files": {
+            "count": 3262,
+            "sha256": "628478d807a0f4b69d8059ccb1b3b0d59425b7981ee9d5ba7bc1c4690c66573b"
+          }
+        },
+        {
+          "id": "08Aa01",
+          "title": "08Aa01 - Deposition Birchmattä Blatten (1h interval)",
+          "file_count": 38,
+          "archive": {
+            "href": "/s3/archives/08Aa01.zip",
+            "size": 83276397,
+            "checksum": "12202cb81474f304261e595a110546134791421de262a7fc70553c8192dfc5d1c9e9"
+          },
+          "files": {
+            "count": 39,
+            "sha256": "092b64870f39e0b8f9d96446a170925bfec18f77d069febd261752bab7e842f8"
+          }
+        },
+        {
+          "id": "08Aa02",
+          "title": "08Aa02 - Deposition Birchmattä Blatten (30min interval)",
+          "file_count": 3223,
+          "archive": {
+            "href": "/s3/archives/08Aa02.zip",
+            "size": 6256374809,
+            "checksum": "1220d60d4b80b47f7338eede2c57f2e4bf3fee88a027ac9e16ba8beac2cb369d5173"
+          },
+          "files": {
+            "count": 3224,
+            "sha256": "9a6fc66c57e0de4f332c41f0a8dcd0432d6f2f0c2c74a373bf15dc3977b70fd2"
+          }
+        },
+        {
+          "id": "09Aa00",
+          "title": "09Aa00 - Deposition Blatten (All Frames)",
+          "file_count": 15107,
+          "archive": {
+            "href": "/s3/archives/09Aa00.zip",
+            "size": 5192672023,
+            "checksum": "1220045ed13681cf97a456031fb2f0f11f7e6d2e8ed833c91ec6062c3a03522c60c5"
+          },
+          "files": {
+            "count": 15108,
+            "sha256": "1f85d4123c449868baeedafb920f10615d66edc1d5cbfbee86833615c73f7aff"
+          }
+        }
+      ]
+    }
+  ]
+}

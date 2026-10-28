@@ -64,11 +64,15 @@
     }
   },
   "summaries": {
-    "processing_level": [
-      1
+    "blatten:sensor": [
+      "GNSS Nesthorn",
+      "GNSS Weissenried"
     ],
-    "source": [
+    "blatten:source": [
       "DNAGE (Glaciorisk)"
+    ],
+    "blatten:processing_level": [
+      1
     ]
   },
   "links": [

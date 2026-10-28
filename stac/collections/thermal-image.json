@@ -64,11 +64,14 @@
     }
   },
   "summaries": {
-    "processing_level": [
-      2
+    "blatten:sensor": [
+      "Helimap"
     ],
-    "source": [
+    "blatten:source": [
       "Terradata"
+    ],
+    "blatten:processing_level": [
+      2
     ]
   },
   "links": [

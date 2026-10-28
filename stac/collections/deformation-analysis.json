@@ -64,12 +64,15 @@
     }
   },
   "summaries": {
-    "processing_level": [
+    "blatten:sensor": [
+      "DEFOX Birchgletscher"
+    ],
+    "blatten:source": [
+      "Geoprevent"
+    ],
+    "blatten:processing_level": [
       3,
       4
-    ],
-    "source": [
-      "Geoprevent"
     ]
   },
   "links": [

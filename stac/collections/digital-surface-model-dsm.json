@@ -64,11 +64,15 @@
     }
   },
   "summaries": {
-    "processing_level": [
-      3
+    "blatten:sensor": [
+      "Drone Survey",
+      "Helimap"
     ],
-    "source": [
+    "blatten:source": [
       "Terradata"
+    ],
+    "blatten:processing_level": [
+      3
     ]
   },
   "links": [

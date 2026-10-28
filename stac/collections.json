@@ -66,11 +66,14 @@
         }
       },
       "summaries": {
-        "processing_level": [
-          4
+        "blatten:sensor": [
+          "Helimap"
         ],
-        "source": [
+        "blatten:source": [
           "Terradata"
+        ],
+        "blatten:processing_level": [
+          4
         ]
       },
       "links": [
@@ -176,12 +179,15 @@
         }
       },
       "summaries": {
-        "processing_level": [
+        "blatten:sensor": [
+          "DEFOX Birchgletscher"
+        ],
+        "blatten:source": [
+          "Geoprevent"
+        ],
+        "blatten:processing_level": [
           3,
           4
-        ],
-        "source": [
-          "Geoprevent"
         ]
       },
       "links": [
@@ -287,11 +293,15 @@
         }
       },
       "summaries": {
-        "processing_level": [
-          3
+        "blatten:sensor": [
+          "Drone Survey",
+          "Helimap"
         ],
-        "source": [
+        "blatten:source": [
           "Terradata"
+        ],
+        "blatten:processing_level": [
+          3
         ]
       },
       "links": [
@@ -397,11 +407,14 @@
         }
       },
       "summaries": {
-        "processing_level": [
-          4
+        "blatten:sensor": [
+          "Helimap"
         ],
-        "source": [
+        "blatten:source": [
           "Terradata"
+        ],
+        "blatten:processing_level": [
+          4
         ]
       },
       "links": [
@@ -507,11 +520,15 @@
         }
       },
       "summaries": {
-        "processing_level": [
-          1
+        "blatten:sensor": [
+          "GNSS Nesthorn",
+          "GNSS Weissenried"
         ],
-        "source": [
+        "blatten:source": [
           "DNAGE (Glaciorisk)"
+        ],
+        "blatten:processing_level": [
+          1
         ]
       },
       "links": [
@@ -629,14 +646,21 @@
         }
       },
       "summaries": {
-        "processing_level": [
-          2,
-          3
+        "blatten:sensor": [
+          "Lake level - Geoazimut",
+          "Lonza river discharge - Blatten",
+          "Lonza river discharge - Gampel",
+          "Lonza river discharge - Kippel",
+          "Lonza river discharge - upstream"
         ],
-        "source": [
+        "blatten:source": [
           "DNAGE (Geoazimut)",
           "DNAGE (HYDRO OFEV)",
           "DNAGE (HYDRO-VS)"
+        ],
+        "blatten:processing_level": [
+          2,
+          3
         ]
       },
       "links": [
@@ -742,11 +766,15 @@
         }
       },
       "summaries": {
-        "processing_level": [
-          3
+        "blatten:sensor": [
+          "Drone Survey",
+          "Helimap"
         ],
-        "source": [
+        "blatten:source": [
           "Terradata"
+        ],
+        "blatten:processing_level": [
+          3
         ]
       },
       "links": [
@@ -852,11 +880,14 @@
         }
       },
       "summaries": {
-        "processing_level": [
-          3
+        "blatten:sensor": [
+          "Helimap"
         ],
-        "source": [
+        "blatten:source": [
           "Terradata"
+        ],
+        "blatten:processing_level": [
+          3
         ]
       },
       "links": [
@@ -962,13 +993,16 @@
         }
       },
       "summaries": {
-        "processing_level": [
+        "blatten:sensor": [
+          "Interferometric Radar Kleines Nesthorn"
+        ],
+        "blatten:source": [
+          "Geoprevent"
+        ],
+        "blatten:processing_level": [
           2,
           3,
           4
-        ],
-        "source": [
-          "Geoprevent"
         ]
       },
       "links": [
@@ -1074,11 +1108,14 @@
         }
       },
       "summaries": {
-        "processing_level": [
-          2
+        "blatten:sensor": [
+          "Helimap"
         ],
-        "source": [
+        "blatten:source": [
           "Terradata"
+        ],
+        "blatten:processing_level": [
+          2
         ]
       },
       "links": [
@@ -1202,15 +1239,24 @@
         }
       },
       "summaries": {
-        "processing_level": [
-          2,
-          4
+        "blatten:sensor": [
+          "DEFOX Birchgletscher",
+          "FlexCam Birchgletscher",
+          "Interferometric Radar Kleines Nesthorn",
+          "Sensalpin Camera",
+          "Webcam Blatten",
+          "Webcam Geoazimut - Lonza",
+          "Webcam Lonza - View from SW"
         ],
-        "source": [
+        "blatten:source": [
           "DNAGE (Geoazimut)",
           "DNAGE (Guardaval)",
           "Geoprevent",
           "SensAlpin"
+        ],
+        "blatten:processing_level": [
+          2,
+          4
         ]
       },
       "links": [

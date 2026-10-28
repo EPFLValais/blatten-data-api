@@ -22,6 +22,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod asset_routes;
 mod catalog;
+mod filter;
 mod stats;
 mod stats_routes;
 mod stats_store;
@@ -102,6 +103,11 @@ struct SearchParams {
     exclude_assets: bool,
     /// Fields filter (STAC Fields Extension): comma-separated, prefix `-` to exclude
     fields: Option<String>,
+    /// CQL2 filter (STAC Filter Extension)
+    filter: Option<String>,
+    /// Language of `filter`: cql2-text (the default) or cql2-json
+    #[serde(rename = "filter-lang")]
+    filter_lang: Option<String>,
 }
 
 /// Deserializer that accepts either a string or array of strings for the `q` parameter
@@ -211,6 +217,11 @@ struct SearchBody {
     exclude_assets: bool,
     /// Fields filter (STAC Fields Extension)
     fields: Option<FieldsBody>,
+    /// CQL2 filter (STAC Filter Extension)
+    filter: Option<serde_json::Value>,
+    /// Language of `filter`: cql2-json (the default) or cql2-text
+    #[serde(rename = "filter-lang")]
+    filter_lang: Option<String>,
 }
 
 /// Query parameters for asset pagination
@@ -405,6 +416,7 @@ struct ValidatedSearch {
     q: Option<Vec<Vec<String>>>,
     exclude_assets: bool,
     fields: FieldsFilter,
+    filter: Option<filter::Filter>,
 }
 
 impl ValidatedSearch {
@@ -440,6 +452,12 @@ impl ValidatedSearch {
             .map(FieldsFilter::parse_get)
             .unwrap_or_default();
 
+        let filter = params
+            .filter
+            .as_deref()
+            .map(|f| filter::Filter::from_get(f, params.filter_lang.as_deref()))
+            .transpose()?;
+
         Ok(ValidatedSearch {
             bbox,
             datetime,
@@ -452,6 +470,7 @@ impl ValidatedSearch {
             q: params.q.map(|q| parse_q_terms(&q)).filter(|v| !v.is_empty()),
             exclude_assets: params.exclude_assets,
             fields,
+            filter,
         })
     }
 
@@ -483,6 +502,11 @@ impl ValidatedSearch {
             .map(FieldsFilter::from_body)
             .unwrap_or_default();
 
+        let filter = body
+            .filter
+            .map(|f| filter::Filter::from_post(f, body.filter_lang.as_deref()))
+            .transpose()?;
+
         Ok(ValidatedSearch {
             bbox,
             datetime,
@@ -500,6 +524,7 @@ impl ValidatedSearch {
             }).filter(|v| !v.is_empty()),
             exclude_assets: body.exclude_assets,
             fields,
+            filter,
         })
     }
 }
@@ -525,6 +550,14 @@ const CONFORMANCE_CLASSES: &[&str] = &[
     "https://api.stacspec.org/v1.0.0-rc.1/ogcapi-features#free-text",
     // Fields Extension
     "https://api.stacspec.org/v1.0.0/item-search#fields",
+    // Filter Extension, Basic CQL2 in text and JSON
+    "https://api.stacspec.org/v1.0.0-rc.2/item-search#filter",
+    "https://api.stacspec.org/v1.0.0-rc.2/ogcapi-features/extensions/filter",
+    "http://www.opengis.net/spec/ogcapi-features-3/1.0/conf/filter",
+    "http://www.opengis.net/spec/ogcapi-features-3/1.0/conf/features-filter",
+    "http://www.opengis.net/spec/cql2/1.0/conf/basic-cql2",
+    "http://www.opengis.net/spec/cql2/1.0/conf/cql2-text",
+    "http://www.opengis.net/spec/cql2/1.0/conf/cql2-json",
 ];
 
 // ============================================================================
@@ -835,6 +868,13 @@ fn filter_item(item: &StacItem, params: &ValidatedSearch) -> bool {
         }
     }
 
+    // CQL2 filter (STAC Filter Extension)
+    if let Some(ref filter) = params.filter {
+        if !filter.matches(item) {
+            return false;
+        }
+    }
+
     // Free-text search (STAC Free-Text Search Extension)
     // Commas = OR across groups, spaces = AND within each group
     // Substring matching first, edit-distance fallback for typos
@@ -1023,34 +1063,7 @@ async fn main() -> Result<()> {
         STAC_VERSION
     );
 
-    let stat_items: Vec<stats::ItemInfo> = catalog
-        .items
-        .iter()
-        .filter_map(|i| {
-            let text = |key: &str| {
-                i.get_property(key)
-                    .map(|v| match v {
-                        serde_json::Value::String(s) => s.clone(),
-                        other => other.to_string(),
-                    })
-                    .unwrap_or_else(|| "Unknown".to_string())
-            };
-            Some(stats::ItemInfo {
-                code: i.id.clone(),
-                title: i.properties.title.clone().unwrap_or_else(|| i.id.clone()),
-                files: i.assets.keys().filter(|k| k.as_str() != "archive").count(),
-                facets: stats::Facets {
-                    collection: i.collection.clone()?,
-                    provider: text("blatten:source"),
-                    data_type: text("blatten:product_type"),
-                    dataset: text("blatten:dataset"),
-                    sensor: text("blatten:sensor"),
-                    format: text("blatten:format"),
-                    level: text("blatten:processing_level"),
-                },
-            })
-        })
-        .collect();
+    let stat_items = stat_items(&catalog.items);
 
     let mut file_sizes: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
     for item in &catalog.items {
@@ -1106,6 +1119,9 @@ fn stac_router(state: AppState, asset_limits: asset_routes::Limits) -> Router {
         // Collections
         .route("/stac/collections", get(list_collections))
         .route("/stac/collections/:collection_id", get(get_collection))
+        // Queryables (STAC Filter Extension)
+        .route("/stac/queryables", get(get_queryables))
+        .route("/stac/collections/:collection_id/queryables", get(get_collection_queryables))
         // Search, collection items and item: asset-bearing responses, behind one concurrency limit
         .merge(asset_routes::router(
             get(search_items_get).post(search_items_post),
@@ -1201,6 +1217,11 @@ async fn landing_page(State(state): State<AppState>) -> impl IntoResponse {
                 "href": format!("{}/stac/search", state.base_url),
                 "type": "application/geo+json",
                 "method": "POST"
+            },
+            {
+                "rel": filter::QUERYABLES_REL,
+                "href": format!("{}/stac/queryables", state.base_url),
+                "type": "application/schema+json"
             },
             {
                 "rel": "describedby",
@@ -1302,6 +1323,34 @@ async fn get_collection(
         }
         None => ApiError::not_found(format!("Collection '{}' not found", collection_id)).into_response(),
     }
+}
+
+/// The queryables a filter may name, as a JSON Schema
+fn queryables_response(id: String) -> Response {
+    (
+        [
+            (header::CONTENT_TYPE, "application/schema+json"),
+            (header::CACHE_CONTROL, "public, max-age=86400"),
+        ],
+        filter::queryables_schema(&id).to_string(),
+    )
+        .into_response()
+}
+
+/// Queryables of the whole catalog
+async fn get_queryables(State(state): State<AppState>) -> Response {
+    queryables_response(format!("{}/stac/queryables", state.base_url))
+}
+
+/// Queryables of one collection: the same list as the whole catalog's
+async fn get_collection_queryables(
+    State(state): State<AppState>,
+    Path(collection_id): Path<String>,
+) -> Response {
+    if !state.catalog.collections.contains_key(&collection_id) {
+        return ApiError::not_found(format!("Collection '{}' not found", collection_id)).into_response();
+    }
+    queryables_response(format!("{}/stac/collections/{}/queryables", state.base_url, collection_id))
 }
 
 /// Get items in a collection
@@ -1531,6 +1580,59 @@ fn perform_search(
         .into_response()
 }
 
+/// The items the download statistics list: each series-level item (one without
+/// `blatten:series`), its files counted with those of its days. Downloads are keyed by the
+/// item code in the file path, which a series and its days share.
+fn stat_items(items: &[StacItem]) -> Vec<stats::ItemInfo> {
+    let files = |i: &StacItem| {
+        i.assets
+            .keys()
+            .filter(|k| k.as_str() != "archive" && k.as_str() != "manifest")
+            .count()
+    };
+    let series_of = |i: &StacItem| {
+        i.properties
+            .additional_fields
+            .get("blatten:series")
+            .and_then(|v| v.as_str())
+            .map(str::to_string)
+    };
+    let mut day_files: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for i in items {
+        if let Some(series) = series_of(i) {
+            *day_files.entry(series).or_default() += files(i);
+        }
+    }
+    items
+        .iter()
+        .filter(|i| series_of(i).is_none())
+        .filter_map(|i| {
+            let text = |key: &str| {
+                i.get_property(key)
+                    .map(|v| match v {
+                        serde_json::Value::String(s) => s.clone(),
+                        other => other.to_string(),
+                    })
+                    .unwrap_or_else(|| "Unknown".to_string())
+            };
+            Some(stats::ItemInfo {
+                code: i.id.clone(),
+                title: i.properties.title.clone().unwrap_or_else(|| i.id.clone()),
+                files: files(i) + day_files.get(&i.id).copied().unwrap_or(0),
+                facets: stats::Facets {
+                    collection: i.collection.clone()?,
+                    provider: text("blatten:source"),
+                    data_type: text("blatten:product_type"),
+                    dataset: text("blatten:dataset"),
+                    sensor: text("blatten:sensor"),
+                    format: text("blatten:format"),
+                    level: text("blatten:processing_level"),
+                },
+            })
+        })
+        .collect()
+}
+
 /// Health check endpoint
 async fn health_check(State(state): State<AppState>) -> impl IntoResponse {
     Json(serde_json::json!({
@@ -1582,7 +1684,7 @@ async fn generate_kml_item_path(
     }
 }
 
-/// Path-based KML for all items in a collection.
+/// Path-based KML for the series-level items of a collection (those without `blatten:series`).
 /// The `:_kml` param absorbs trailing junk SwissTopo appends (e.g. "kml&bgLayer=...").
 async fn generate_kml_collection_path(
     State(state): State<AppState>,
@@ -1604,8 +1706,10 @@ async fn generate_kml_collection_path(
         );
     }
 
+    // A series' days share its geometry, so only series-level items are placed
     let placemarks: String = items
         .iter()
+        .filter(|item| item.properties.additional_fields.get("blatten:series").is_none_or(|v| v.is_null()))
         .filter_map(|item| {
             let name = item_display_name(item);
             item_to_kml_placemark(&name, item)
@@ -1836,19 +1940,135 @@ mod tests {
                 serde_json::from_value(serde_json::json!({"href": format!("/s3/pear-01/leaf-{n}.jpg")})).unwrap(),
             );
         }
+        let in_series = |mut tree: StacItem, series: &str, level: i64| {
+            tree.properties.additional_fields.insert("blatten:series".into(), series.into());
+            tree.properties.additional_fields.insert("blatten:processing_level".into(), level.into());
+            tree
+        };
         let catalog = StacCatalog::from_parts(
             root,
             [("orchards".to_string(), collection)].into(),
             vec![
-                dated_item("quince-03", "2019-09-01T00:00:00Z"),
-                dated_item("quince-04", "2019-09-02T00:00:00Z"),
+                in_series(dated_item("quince-03", "2019-09-01T00:00:00Z"), "orchard-a", 1),
+                in_series(dated_item("quince-04", "2019-09-02T00:00:00Z"), "orchard-a", 2),
                 pear,
-                item("plum-02"),
+                in_series(item("plum-02"), "orchard-b", 2),
             ],
             "orchard-version".to_string(),
         );
         let state = AppState { catalog: Arc::new(catalog), base_url: "http://orchard.test".into() };
         stac_router(state, asset_routes::Limits::from_env(|_| None))
+    }
+
+    /// Two kite series in the orchards collection, as the generator writes them: `kites-a`
+    /// over 2019-09-01 to 2019-09-03 with one day item a day, the second day cut in two
+    /// parts, and `kites-b` over 2019-10-01 with its one day.
+    fn kite_series_app() -> Router {
+        let ranged = |id: &str, start: &str, end: &str, series: Option<&str>| -> StacItem {
+            let mut properties = serde_json::json!({"datetime": null, "start_datetime": start, "end_datetime": end, "title": id});
+            if let Some(series) = series {
+                properties["blatten:series"] = series.into();
+            }
+            serde_json::from_value(serde_json::json!({
+                "type": "Feature",
+                "stac_version": "1.1.0",
+                "id": id,
+                "geometry": {"type": "Point", "coordinates": [7.8, 46.4]},
+                "bbox": [7.8, 46.4, 7.8, 46.4],
+                "properties": properties,
+                "links": [],
+                "assets": {},
+                "collection": "orchards"
+            }))
+            .unwrap()
+        };
+        let root = serde_json::from_value(serde_json::json!({
+            "type": "Catalog", "stac_version": "1.1.0", "id": "kites-root", "description": "Kites", "links": []
+        }))
+        .unwrap();
+        let collection: catalog::StacCollection = serde_json::from_value(serde_json::json!({
+            "type": "Collection",
+            "stac_version": "1.1.0",
+            "id": "orchards",
+            "description": "Kite flights over the orchards",
+            "license": "CC0-1.0",
+            "extent": {
+                "spatial": {"bbox": [[-180.0, -90.0, 180.0, 90.0]]},
+                "temporal": {"interval": [["2019-09-01T00:00:00Z", null]]}
+            },
+            "links": []
+        }))
+        .unwrap();
+        let catalog = StacCatalog::from_parts(
+            root,
+            [("orchards".to_string(), collection)].into(),
+            vec![
+                ranged("kites-a", "2019-09-01T00:00:00Z", "2019-09-03T23:59:59Z", None),
+                ranged("kites-a_2019-09-01", "2019-09-01T08:00:00Z", "2019-09-01T18:00:00Z", Some("kites-a")),
+                ranged("kites-a_2019-09-02_1", "2019-09-02T06:00:00Z", "2019-09-02T12:00:00Z", Some("kites-a")),
+                ranged("kites-a_2019-09-02_2", "2019-09-02T12:10:00Z", "2019-09-02T19:00:00Z", Some("kites-a")),
+                ranged("kites-a_2019-09-03", "2019-09-03T07:00:00Z", "2019-09-03T17:00:00Z", Some("kites-a")),
+                ranged("kites-b", "2019-10-01T00:00:00Z", "2019-10-01T23:59:59Z", None),
+                ranged("kites-b_2019-10-01", "2019-10-01T09:00:00Z", "2019-10-01T15:00:00Z", Some("kites-b")),
+            ],
+            "kites-version".to_string(),
+        );
+        let state = AppState { catalog: Arc::new(catalog), base_url: "http://kites.test".into() };
+        stac_router(state, asset_routes::Limits::from_env(|_| None))
+    }
+
+    #[test]
+    fn download_statistics_list_a_series_with_every_file_of_its_days_and_no_day() {
+        let with = |mut tree: StacItem, series: Option<&str>, leaves: &[&str]| {
+            tree.assets.clear();
+            let kept: &[&str] = match series {
+                Some(series) => {
+                    tree.properties.additional_fields.insert("blatten:series".into(), series.into());
+                    &[]
+                }
+                None => &["archive", "manifest"],
+            };
+            for name in kept.iter().chain(leaves) {
+                tree.assets.insert(
+                    name.to_string(),
+                    serde_json::from_value(serde_json::json!({"href": format!("/s3/{name}")})).unwrap(),
+                );
+            }
+            tree
+        };
+        let items = vec![
+            with(item("kites-a"), None, &["logbook"]),
+            with(item("kites-a_2019-09-01"), Some("kites-a"), &["k1", "k2"]),
+            with(item("kites-a_2019-09-02"), Some("kites-a"), &["k3"]),
+            with(item("pear-01"), None, &["leaf"]),
+        ];
+        let listed: Vec<(String, usize)> = stat_items(&items).into_iter().map(|i| (i.code, i.files)).collect();
+        assert_eq!(listed, vec![("kites-a".to_string(), 4), ("pear-01".to_string(), 1)]);
+    }
+
+    #[tokio::test]
+    async fn a_datetime_search_over_series_returns_the_days_asked_for_and_the_series_covering_them() {
+        let app = kite_series_app();
+        let (status, _, body) = send(
+            &app,
+            "/stac/collections/orchards/items?datetime=2019-09-02T00:00:00Z/2019-09-02T23:59:59Z",
+            &[],
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let page: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let ids: Vec<&str> = page["features"].as_array().unwrap().iter().map(|f| f["id"].as_str().unwrap()).collect();
+        assert_eq!(ids, vec!["kites-a", "kites-a_2019-09-02_1", "kites-a_2019-09-02_2"]);
+    }
+
+    #[tokio::test]
+    async fn a_collection_kml_places_each_series_once_and_none_of_its_days() {
+        let app = kite_series_app();
+        let (status, _, body) = send(&app, "/stac/collections/orchards/kml", &[]).await;
+        assert_eq!(status, StatusCode::OK);
+        let kml = String::from_utf8(body).unwrap();
+        assert_eq!(kml.matches("<Placemark>").count(), 2, "{kml}");
+        assert!(kml.contains("<name>kites-a</name>") && kml.contains("<name>kites-b</name>"), "{kml}");
     }
 
     async fn send(
@@ -2108,6 +2328,187 @@ mod tests {
             assert_eq!(features[0]["id"], "plum-02", "{next}");
             assert!(features[0]["assets"].get("photo").is_none(), "{next}");
             assert!(link_href(page["links"].as_array().unwrap(), "next").is_none(), "{next}");
+        }
+    }
+
+    async fn send_json(app: &Router, uri: &str, body: Option<serde_json::Value>) -> (StatusCode, serde_json::Value) {
+        use tower::ServiceExt;
+        let req = match body {
+            Some(body) => axum::http::Request::builder()
+                .method("POST")
+                .uri(uri)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(axum::body::Body::from(body.to_string())),
+            None => axum::http::Request::builder().uri(uri).body(axum::body::Body::empty()),
+        };
+        let resp = app.clone().oneshot(req.unwrap()).await.unwrap();
+        let status = resp.status();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        (status, serde_json::from_slice(&bytes).unwrap_or_default())
+    }
+
+    fn feature_ids(page: &serde_json::Value) -> Vec<String> {
+        let mut ids: Vec<String> = page["features"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| f["id"].as_str().unwrap().to_string())
+            .collect();
+        ids.sort();
+        ids
+    }
+
+    fn encoded(text: &str) -> String {
+        url::form_urlencoded::byte_serialize(text.as_bytes()).collect()
+    }
+
+    #[tokio::test]
+    async fn a_cql2_text_filter_keeps_only_the_items_it_is_true_of() {
+        let app = orchard_app();
+        for (filter, expected) in [
+            ("blatten:series='orchard-a'", vec!["quince-03", "quince-04"]),
+            ("blatten:series IS NULL", vec!["pear-01"]),
+            ("blatten:series IS NOT NULL AND blatten:series <> 'orchard-a'", vec!["plum-02"]),
+            ("blatten:series = 'orchard-a' AND blatten:processing_level >= 2", vec!["quince-04"]),
+            ("NOT (blatten:series = 'orchard-a') OR blatten:processing_level < 2", vec!["plum-02", "quince-03"]),
+            ("datetime > TIMESTAMP('2024-01-01T00:00:00Z')", vec!["pear-01", "plum-02"]),
+            ("datetime <= '2019-09-01T00:00:00Z'", vec!["quince-03"]),
+        ] {
+            for uri in [
+                format!("/stac/search?filter={}", encoded(filter)),
+                format!("/stac/search?filter-lang=cql2-text&filter={}", encoded(filter)),
+                format!("/stac/collections/orchards/items?filter={}", encoded(filter)),
+            ] {
+                let (status, page) = send_json(&app, &uri, None).await;
+                assert_eq!(status, StatusCode::OK, "{uri}: {page}");
+                assert_eq!(feature_ids(&page), expected, "{uri}");
+                assert_eq!(page["numberMatched"], expected.len(), "{uri}");
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn a_cql2_json_filter_posted_to_search_keeps_only_the_items_it_is_true_of() {
+        let app = orchard_app();
+        let series = serde_json::json!({"property": "blatten:series"});
+        for (filter, expected) in [
+            (serde_json::json!({"op": "=", "args": [series, "orchard-a"]}), vec!["quince-03", "quince-04"]),
+            (serde_json::json!({"op": "isNull", "args": [series]}), vec!["pear-01"]),
+            (
+                serde_json::json!({"op": "and", "args": [
+                    {"op": "not", "args": [{"op": "isNull", "args": [series]}]},
+                    {"op": ">", "args": [{"property": "blatten:processing_level"}, 1]}
+                ]}),
+                vec!["plum-02", "quince-04"],
+            ),
+        ] {
+            for body in [
+                serde_json::json!({"filter": filter, "filter-lang": "cql2-json"}),
+                serde_json::json!({"filter": filter}),
+            ] {
+                let (status, page) = send_json(&app, "/stac/search", Some(body.clone())).await;
+                assert_eq!(status, StatusCode::OK, "{body}: {page}");
+                assert_eq!(feature_ids(&page), expected, "{body}");
+            }
+        }
+        let (status, page) = send_json(
+            &app,
+            "/stac/search",
+            Some(serde_json::json!({"filter": "blatten:series = 'orchard-b'", "filter-lang": "cql2-text"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{page}");
+        assert_eq!(feature_ids(&page), ["plum-02"]);
+    }
+
+    #[tokio::test]
+    async fn a_filter_naming_an_unknown_property_or_failing_to_parse_is_a_bad_request() {
+        let app = orchard_app();
+        for filter in ["nope='x'", "blatten:series LIKE 'orchard%'", "blatten:series = = 'x'", "(("] {
+            for path in ["/stac/search", "/stac/collections/orchards/items"] {
+                let uri = format!("{path}?filter={}", encoded(filter));
+                let (status, body) = send_json(&app, &uri, None).await;
+                assert_eq!(status, StatusCode::BAD_REQUEST, "{uri}");
+                assert!(!body["description"].as_str().unwrap().is_empty(), "{uri}");
+            }
+        }
+        let (status, body) = send_json(&app, "/stac/search?filter=nope%3D'x'", None).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert!(body["description"].as_str().unwrap().contains("nope"), "{body}");
+
+        let (status, _) = send_json(&app, "/stac/search?filter-lang=cql2-xml&filter=x%3D1", None).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        let (status, _) = send_json(
+            &app,
+            "/stac/search",
+            Some(serde_json::json!({"filter": {"op": "=", "args": [{"property": "nope"}, "x"]}})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn following_next_from_a_filtered_page_keeps_the_filter() {
+        let app = orchard_app();
+        let filter = encoded("blatten:series='orchard-a'");
+        for first in [
+            format!("/stac/search?filter={filter}&filter-lang=cql2-text&limit=1"),
+            format!("/stac/collections/orchards/items?filter={filter}&limit=1"),
+        ] {
+            let (status, page) = send_json(&app, &first, None).await;
+            assert_eq!(status, StatusCode::OK, "{first}");
+            assert_eq!(page["numberMatched"], 2, "{first}");
+            assert_eq!(feature_ids(&page), ["quince-03"], "{first}");
+            let next = link_href(page["links"].as_array().unwrap(), "next").unwrap().to_string();
+            let (status, page) = send_json(&app, next.strip_prefix("http://orchard.test").unwrap(), None).await;
+            assert_eq!(status, StatusCode::OK, "{next}");
+            assert_eq!(page["numberMatched"], 2, "{next}");
+            assert_eq!(feature_ids(&page), ["quince-04"], "{next}");
+        }
+    }
+
+    #[tokio::test]
+    async fn queryables_are_served_as_a_json_schema_and_named_by_the_landing_page_and_conformance() {
+        let app = orchard_app();
+        for uri in ["/stac/queryables", "/stac/collections/orchards/queryables"] {
+            let (status, headers, body) = send(&app, uri, &[]).await;
+            assert_eq!(status, StatusCode::OK, "{uri}");
+            assert_eq!(headers[header::CONTENT_TYPE], "application/schema+json", "{uri}");
+            let schema: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(schema["$id"], format!("http://orchard.test{uri}"));
+            assert_eq!(schema["additionalProperties"], false);
+            let names: Vec<_> = schema["properties"].as_object().unwrap().keys().cloned().collect();
+            for name in [
+                "blatten:series",
+                "blatten:sensor",
+                "blatten:code",
+                "blatten:source",
+                "blatten:processing_level",
+                "datetime",
+                "start_datetime",
+                "end_datetime",
+            ] {
+                assert!(names.iter().any(|n| n == name), "{uri} lacks {name}");
+            }
+        }
+        let (status, _) = send_json(&app, "/stac/collections/nope/queryables", None).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+
+        let (_, landing) = send_json(&app, "/stac", None).await;
+        assert_eq!(
+            link_href(landing["links"].as_array().unwrap(), "http://www.opengis.net/def/rel/ogc/1.0/queryables"),
+            Some("http://orchard.test/stac/queryables")
+        );
+        let (_, conformance) = send_json(&app, "/stac/conformance", None).await;
+        let classes = conformance["conformsTo"].as_array().unwrap();
+        for class in [
+            "https://api.stacspec.org/v1.0.0-rc.2/item-search#filter",
+            "https://api.stacspec.org/v1.0.0-rc.2/ogcapi-features/extensions/filter",
+            "http://www.opengis.net/spec/cql2/1.0/conf/basic-cql2",
+            "http://www.opengis.net/spec/cql2/1.0/conf/cql2-text",
+            "http://www.opengis.net/spec/cql2/1.0/conf/cql2-json",
+        ] {
+            assert!(classes.iter().any(|c| c == class), "conformance lacks {class}");
         }
     }
 }

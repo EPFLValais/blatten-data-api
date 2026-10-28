@@ -64,13 +64,16 @@
     }
   },
   "summaries": {
-    "processing_level": [
+    "blatten:sensor": [
+      "Interferometric Radar Kleines Nesthorn"
+    ],
+    "blatten:source": [
+      "Geoprevent"
+    ],
+    "blatten:processing_level": [
       2,
       3,
       4
-    ],
-    "source": [
-      "Geoprevent"
     ]
   },
   "links": [

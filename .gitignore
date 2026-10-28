@@ -1,6 +1,7 @@
 target
 *.md
 !README.md
+!CHANGELOG.md
 
 # Generator cache / build artifacts
 stac/manifest.json

@@ -2080,10 +2080,12 @@ enum CheckKind {
     DuplicateData,
     SchemaInvalid,
     PhaseInvalid,
+    ItemTooLarge,
+    SeriesFilesDiffer,
 }
 
 impl CheckKind {
-    const ALL: [CheckKind; 5] = [CheckKind::EmptyDescription, CheckKind::FormatMismatch, CheckKind::DuplicateData, CheckKind::SchemaInvalid, CheckKind::PhaseInvalid];
+    const ALL: [CheckKind; 7] = [CheckKind::EmptyDescription, CheckKind::FormatMismatch, CheckKind::DuplicateData, CheckKind::SchemaInvalid, CheckKind::PhaseInvalid, CheckKind::ItemTooLarge, CheckKind::SeriesFilesDiffer];
 
     fn label(self) -> &'static str {
         match self {
@@ -2092,6 +2094,8 @@ impl CheckKind {
             CheckKind::DuplicateData => "data identical to another item",
             CheckKind::SchemaInvalid => "STAC schema failure",
             CheckKind::PhaseInvalid => "phase not a number or range",
+            CheckKind::ItemTooLarge => "item over the size limit",
+            CheckKind::SeriesFilesDiffer => "series files differ from source",
         }
     }
 }
@@ -2416,7 +2420,10 @@ impl StacSchemas {
 /// This creates STAC 1.1.0 compliant items with:
 /// - Item-level geometry in WGS84 (combined extent of all files)
 /// - Per-asset geometry using Projection Extension (LV95 when available)
-fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str, collection_titles: &HashMap<String, String>, product_type_strip: &HashMap<String, Vec<String>>, producers: &HashMap<String, ProducerConfig>) -> serde_json::Value {
+///
+/// When the item is over the size budget (`is_series`), it lists a `manifest`
+/// asset and the text of that manifest is returned with it.
+fn create_stac_item_and_manifest(item: &ItemMetadata, base_url: &str, s3_base_url: &str, collection_titles: &HashMap<String, String>, product_type_strip: &HashMap<String, Vec<String>>, producers: &HashMap<String, ProducerConfig>) -> (serde_json::Value, Option<String>) {
     let collection_id = item.collection_id.as_deref().unwrap_or("unknown");
 
     // Build datetime fields
@@ -2603,6 +2610,7 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str, coll
     }
 
     // Add individual file assets with Projection Extension fields
+    let mut manifest_rows: Vec<ManifestRow> = Vec::with_capacity(item.files.len());
     let mut used_keys: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     for file_info in &item.files {
         let filename = file_info.path.file_name()
@@ -2632,7 +2640,8 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str, coll
         } else {
             filename.clone()
         };
-        let href = s3_href(s3_base_url, &format!("assets/{}/{}", item.code, rel_path_from_folder));
+        let s3_path = format!("assets/{}/{}", item.code, rel_path_from_folder);
+        let href = s3_href(s3_base_url, &s3_path);
         let mime_type = get_mime_type(&file_info.path);
 
         let roles = vec![asset_role(&filename)];
@@ -2668,6 +2677,12 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str, coll
             }
         }
 
+        manifest_rows.push(ManifestRow {
+            path: s3_path,
+            datetime: asset["datetime"].as_str().map(str::to_string),
+            size: asset["file:size"].as_u64(),
+            checksum: asset["file:checksum"].as_str().map(str::to_string),
+        });
         assets.insert(key, asset);
     }
 
@@ -2707,8 +2722,255 @@ fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str, coll
         "assets": assets,
         "collection": collection_id
     });
+    let manifest = is_series(&feature).then(|| {
+        let text = series_manifest_csv(manifest_rows);
+        feature["assets"]["manifest"] = serde_json::json!({
+            "href": s3_href(s3_base_url, &format!("archives/{}", series_manifest_name(&item.code))),
+            "type": "text/csv",
+            "title": format!("{} file manifest", item.code),
+            "roles": ["metadata"],
+            "file:size": text.len(),
+            "file:checksum": format!("1220{}", sha256_hex(text.as_bytes())),
+        });
+        text
+    });
     feature["stac_extensions"] = serde_json::json!(stac_extensions(&feature));
-    feature
+    (feature, manifest)
+}
+
+/// Largest written item, in bytes of its compact JSON with production URLs.
+const ITEM_SIZE_LIMIT: usize = 100_000;
+/// Room kept below the limit for the links an item gains when it is split.
+const ITEM_LINK_MARGIN: usize = 2_000;
+/// An item whose JSON exceeds this is a series.
+const ITEM_SIZE_BUDGET: usize = ITEM_SIZE_LIMIT - ITEM_LINK_MARGIN;
+/// Base URLs the production API serves the catalog under, so an item is
+/// measured at the size a client receives.
+const PRODUCTION_STAC_BASE_URL: &str = "https://blatten-data.epfl.ch";
+const PRODUCTION_S3_BASE_URL: &str = "https://blatten-data.epfl.ch/s3";
+
+/// Whether an item is a series: its JSON, with the production base URLs in
+/// place of the placeholders, exceeds the item size budget.
+fn is_series(item: &serde_json::Value) -> bool {
+    item_size(item) > ITEM_SIZE_BUDGET
+}
+
+/// Bytes of a value's compact JSON with the production base URLs in place of the placeholders.
+fn item_size(value: &serde_json::Value) -> usize {
+    serde_json::to_string(value).unwrap_or_default()
+        .replace("${STAC_BASE_URL}", PRODUCTION_STAC_BASE_URL)
+        .replace("${S3_BASE_URL}", PRODUCTION_S3_BASE_URL)
+        .len()
+}
+
+/// Properties a day item takes from its series, besides those it sets itself.
+const DAY_PROPERTIES: [&str; 7] = [
+    "blatten:code", "blatten:sensor", "blatten:source", "blatten:processing_level",
+    "blatten:format", "blatten:product_type", "providers",
+];
+
+/// The items written for a built item. An item under the size budget is written
+/// whole. A series keeps its archive, manifest and undated files and links its
+/// days; each date of its dated files is a day item, cut in file-time order into
+/// the fewest parts under the budget when the day alone exceeds it.
+fn series_and_days(mut series: serde_json::Value, base_url: &str) -> Vec<serde_json::Value> {
+    if !is_series(&series) {
+        return vec![series];
+    }
+    let code = series["id"].as_str().unwrap_or_default().to_string();
+    let collection = series["collection"].as_str().unwrap_or("unknown").to_string();
+    let assets = std::mem::take(series["assets"].as_object_mut().expect("an item has assets"));
+    let mut kept = serde_json::Map::new();
+    let mut days: BTreeMap<String, Vec<(String, serde_json::Value)>> = BTreeMap::new();
+    for (key, asset) in assets {
+        let date = asset["datetime"].as_str()
+            .filter(|_| key != "archive" && key != "manifest")
+            .and_then(|dt| dt.get(..10))
+            .map(str::to_string);
+        match date {
+            Some(date) => days.entry(date).or_default().push((key, asset)),
+            None => { kept.insert(key, asset); }
+        }
+    }
+    series["assets"] = serde_json::Value::Object(kept);
+    series["links"].as_array_mut().expect("an item has links").push(serde_json::json!({
+        "rel": "items",
+        "href": format!("{}/stac/collections/{}/items?filter=blatten:series='{}'", base_url, collection, code),
+        "type": "application/geo+json",
+        "title": "Days"
+    }));
+    series["stac_extensions"] = serde_json::json!(stac_extensions(&series));
+
+    let mut written = vec![series];
+    for (date, mut files) in days {
+        files.sort_by(|a, b| a.1["datetime"].as_str().cmp(&b.1["datetime"].as_str()).then_with(|| a.0.cmp(&b.0)));
+        let whole = day_item(&written[0], &format!("{}_{}", code, date), &date, files.clone(), base_url);
+        if !is_series(&whole) {
+            written.push(whole);
+            continue;
+        }
+        let parts = cut_day(&written[0], &code, &date, files, base_url);
+        let count = parts.len();
+        for (n, part) in parts.into_iter().enumerate() {
+            let mut item = day_item(&written[0], &format!("{}_{}_{}", code, date, n + 1), &date, part, base_url);
+            item["properties"]["title"] = serde_json::json!(format!("{} ({}/{})", item["properties"]["title"].as_str().unwrap_or_default(), n + 1, count));
+            written.push(item);
+        }
+    }
+    written
+}
+
+/// Files of one day cut, in the order given, into the fewest runs whose day
+/// items stay under the size budget.
+fn cut_day(series: &serde_json::Value, code: &str, date: &str, files: Vec<(String, serde_json::Value)>, base_url: &str) -> Vec<Vec<(String, serde_json::Value)>> {
+    // An empty part with the longest id, count and title a part can carry
+    let mut empty = day_item(series, &format!("{}_{}_9999", code, date), date, Vec::new(), base_url);
+    empty["properties"]["blatten:file_count"] = serde_json::json!(usize::MAX);
+    empty["properties"]["blatten:total_size"] = serde_json::json!(u64::MAX);
+    empty["properties"]["start_datetime"] = serde_json::json!("0000-00-00T00:00:00Z");
+    empty["properties"]["end_datetime"] = serde_json::json!("0000-00-00T00:00:00Z");
+    empty["properties"]["title"] = serde_json::json!(format!("{} (9999/9999)", empty["properties"]["title"].as_str().unwrap_or_default()));
+    let base = item_size(&empty);
+    let mut parts: Vec<Vec<(String, serde_json::Value)>> = Vec::new();
+    let mut size = base;
+    for (key, asset) in files {
+        // `"key":asset` and the comma before it
+        let added = item_size(&serde_json::json!(key)) + 1 + item_size(&asset) + 1;
+        if parts.is_empty() || size + added > ITEM_SIZE_BUDGET {
+            parts.push(Vec::new());
+            size = base;
+        }
+        size += added;
+        parts.last_mut().expect("a part was pushed").push((key, asset));
+    }
+    parts
+}
+
+/// A day item of a series: its files, the series' geometry and descriptive
+/// properties, the time range and total size of its files and a link back to the series.
+fn day_item(series: &serde_json::Value, id: &str, date: &str, files: Vec<(String, serde_json::Value)>, base_url: &str) -> serde_json::Value {
+    let collection = series["collection"].as_str().unwrap_or("unknown");
+    let times: Vec<&str> = files.iter().filter_map(|(_, a)| a["datetime"].as_str()).collect();
+    let total_size: u64 = files.iter().filter_map(|(_, a)| a["file:size"].as_u64()).sum();
+    let mut properties = serde_json::json!({
+        "title": format!("{} - {}", series["properties"]["title"].as_str().unwrap_or_default(), date),
+        "datetime": null,
+        "start_datetime": times.iter().min(),
+        "end_datetime": times.iter().max(),
+        "blatten:series": series["id"],
+        "blatten:file_count": files.len(),
+        "blatten:total_size": total_size,
+    });
+    for key in DAY_PROPERTIES {
+        if let Some(value) = series["properties"].get(key) {
+            properties[key] = value.clone();
+        }
+    }
+    let item_href = |item_id: &str| format!("{}/stac/collections/{}/items/{}", base_url, collection, item_id);
+    let mut day = serde_json::json!({
+        "type": "Feature",
+        "stac_version": STAC_VERSION,
+        "stac_extensions": [],
+        "id": id,
+        "geometry": series["geometry"],
+        "bbox": series["bbox"],
+        "properties": properties,
+        "links": [
+            { "rel": "self", "href": item_href(id), "type": "application/geo+json" },
+            { "rel": "parent", "href": format!("{}/stac/collections/{}", base_url, collection), "type": "application/json" },
+            { "rel": "collection", "href": format!("{}/stac/collections/{}", base_url, collection), "type": "application/json" },
+            { "rel": "root", "href": format!("{}/stac", base_url), "type": "application/json" },
+            { "rel": "related", "href": item_href(series["id"].as_str().unwrap_or_default()), "type": "application/geo+json", "title": "Series" },
+        ],
+        "assets": serde_json::Value::Object(files.into_iter().collect()),
+        "collection": collection,
+    });
+    day["stac_extensions"] = serde_json::json!(stac_extensions(&day));
+    day
+}
+
+/// Errors in the items written for one source item: any over the size limit,
+/// and files that differ between the source and the written items together.
+fn series_issues(source: &serde_json::Value, written: &[serde_json::Value]) -> Vec<ValidationIssue> {
+    let code = source["id"].as_str().unwrap_or_default();
+    let mut issues: Vec<ValidationIssue> = written.iter()
+        .map(|item| (item, item_size(item)))
+        .filter(|(_, size)| *size > ITEM_SIZE_LIMIT)
+        .map(|(item, size)| ValidationIssue {
+            item_id: item["id"].as_str().unwrap_or_default().to_string(),
+            severity: "error".to_string(),
+            message: format!("Item is {} bytes, over the {} byte limit", size, ITEM_SIZE_LIMIT),
+            check: Some(CheckKind::ItemTooLarge),
+            ..Default::default()
+        })
+        .collect();
+    let files = |item: &serde_json::Value| -> Vec<(String, String)> {
+        item["assets"].as_object().into_iter().flatten()
+            .filter(|(key, _)| *key != "archive" && *key != "manifest")
+            .map(|(key, asset)| (key.clone(), asset.to_string()))
+            .collect()
+    };
+    let mut source_files = files(source);
+    let mut written_files: Vec<(String, String)> = written.iter().flat_map(files).collect();
+    source_files.sort_unstable();
+    written_files.sort_unstable();
+    if source_files != written_files {
+        issues.push(ValidationIssue {
+            item_id: code.to_string(),
+            severity: "error".to_string(),
+            message: format!("Series and its days hold {} files that differ from the {} of the source item", written_files.len(), source_files.len()),
+            check: Some(CheckKind::SeriesFilesDiffer),
+            ..Default::default()
+        });
+    }
+    issues
+}
+
+/// One file of a series manifest: its S3 key and the datetime, size and
+/// checksum its asset carries.
+struct ManifestRow {
+    path: String,
+    datetime: Option<String>,
+    size: Option<u64>,
+    checksum: Option<String>,
+}
+
+/// Name of a series manifest, staged and served beside the item's archive.
+fn series_manifest_name(code: &str) -> String {
+    format!("{}.manifest.csv", code)
+}
+
+/// CSV listing every file of a series, `path,datetime,size,checksum`, sorted by path.
+fn series_manifest_csv(mut rows: Vec<ManifestRow>) -> String {
+    rows.sort_by(|a, b| a.path.cmp(&b.path));
+    let mut writer = csv::Writer::from_writer(Vec::new());
+    writer.write_record(["path", "datetime", "size", "checksum"]).expect("write to memory");
+    for row in rows {
+        let size = row.size.map(|s| s.to_string()).unwrap_or_default();
+        writer.write_record([
+            row.path.as_str(),
+            row.datetime.as_deref().unwrap_or(""),
+            size.as_str(),
+            row.checksum.as_deref().unwrap_or(""),
+        ]).expect("write to memory");
+    }
+    String::from_utf8(writer.into_inner().expect("flush to memory")).expect("CSV of UTF-8 fields")
+}
+
+/// Write a series manifest into the archives staging directory, leaving the
+/// file untouched when its content is unchanged. Returns whether it was written.
+fn write_series_manifest(archives_dir: &Path, code: &str, text: &str) -> Result<bool> {
+    let path = archives_dir.join(series_manifest_name(code));
+    if fs::read(&path).is_ok_and(|existing| existing == text.as_bytes()) {
+        return Ok(false);
+    }
+    fs::write(&path, text).with_context(|| format!("Failed to write {:?}", path))?;
+    Ok(true)
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    format!("{:x}", Sha256::digest(bytes))
 }
 
 /// Get MIME type for a file extension
@@ -2757,6 +3019,11 @@ fn get_mime_type(path: &Path) -> &'static str {
     }
 }
 
+/// The distinct values, sorted
+fn distinct_sorted<T: Ord>(values: impl Iterator<Item = T>) -> Vec<T> {
+    values.collect::<std::collections::BTreeSet<_>>().into_iter().collect()
+}
+
 /// Create a STAC Collection
 fn create_stac_collection(
     def: &CollectionDef,
@@ -2796,31 +3063,36 @@ fn create_stac_collection(
         serde_json::json!([[null, null]])
     };
 
-    // Build summaries
-    let mut processing_levels: Vec<i32> = items
-        .iter()
-        .filter_map(|i| i.processing_level)
-        .collect::<std::collections::HashSet<_>>()
-        .into_iter()
-        .collect();
-    processing_levels.sort_unstable();
-
-    let mut sources: Vec<String> = items
-        .iter()
-        .filter_map(|i| i.source.clone())
-        .collect::<std::collections::HashSet<_>>()
-        .into_iter()
-        .collect();
-    sources.sort_unstable();
-
-    // A summary must list at least one value, so empty ones are left out
+    // Summaries are keyed by the item property names, each the sorted distinct
+    // values of the collection's items. A summary must list at least one value,
+    // so empty ones are left out
     let mut summaries = serde_json::Map::new();
-    if !processing_levels.is_empty() {
-        summaries.insert("processing_level".to_string(), serde_json::json!(processing_levels));
-    }
-    if !sources.is_empty() {
-        summaries.insert("source".to_string(), serde_json::json!(sources));
-    }
+    let mut summarise = |key: &str, values: Vec<serde_json::Value>| {
+        if !values.is_empty() {
+            summaries.insert(key.to_string(), serde_json::Value::Array(values));
+        }
+    };
+    summarise(
+        "blatten:sensor",
+        distinct_sorted(items.iter().filter_map(|i| i.sensor.clone()))
+            .into_iter()
+            .map(serde_json::Value::from)
+            .collect(),
+    );
+    summarise(
+        "blatten:source",
+        distinct_sorted(items.iter().filter_map(|i| i.source.clone()))
+            .into_iter()
+            .map(serde_json::Value::from)
+            .collect(),
+    );
+    summarise(
+        "blatten:processing_level",
+        distinct_sorted(items.iter().filter_map(|i| i.processing_level))
+            .into_iter()
+            .map(serde_json::Value::from)
+            .collect(),
+    );
 
     let providers = collection_providers(
         &catalog_config.providers,
@@ -2915,6 +3187,7 @@ fn generate_catalog(
     output_dir: &PathBuf,
     base_url: &str,
     s3_base_url: &str,
+    archives_dir: Option<&Path>,
     multi_progress: &MultiProgress,
     config: &GenConfig,
 ) -> Result<(usize, usize, usize, Vec<ValidationIssue>)> {
@@ -2955,7 +3228,7 @@ fn generate_catalog(
     let results: Vec<_> = items
         .par_iter()
         .map(|item| {
-            let stac_item = create_stac_item(item, base_url, s3_base_url, &coll_title_map, &config.product_type_strip, &config.producers);
+            let (stac_item, manifest) = create_stac_item_and_manifest(item, base_url, s3_base_url, &coll_title_map, &config.product_type_strip, &config.producers);
 
             // Count assets for stats
             let asset_count = stac_item
@@ -3016,21 +3289,35 @@ fn generate_catalog(
             item_issues.extend(format_issue(&stac_item, item.format.as_deref()));
             item_issues.extend(phase_issue(&item.code, item.phase.as_deref()));
 
+            // An item over the size budget is written as its series and days
+            let written = series_and_days(stac_item.clone(), base_url);
+            item_issues.extend(series_issues(&stac_item, &written));
+
             item_pb.inc(1);
-            (item, stac_item, asset_count, item_issues)
+            (item, stac_item, written, manifest, asset_count, item_issues)
         })
         .collect();
 
     // Aggregate results
     let mut items_with_stac: Vec<(&ItemMetadata, serde_json::Value)> = Vec::with_capacity(results.len());
+    let mut all_items: Vec<serde_json::Value> = Vec::with_capacity(results.len());
     let mut total_assets: usize = 0;
-    for (item, stac_item, asset_count, item_issues) in results {
+    let mut manifests_written = 0;
+    for (item, stac_item, written, manifest, asset_count, item_issues) in results {
+        // Series manifests are staged with the archives, so they are uploaded with them
+        if let (Some(dir), Some(text)) = (archives_dir, manifest.as_deref()) {
+            fs::create_dir_all(dir)?;
+            if write_series_manifest(dir, &item.code, text)? {
+                manifests_written += 1;
+            }
+        }
         items_with_stac.push((item, stac_item));
+        all_items.extend(written);
         total_assets += asset_count;
         issues.extend(item_issues);
     }
 
-    item_pb.finish_with_message(format!("Created {} STAC items ({} assets)", items_with_stac.len(), total_assets));
+    item_pb.finish_with_message(format!("Created {} STAC items ({} assets, {} series manifests written), written as {} items", items_with_stac.len(), total_assets, manifests_written, all_items.len()));
 
     // Phase 2: Build all collection data in memory, then write in parallel
     let coll_pb = multi_progress.add(ProgressBar::new(items_by_collection.len() as u64));
@@ -3075,8 +3362,10 @@ fn generate_catalog(
 
     coll_pb.finish_with_message(format!("Wrote {} collection files", stac_collections.len()));
 
-    // Collect all STAC items for the all_items file, sorted by ID for deterministic output
-    let mut all_items: Vec<serde_json::Value> = items_with_stac.into_iter().map(|(_, stac)| stac).collect();
+    // Items as built, one per source item, for the checks and statistics on whole datasets
+    let source_items: Vec<serde_json::Value> = items_with_stac.into_iter().map(|(_, stac)| stac).collect();
+
+    // Sort the written items by ID for deterministic output, so a series' days follow it in date order
     all_items.sort_by(|a, b| {
         let a_id = a["id"].as_str().unwrap_or("");
         let b_id = b["id"].as_str().unwrap_or("");
@@ -3192,7 +3481,7 @@ fn generate_catalog(
         serde_json::to_string_pretty(&collections_list)?,
     )?;
 
-    issues.extend(duplicate_data_issues(&all_items));
+    issues.extend(duplicate_data_issues(&source_items));
 
     // Check the written catalog, collections and items against the vendored STAC schemas
     let schemas = StacSchemas::load()?;
@@ -3203,11 +3492,11 @@ fn generate_catalog(
     }
     issues.extend(all_items.par_iter().flat_map_iter(|item| schemas.issues(item)).collect::<Vec<_>>());
 
-    // Compute quality metrics
-    let num_items = all_items.len();
-    let items_with_geometry = all_items.iter().filter(|i| !i["geometry"].is_null()).count();
-    let items_missing_geometry = all_items.iter().filter(|i| i["geometry"].is_null()).count();
-    let items_with_archive = all_items.iter().filter(|i| {
+    // Compute quality metrics over the source items, whose days add no dataset
+    let num_items = source_items.len();
+    let items_with_geometry = source_items.iter().filter(|i| !i["geometry"].is_null()).count();
+    let items_missing_geometry = source_items.iter().filter(|i| i["geometry"].is_null()).count();
+    let items_with_archive = source_items.iter().filter(|i| {
         i.get("assets").and_then(|a| a.get("archive")).is_some()
     }).count();
     let items_missing_archive = num_items - items_with_archive;
@@ -3219,7 +3508,7 @@ fn generate_catalog(
 
     // Group items by collection for per-collection stats
     let mut collection_stats: BTreeMap<String, serde_json::Value> = BTreeMap::new();
-    for item in &all_items {
+    for item in &source_items {
         let coll_id = item.get("collection").and_then(|c| c.as_str()).unwrap_or("unknown");
         let num_assets = item.get("assets").and_then(|a| a.as_object()).map(|a| a.len()).unwrap_or(0);
         let entry = collection_stats.entry(coll_id.to_string()).or_insert_with(|| {
@@ -3247,6 +3536,7 @@ fn generate_catalog(
         "summary": {
             "total_collections": stac_collections.len(),
             "total_items": num_items,
+            "written_items": all_items.len(),
             "total_assets": total_assets,
             "items_with_geometry": items_with_geometry,
             "items_missing_geometry": items_missing_geometry,
@@ -3274,7 +3564,7 @@ fn generate_catalog(
         serde_json::to_string_pretty(&report)?,
     )?;
 
-    Ok((stac_collections.len(), num_items, total_assets, issues))
+    Ok((stac_collections.len(), all_items.len(), total_assets, issues))
 }
 
 // =============================================================================
@@ -4220,7 +4510,7 @@ fn main() -> Result<()> {
             }
 
             // Generate STAC catalog
-            let (num_collections, num_items, num_assets, issues) = generate_catalog(&items, &output, &base_url, &s3_base_url, &multi_progress, &config)?;
+            let (num_collections, num_items, num_assets, issues) = generate_catalog(&items, &output, &base_url, &s3_base_url, archives_dir.as_deref(), &multi_progress, &config)?;
             info!(
                 "  Generated {} collections, {} items, {} assets",
                 num_collections, num_items, num_assets
@@ -5738,6 +6028,253 @@ mod tests {
         assert!(!issues.iter().any(|i| i.message.contains("iri-reference")), "{:?}", issues);
     }
 
+    fn create_stac_item(item: &ItemMetadata, base_url: &str, s3_base_url: &str, collection_titles: &HashMap<String, String>, product_type_strip: &HashMap<String, Vec<String>>, producers: &HashMap<String, ProducerConfig>) -> serde_json::Value {
+        create_stac_item_and_manifest(item, base_url, s3_base_url, collection_titles, product_type_strip, producers).0
+    }
+
+    fn kite_item(code: &str, file_count: usize) -> ItemMetadata {
+        let files: Vec<serde_json::Value> = (0..file_count).map(|i| serde_json::json!({
+            "path": format!("/data/{}/flights, day {}/kite_20240301_{:06}.jpg", code, i % 3, i),
+            "size": i + 1,
+            "hash": format!("{:064x}", i),
+            "bbox": null,
+            "geometry": null,
+        })).collect();
+        let mut item: ItemMetadata = serde_json::from_value(serde_json::json!({
+            "code": code,
+            "continued": false,
+            "collection_id": "kites",
+            "archive_file": format!("{}.zip", code),
+            "files": files,
+        })).unwrap();
+        item.folder_path = Some(PathBuf::from(format!("/data/{}", code)));
+        item
+    }
+
+    fn build_kite_item(item: &ItemMetadata) -> (serde_json::Value, Option<String>) {
+        create_stac_item_and_manifest(item, "${STAC_BASE_URL}", "${S3_BASE_URL}", &HashMap::new(), &HashMap::new(), &HashMap::new())
+    }
+
+    #[test]
+    fn item_over_the_size_budget_lists_every_file_in_a_manifest_asset() {
+        let (stac, manifest) = build_kite_item(&kite_item("99Za05", 2000));
+        assert!(is_series(&stac));
+        let csv_text = manifest.expect("an item over the budget has a manifest");
+
+        let asset = &stac["assets"]["manifest"];
+        assert_eq!(asset["href"], "${S3_BASE_URL}/archives/99Za05.manifest.csv");
+        assert_eq!(asset["type"], "text/csv");
+        assert_eq!(asset["roles"], serde_json::json!(["metadata"]));
+        assert_eq!(asset["file:size"], csv_text.len());
+        assert_eq!(asset["file:checksum"], format!("1220{:x}", <sha2::Sha256 as sha2::Digest>::digest(csv_text.as_bytes())));
+
+        let mut reader = csv::Reader::from_reader(csv_text.as_bytes());
+        assert_eq!(reader.headers().unwrap(), vec!["path", "datetime", "size", "checksum"]);
+        let rows: Vec<csv::StringRecord> = reader.records().map(|r| r.unwrap()).collect();
+        let paths: Vec<&str> = rows.iter().map(|r| &r[0]).collect();
+        let mut sorted = paths.clone();
+        sorted.sort();
+        assert_eq!(paths, sorted);
+        assert_eq!(rows.len(), 2000);
+
+        let rows_by_path: HashMap<&str, &csv::StringRecord> = rows.iter().map(|r| (&r[0], r)).collect();
+        let file_assets: Vec<&serde_json::Value> = stac["assets"].as_object().unwrap().iter()
+            .filter(|(key, _)| *key != "archive" && *key != "manifest")
+            .map(|(_, a)| a)
+            .collect();
+        assert_eq!(file_assets.len(), rows.len());
+        for asset in file_assets {
+            let encoded = asset["href"].as_str().unwrap().strip_prefix("${S3_BASE_URL}/").unwrap();
+            let path = percent_encoding::percent_decode_str(encoded).decode_utf8().unwrap();
+            assert!(path.starts_with("assets/99Za05/"), "{}", path);
+            let row = rows_by_path[path.as_ref()];
+            assert_eq!(&row[1], asset["datetime"].as_str().unwrap_or(""));
+            assert_eq!(row[2], asset["file:size"].to_string());
+            assert_eq!(&row[3], asset["file:checksum"].as_str().unwrap());
+        }
+    }
+
+    #[test]
+    fn item_under_the_size_budget_has_no_manifest() {
+        let (stac, manifest) = build_kite_item(&kite_item("99Za06", 3));
+        assert!(!is_series(&stac));
+        assert!(manifest.is_none());
+        assert!(stac["assets"].get("manifest").is_none());
+    }
+
+    /// A kite series: `first_day` files on 2024-03-01, `second_day` on 2024-03-02 and one
+    /// undated logbook, each file with a checksum and an LV95 footprint so it weighs as a
+    /// radar file does.
+    fn kite_series(code: &str, first_day: usize, second_day: usize) -> ItemMetadata {
+        let footprint = serde_json::json!({
+            "type": "Polygon",
+            "coordinates": [[[2600000.5, 1200000.5], [2600100.5, 1200000.5], [2600100.5, 1200100.5], [2600000.5, 1200100.5], [2600000.5, 1200000.5]]]
+        });
+        let dated = (0..first_day).map(|i| format!("kite_20240301-{:02}{:02}{:02}.jpg", i / 3600, i / 60 % 60, i % 60))
+            .chain((0..second_day).map(|i| format!("kite_20240302-{:02}{:02}{:02}.jpg", i / 3600, i / 60 % 60, i % 60)));
+        let files: Vec<serde_json::Value> = dated.chain(["logbook.pdf".to_string()]).enumerate().map(|(i, name)| serde_json::json!({
+            "path": format!("/data/{}/{}", code, name),
+            "size": i + 1,
+            "hash": format!("{:064x}", i),
+            "bbox": null,
+            "geometry": null,
+            "bbox_lv95": [2600000.5, 1200000.5, 2600100.5, 1200100.5],
+            "geometry_lv95": footprint,
+        })).collect();
+        let mut item: ItemMetadata = serde_json::from_value(serde_json::json!({
+            "code": code,
+            "continued": false,
+            "collection_id": "kites",
+            "sensor": "Kite Line",
+            "source": "Kite Club",
+            "processing_level": 1,
+            "format": "JPG",
+            "product_type": "Kite Photo",
+            "description": "Kite flights over the meadow",
+            "date_first": "2024-03-01",
+            "date_last": "2024-03-02",
+            "geometry": { "type": "Point", "coordinates": [7.8, 46.4] },
+            "bbox": [7.8, 46.4, 7.8, 46.4],
+            "archive_file": format!("{}.zip", code),
+            "files": files,
+        })).unwrap();
+        item.file_count = item.files.len();
+        item.folder_path = Some(PathBuf::from(format!("/data/{}", code)));
+        item
+    }
+
+    fn file_assets(item: &serde_json::Value) -> Vec<(String, serde_json::Value)> {
+        item["assets"].as_object().unwrap().iter()
+            .filter(|(key, _)| *key != "archive" && *key != "manifest")
+            .map(|(key, asset)| (key.clone(), asset.clone()))
+            .collect()
+    }
+
+    #[test]
+    fn item_over_the_size_budget_is_written_as_a_series_and_its_days() {
+        let (source, _) = build_kite_item(&kite_series("99Za08", 40, 900));
+        assert!(is_series(&source));
+        let written = series_and_days(source.clone(), "${STAC_BASE_URL}");
+
+        let series = &written[0];
+        assert_eq!(series["id"], "99Za08");
+        assert_eq!(series["properties"], source["properties"]);
+        assert_eq!(series["geometry"], source["geometry"]);
+        let mut kept: Vec<&str> = series["assets"].as_object().unwrap().keys().map(String::as_str).collect();
+        kept.sort_unstable();
+        assert_eq!(kept, vec!["archive", "logbook", "manifest"]);
+        assert_eq!(series["properties"]["blatten:file_count"], 941);
+        let days_link = series["links"].as_array().unwrap().iter().find(|l| l["rel"] == "items").unwrap();
+        assert_eq!(days_link["href"], "${STAC_BASE_URL}/stac/collections/kites/items?filter=blatten:series='99Za08'");
+        assert_eq!(days_link["type"], "application/geo+json");
+        assert_eq!(days_link["title"], "Days");
+
+        let days = &written[1..];
+        let ids: Vec<&str> = days.iter().map(|d| d["id"].as_str().unwrap()).collect();
+        assert_eq!(ids[0], "99Za08_2024-03-01");
+        assert!(ids.len() > 2, "the second day is over the budget and is cut: {:?}", ids);
+        for (n, id) in ids[1..].iter().enumerate() {
+            assert_eq!(*id, format!("99Za08_2024-03-02_{}", n + 1));
+        }
+        let mut sorted = ids.clone();
+        sorted.sort_unstable();
+        assert_eq!(ids, sorted);
+
+        for day in days {
+            let props = &day["properties"];
+            assert!(item_size(day) <= ITEM_SIZE_BUDGET, "{} is {} bytes", day["id"], item_size(day));
+            assert!(props["datetime"].is_null());
+            assert_eq!(props["blatten:series"], "99Za08");
+            for key in ["blatten:code", "blatten:sensor", "blatten:source", "blatten:processing_level", "blatten:format", "blatten:product_type"] {
+                assert_eq!(props[key], source["properties"][key], "{}", key);
+            }
+            assert_eq!(day["geometry"], source["geometry"]);
+            assert_eq!(day["bbox"], source["bbox"]);
+            assert_eq!(day["collection"], "kites");
+            let files = file_assets(day);
+            assert_eq!(props["blatten:file_count"], files.len());
+            let size: u64 = files.iter().map(|(_, a)| a["file:size"].as_u64().unwrap()).sum();
+            assert_eq!(props["blatten:total_size"], size, "{}", day["id"]);
+            let times: Vec<&str> = files.iter().map(|(_, a)| a["datetime"].as_str().unwrap()).collect();
+            assert_eq!(props["start_datetime"], *times.iter().min().unwrap());
+            assert_eq!(props["end_datetime"], *times.iter().max().unwrap());
+            assert!(props["title"].as_str().unwrap().contains(&props["start_datetime"].as_str().unwrap()[..10]));
+            let series_link = day["links"].as_array().unwrap().iter().find(|l| l["rel"] == "related").unwrap();
+            assert_eq!(series_link["href"], "${STAC_BASE_URL}/stac/collections/kites/items/99Za08");
+            assert_eq!(series_link["title"], "Series");
+            assert_eq!(link_href(day, "self"), format!("${{STAC_BASE_URL}}/stac/collections/kites/items/{}", day["id"].as_str().unwrap()));
+        }
+
+        // The parts of a day follow file time, and each is as full as the budget allows
+        let parts = &days[1..];
+        for pair in parts.windows(2) {
+            assert!(pair[0]["properties"]["end_datetime"].as_str() < pair[1]["properties"]["start_datetime"].as_str());
+            let mut fuller = pair[0].clone();
+            let (key, asset) = file_assets(&pair[1]).into_iter()
+                .min_by(|a, b| a.1["datetime"].as_str().cmp(&b.1["datetime"].as_str())).unwrap();
+            fuller["assets"][key] = asset;
+            assert!(item_size(&fuller) > ITEM_SIZE_BUDGET, "{} could hold one more file", pair[0]["id"]);
+        }
+
+        let mut split: Vec<(String, serde_json::Value)> = written.iter().flat_map(file_assets).collect();
+        let mut whole = file_assets(&source);
+        split.sort_by(|a, b| a.0.cmp(&b.0));
+        whole.sort_by(|a, b| a.0.cmp(&b.0));
+        assert_eq!(split, whole);
+
+        assert!(series_issues(&source, &written).is_empty());
+        let schemas = StacSchemas::load().unwrap();
+        for item in &written {
+            assert!(schemas.issues(item).is_empty(), "{}", item["id"]);
+        }
+    }
+
+    #[test]
+    fn day_item_carries_the_total_size_of_its_files() {
+        let (source, _) = build_kite_item(&kite_series("99Za11", 2, 2));
+        let files: Vec<(String, serde_json::Value)> = [1, 2, 4].iter().enumerate()
+            .map(|(i, size)| (format!("kite_{}", i), serde_json::json!({ "href": format!("kite_{}.jpg", i), "file:size": size })))
+            .collect();
+        let day = day_item(&source, "99Za11_2024-03-01", "2024-03-01", files, "${STAC_BASE_URL}");
+        assert_eq!(day["properties"]["blatten:total_size"], 7);
+    }
+
+    #[test]
+    fn item_under_the_size_budget_is_written_whole() {
+        let (source, _) = build_kite_item(&kite_series("99Za09", 2, 2));
+        assert_eq!(series_and_days(source.clone(), "${STAC_BASE_URL}"), vec![source]);
+    }
+
+    #[test]
+    fn written_items_that_lose_a_file_or_exceed_the_limit_are_errors() {
+        let (source, _) = build_kite_item(&kite_series("99Za10", 40, 900));
+        let mut written = series_and_days(source.clone(), "${STAC_BASE_URL}");
+        let dropped = file_assets(&written[1])[0].0.clone();
+        written[1]["assets"].as_object_mut().unwrap().remove(&dropped);
+        let issues = series_issues(&source, &written);
+        assert_eq!(issues.len(), 1, "{:?}", issues);
+        assert_eq!(issues[0].severity, "error");
+        assert_eq!(issues[0].item_id, "99Za10");
+        assert_eq!(issues[0].check, Some(CheckKind::SeriesFilesDiffer));
+
+        let issues = series_issues(&source, std::slice::from_ref(&source));
+        assert_eq!(issues.len(), 1, "{:?}", issues);
+        assert_eq!(issues[0].severity, "error");
+        assert_eq!(issues[0].check, Some(CheckKind::ItemTooLarge));
+    }
+
+    #[test]
+    fn manifest_file_is_rewritten_only_when_its_content_changes() {
+        let dir = scratch_dir("series-manifest");
+        assert!(write_series_manifest(&dir, "99Za07", "path,datetime,size,checksum\n").unwrap());
+        assert!(!write_series_manifest(&dir, "99Za07", "path,datetime,size,checksum\n").unwrap());
+        assert!(write_series_manifest(&dir, "99Za07", "path,datetime,size,checksum\nassets/99Za07/a.jpg,,1,\n").unwrap());
+        assert_eq!(
+            fs::read_to_string(dir.join("99Za07.manifest.csv")).unwrap(),
+            "path,datetime,size,checksum\nassets/99Za07/a.jpg,,1,\n"
+        );
+    }
+
     #[test]
     fn sidecar_and_descriptor_files_take_the_metadata_role() {
         for name in [
@@ -6197,6 +6734,54 @@ links:
         assert_eq!(collection["published"], "2030-04-01T00:00:00Z");
         let extensions = collection["stac_extensions"].as_array().unwrap();
         assert!(extensions.iter().any(|e| e == TIMESTAMPS_SCHEMA));
+    }
+
+    fn summarised_item(code: &str, sensor: Option<&str>, source: Option<&str>, level: Option<i32>) -> ItemMetadata {
+        serde_json::from_value(serde_json::json!({
+            "code": code,
+            "continued": false,
+            "sensor": sensor,
+            "source": source,
+            "processing_level": level,
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn collection_summaries_use_item_property_names() {
+        let def = CollectionDef {
+            id: "orchard-survey".to_string(),
+            title: "Orchard Survey".to_string(),
+            description: "Apple trees".to_string(),
+        };
+        let items = [
+            summarised_item("01Aa01", Some("Pruning Ladder"), Some("Grove Office"), Some(2)),
+            summarised_item("02Aa01", Some("Blossom Counter"), Some("Grove Office"), Some(1)),
+            summarised_item("02Aa02", Some("Blossom Counter"), None, None),
+        ];
+        let refs: Vec<&ItemMetadata> = items.iter().collect();
+        let collection = create_stac_collection(&def, &refs, "https://example.org", &cited_catalog_config(), &HashMap::new());
+
+        let summaries = collection["summaries"].as_object().unwrap();
+        assert_eq!(summaries["blatten:sensor"], serde_json::json!(["Blossom Counter", "Pruning Ladder"]));
+        assert_eq!(summaries["blatten:source"], serde_json::json!(["Grove Office"]));
+        assert_eq!(summaries["blatten:processing_level"], serde_json::json!([1, 2]));
+        assert!(!summaries.contains_key("source"));
+        assert!(!summaries.contains_key("processing_level"));
+    }
+
+    #[test]
+    fn collection_summaries_leave_out_empty_properties() {
+        let def = CollectionDef {
+            id: "orchard-survey".to_string(),
+            title: "Orchard Survey".to_string(),
+            description: "Apple trees".to_string(),
+        };
+        let items = [summarised_item("01Aa01", None, None, None)];
+        let refs: Vec<&ItemMetadata> = items.iter().collect();
+        let collection = create_stac_collection(&def, &refs, "https://example.org", &cited_catalog_config(), &HashMap::new());
+
+        assert!(collection["summaries"].as_object().unwrap().is_empty());
     }
 
     fn data_item(id: &str, files: &[(&str, &str)]) -> serde_json::Value {

@@ -76,14 +76,21 @@
     }
   },
   "summaries": {
-    "processing_level": [
-      2,
-      3
+    "blatten:sensor": [
+      "Lake level - Geoazimut",
+      "Lonza river discharge - Blatten",
+      "Lonza river discharge - Gampel",
+      "Lonza river discharge - Kippel",
+      "Lonza river discharge - upstream"
     ],
-    "source": [
+    "blatten:source": [
       "DNAGE (Geoazimut)",
       "DNAGE (HYDRO OFEV)",
       "DNAGE (HYDRO-VS)"
+    ],
+    "blatten:processing_level": [
+      2,
+      3
     ]
   },
   "links": [
