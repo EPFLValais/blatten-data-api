@@ -55,6 +55,7 @@ test('an account without the viewer role sees only the access screen, and can si
   await expect(page.locator('#access-signout')).toBeVisible();
   await expectNoneVisible(page.locator('.controls, .controls *, .toolbar, .toolbar *'));
   await expect(page.locator('main')).toBeHidden();
+  await expect(page.locator('canvas')).toHaveCount(0);
 
   const logout = page.waitForRequest((req) => new URL(req.url()).pathname.endsWith('/protocol/openid-connect/logout'));
   await page.locator('#access-signout').click();

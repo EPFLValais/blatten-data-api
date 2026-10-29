@@ -6,7 +6,7 @@
 use anyhow::{Context, Result};
 use serde_json::Value;
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     fs,
     hash::{DefaultHasher, Hash, Hasher},
     io::BufRead,
@@ -54,8 +54,8 @@ fn substitute_placeholders(json: &str, base_url: &str, s3_base_url: &str) -> Str
 pub struct StacCatalog {
     /// Root catalog (from stac crate)
     pub root: StacCatalogRoot,
-    /// Collections indexed by ID
-    pub collections: HashMap<String, StacCollection>,
+    /// Collections indexed by ID, iterated in ID order so every process lists them alike
+    pub collections: BTreeMap<String, StacCollection>,
     /// All items (flat list for searching)
     pub items: Vec<StacItem>,
     /// Items indexed by (collection_id, item_id) for O(1) lookup
@@ -89,7 +89,7 @@ impl StacCatalog {
 
         // Load collections
         let collections_dir = dir.join("collections");
-        let mut collections = HashMap::new();
+        let mut collections = BTreeMap::new();
 
         if collections_dir.exists() {
             // Sorted so the version does not depend on directory order
@@ -169,7 +169,7 @@ impl StacCatalog {
     /// A catalog over the given parts, with its item indexes built
     pub fn from_parts(
         root: StacCatalogRoot,
-        collections: HashMap<String, StacCollection>,
+        collections: BTreeMap<String, StacCollection>,
         items: Vec<StacItem>,
         version: String,
     ) -> Self {
@@ -301,6 +301,36 @@ mod tests {
             "https://dev.example/s3/assets/box-kite/sail.tif"
         );
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn collections_iterate_in_id_order() {
+        let root: StacCatalogRoot = serde_json::from_value(serde_json::json!({
+            "type": "Catalog", "stac_version": "1.1.0", "id": "kites", "description": "Kites", "links": []
+        }))
+        .unwrap();
+        let collection = |id: &str| -> (String, StacCollection) {
+            let collection = serde_json::from_value(serde_json::json!({
+                "type": "Collection", "stac_version": "1.1.0", "id": id, "description": id,
+                "license": "CC0-1.0",
+                "extent": {"spatial": {"bbox": [[-180.0, -90.0, 180.0, 90.0]]}, "temporal": {"interval": [[null, null]]}},
+                "links": []
+            }))
+            .unwrap();
+            (id.to_string(), collection)
+        };
+        let ids = ["sled", "box", "delta", "parafoil", "diamond", "bow", "rokkaku", "genki"];
+        let catalog = StacCatalog::from_parts(
+            root,
+            ids.iter().map(|id| collection(id)).collect(),
+            Vec::new(),
+            "kites-version".to_string(),
+        );
+
+        let listed: Vec<&str> = catalog.collections.values().map(|c| c.id.as_str()).collect();
+        let mut sorted = ids.to_vec();
+        sorted.sort_unstable();
+        assert_eq!(listed, sorted);
     }
 
     #[test]

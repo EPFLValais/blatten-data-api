@@ -90,19 +90,22 @@
       "rel": "describedby",
       "href": "${S3_BASE_URL}/docs/dataset_overview.csv",
       "type": "text/csv",
-      "title": "Dataset Overview"
+      "title": "Dataset Overview",
+      "file:size": 39080
     },
     {
       "rel": "describedby",
       "href": "${S3_BASE_URL}/docs/A50039_Blatten4Science_TechnicalDocumentation.pdf",
       "type": "application/pdf",
-      "title": "Technical Documentation"
+      "title": "Technical Documentation",
+      "file:size": 22107545
     },
     {
       "rel": "describedby",
       "href": "${S3_BASE_URL}/docs/A50039_Supplement1_GassnerJ_GBIR_Report.pdf",
       "type": "application/pdf",
-      "title": "Supplement 1 - GBIR Report"
+      "title": "Supplement 1 - GBIR Report",
+      "file:size": 12870965
     },
     {
       "rel": "license",

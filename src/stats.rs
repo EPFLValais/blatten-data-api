@@ -9,7 +9,7 @@
 //! nothing is counted, so the proxy's uptime before the store existed is not booked to that day.
 //! Counting starts with the next scrape. A proxy process first seen after that still counts from zero.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 // ============================================================================
 // Reading the proxy's counters
@@ -233,13 +233,40 @@ pub fn whole_file_thousandths(bytes: u64, size: Option<u64>) -> u64 {
     }
 }
 
-/// The key a path is summed under per day: the item code for a catalog file or archive, `~docs` for a
-/// document and `~other` for anything else.
+/// The key documents are summed under when a document has no key of its own: a name too long to
+/// store, or an hour summed before documents were told apart.
+pub const DOCS_KEY: &str = "~docs";
+/// The key paths that are neither a catalog item nor a document are summed under.
+pub const OTHER_KEY: &str = "~other";
+
+/// The name of a document as the proxy reports its path: everything below `/docs/`.
+pub fn document_name(path: &str) -> Option<&str> {
+    match classify(path) {
+        (Kind::Docs, _) => path.trim_start_matches('/').strip_prefix("docs/").filter(|n| !n.is_empty()),
+        _ => None,
+    }
+}
+
+/// Whether a key holds documents: `Some(Some(name))` for one document, `Some(None)` for documents
+/// summed together under `DOCS_KEY`.
+pub fn document_of(code: &str) -> Option<Option<&str>> {
+    if code == DOCS_KEY {
+        return Some(None);
+    }
+    code.strip_prefix(DOCS_KEY).and_then(|rest| rest.strip_prefix('/')).map(Some)
+}
+
+/// The key a path is summed under per day and hour: the item code for a catalog file or archive,
+/// `~docs/<name>` for a document (`~docs` when that is longer than a key may be) and `~other` for
+/// anything else.
 pub fn code_key(path: &str) -> String {
     match classify(path) {
         (Kind::File | Kind::Archive, Some(code)) if code.chars().count() <= MAX_CODE_CHARS => code.to_string(),
-        (Kind::Docs, _) => "~docs".to_string(),
-        _ => "~other".to_string(),
+        (Kind::Docs, _) => match document_name(path) {
+            Some(name) if DOCS_KEY.len() + 1 + name.chars().count() <= MAX_CODE_CHARS => format!("{DOCS_KEY}/{name}"),
+            _ => DOCS_KEY.to_string(),
+        },
+        _ => OTHER_KEY.to_string(),
     }
 }
 
@@ -279,6 +306,9 @@ pub fn summarize(rows: &[DailyRow], collections: &HashMap<String, String>) -> Ve
         let (collection, item) = match code.and_then(|c| collections.get(c).map(|col| (col, c))) {
             Some((col, c)) => (col.clone(), c.to_string()),
             None if kind == Kind::File || kind == Kind::Archive => ("unknown".into(), "unknown".into()),
+            None if kind == Kind::Docs => {
+                ("Documents".into(), document_name(&row.path).unwrap_or("Documents").to_string())
+            }
             None => ("n/a".into(), "n/a".into()),
         };
         grouped.entry((row.day.clone(), collection, item, kind)).or_default().add(row.totals);
@@ -466,8 +496,24 @@ pub struct Breakdown {
     /// Every catalog item, including those with no requests.
     pub items: Vec<ItemTotals>,
     pub docs: Totals,
+    /// Distinct documents requested at least once.
+    pub docs_downloaded: usize,
     /// Paths that are not a known item or document.
     pub unknown: Totals,
+}
+
+/// A row of the table that belongs to no item: the documents, or the paths that are neither an
+/// item nor a document.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct ExtraRow {
+    pub name: &'static str,
+    /// The key its files are listed under, when they can be.
+    pub code: Option<&'static str>,
+    pub requests: u64,
+    pub bytes: u64,
+    pub whole_files: f64,
+    pub files_downloaded: usize,
+    pub expands: bool,
 }
 
 /// Fold per-path totals into one row per catalog item.
@@ -505,10 +551,26 @@ pub fn breakdown(paths: &[(String, Totals)], items: &[ItemInfo]) -> Breakdown {
                 it.whole_files += totals.equiv as f64 / 1000.0;
                 it.archive_requests = it.archive_requests.saturating_add(totals.requests);
             }
-            (Kind::Docs, _) => out.docs.add(*totals),
+            (Kind::Docs, _) => {
+                out.docs.add(*totals);
+                out.docs_downloaded += 1;
+            }
             _ => out.unknown.add(*totals),
         }
     }
+    out
+}
+
+/// Totals per document, by name, largest by requests first.
+pub fn documents(paths: &[(String, Totals)]) -> Vec<(String, Totals)> {
+    let mut by_name: BTreeMap<&str, Totals> = BTreeMap::new();
+    for (path, totals) in paths {
+        if let (Kind::Docs, _) = classify(path) {
+            by_name.entry(document_name(path).unwrap_or("")).or_default().add(*totals);
+        }
+    }
+    let mut out: Vec<_> = by_name.into_iter().map(|(n, t)| (n.to_string(), t)).collect();
+    out.sort_by(|a, b| b.1.requests.cmp(&a.1.requests).then(a.0.cmp(&b.0)));
     out
 }
 
@@ -519,9 +581,27 @@ impl Breakdown {
         if filters.is_active() {
             self.items.retain(|i| filters.matches(&i.facets));
             self.docs = Totals::default();
+            self.docs_downloaded = 0;
             self.unknown = Totals::default();
         }
         self
+    }
+
+    /// The documents and the other paths as table rows, each when it was requested at all.
+    pub fn extra_rows(&self) -> Vec<ExtraRow> {
+        let row = |name, code, t: Totals, files_downloaded| ExtraRow {
+            name,
+            code,
+            requests: t.requests,
+            bytes: t.bytes,
+            whole_files: t.whole_files(),
+            files_downloaded,
+            expands: code.is_some(),
+        };
+        [row("Documents", Some(DOCS_KEY), self.docs, self.docs_downloaded), row("Other", None, self.unknown, 0)]
+            .into_iter()
+            .filter(|r| r.requests > 0)
+            .collect()
     }
 }
 
@@ -709,8 +789,9 @@ pub fn code_passes<'a>(
 }
 
 /// Totals per group and bucket of `window`, from rows of (bucket start, code, totals). The largest
-/// `top` groups by requests are kept, the rest are summed as "Smaller groups", and documents and
-/// unknown paths are "Documents and other".
+/// `top` groups by requests are kept and the rest are summed as "Smaller groups". Documents are
+/// "Documents", or each its own group named by its file name when grouped by item, and unknown
+/// paths are "Other"; neither counts towards `top`.
 pub fn series(
     rows: &[(chrono::NaiveDateTime, String, Totals)],
     infos: &[ItemInfo],
@@ -725,14 +806,20 @@ pub fn series(
     let slot: HashMap<chrono::NaiveDateTime, usize> = starts.iter().enumerate().map(|(n, t)| (*t, n)).collect();
 
     let mut sums: BTreeMap<String, Vec<Totals>> = BTreeMap::new();
+    let mut outside: BTreeSet<String> = BTreeSet::new();
     for (start, code, t) in rows {
         let Some(&n) = slot.get(&window.resolution.align(*start)) else { continue };
         let Some(info) = code_passes(code, &by_code, filters) else { continue };
-        let name = match info {
-            Some(info) if dim == Dim::Item => info.code.clone(),
-            Some(info) => dim.of(&info.facets).to_string(),
-            None => "Documents and other".to_string(),
+        let name = match (info, document_of(code)) {
+            (Some(info), _) if dim == Dim::Item => info.code.clone(),
+            (Some(info), _) => dim.of(&info.facets).to_string(),
+            (None, Some(Some(doc))) if dim == Dim::Item => doc.to_string(),
+            (None, Some(_)) => "Documents".to_string(),
+            (None, None) => "Other".to_string(),
         };
+        if info.is_none() {
+            outside.insert(name.clone());
+        }
         sums.entry(name).or_insert_with(|| vec![Totals::default(); span])[n].add(*t);
     }
 
@@ -743,8 +830,7 @@ pub fn series(
     let mut rest = vec![Totals::default(); span];
     let mut rest_any = false;
     for (name, v) in named {
-        let is_other = name == "Documents and other";
-        if is_other || kept.iter().filter(|(n, _)| n != "Documents and other").count() < top {
+        if outside.contains(&name) || kept.iter().filter(|(n, _)| !outside.contains(n)).count() < top {
             kept.push((name, v));
         } else {
             rest_any = true;
@@ -771,10 +857,10 @@ pub fn series(
     }
 }
 
-/// The path the file proxy reports for a catalog asset link: everything from `/assets/` or
-/// `/archives/`, with percent-escapes decoded as the proxy does.
+/// The path the file proxy reports for a catalog asset or document link: everything from
+/// `/assets/`, `/archives/` or `/docs/`, with percent-escapes decoded as the proxy does.
 pub fn proxy_path(href: &str) -> Option<String> {
-    let start = ["/assets/", "/archives/"].iter().filter_map(|p| href.find(p)).min()?;
+    let start = ["/assets/", "/archives/", "/docs/"].iter().filter_map(|p| href.find(p)).min()?;
     let raw = href[start..].split(['?', '#']).next().unwrap_or("");
     let bytes = raw.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
@@ -894,14 +980,10 @@ http_request_duration_seconds_count{method="GET"} 2
     }
 
     #[test]
-    fn increment_handles_growth_and_first_reading() {
+    fn increment_handles_growth_first_reading_and_a_lower_reading() {
         assert_eq!(increment(None, 5), 5);
         assert_eq!(increment(Some(5), 8), 3);
         assert_eq!(increment(Some(5), 5), 0);
-    }
-
-    #[test]
-    fn a_lower_reading_from_the_same_process_adds_nothing() {
         assert_eq!(increment(Some(100), 40), 0);
     }
 
@@ -920,33 +1002,32 @@ http_request_duration_seconds_count{method="GET"} 2
     }
 
     #[test]
-    fn a_path_with_no_saved_reading_counts_whole_and_is_saved() {
-        let c = changes(&parse_scrape(METRICS), &HashMap::new(), &HashMap::new(), false);
-        assert_eq!(added(&c), vec![("/assets/10Aa00/x.tif", 7, 4300), ("/odd\"path,x", 1, 0)]);
-        assert_eq!(c.save["/assets/10Aa00/x.tif"], (7, 4300));
-    }
-
-    #[test]
     fn a_baseline_scrape_saves_every_reading_and_adds_nothing() {
         let now = scrape(&[("/assets/30Cc00/kiln.tif", 4, 40), ("/archives/30Cc00.zip", 1, 900)]);
         let c = changes(&now, &HashMap::new(), &HashMap::new(), true);
         assert!(c.added.is_empty());
         assert_eq!(c.save["/assets/30Cc00/kiln.tif"], (4, 40));
         assert_eq!(c.save["/archives/30Cc00.zip"], (1, 900));
+        // Past the baseline, a path with no saved reading counts whole and is saved.
         let c = changes(&now, &HashMap::new(), &HashMap::new(), false);
         assert_eq!(added(&c), vec![("/archives/30Cc00.zip", 1, 900), ("/assets/30Cc00/kiln.tif", 4, 40)]);
+        assert_eq!(c.save["/assets/30Cc00/kiln.tif"], (4, 40));
     }
 
     #[test]
-    fn growth_adds_the_difference_and_an_unchanged_reading_adds_nothing() {
+    fn growth_adds_the_difference_an_unchanged_reading_nothing_and_a_new_series_counts_from_zero() {
         let saved = HashMap::from([
             ("/assets/20Bb00/a.tif".to_string(), (3, 300)),
             ("/assets/20Bb00/b.tif".to_string(), (2, 50)),
         ]);
-        let now = scrape(&[("/assets/20Bb00/a.tif", 5, 700), ("/assets/20Bb00/b.tif", 2, 50)]);
+        let now = scrape(&[
+            ("/assets/20Bb00/a.tif", 5, 700),
+            ("/assets/20Bb00/b.tif", 2, 50),
+            ("/assets/20Bb00/new.tif", 2, 20),
+        ]);
         let c = changes(&now, &saved, &HashMap::new(), false);
-        assert_eq!(added(&c), vec![("/assets/20Bb00/a.tif", 2, 400)]);
-        assert_eq!(c.save.len(), 1);
+        assert_eq!(added(&c), vec![("/assets/20Bb00/a.tif", 2, 400), ("/assets/20Bb00/new.tif", 2, 20)]);
+        assert_eq!(c.save.len(), 2);
         assert_eq!(c.save["/assets/20Bb00/a.tif"], (5, 700));
     }
 
@@ -956,14 +1037,6 @@ http_request_duration_seconds_count{method="GET"} 2
         let now = scrape(&[("/archives/20Bb00.zip", 3, 90)]);
         let c = changes(&now, &saved, &HashMap::new(), false);
         assert_eq!(c, Changes::default());
-    }
-
-    #[test]
-    fn a_series_that_appears_later_counts_from_zero() {
-        let saved = HashMap::from([("/assets/20Bb00/a.tif".to_string(), (1, 10))]);
-        let now = scrape(&[("/assets/20Bb00/a.tif", 1, 10), ("/assets/20Bb00/new.tif", 2, 20)]);
-        let c = changes(&now, &saved, &HashMap::new(), false);
-        assert_eq!(added(&c), vec![("/assets/20Bb00/new.tif", 2, 20)]);
     }
 
     #[test]
@@ -1021,6 +1094,20 @@ http_request_duration_seconds_count{method="GET"} 2
     }
 
     #[test]
+    fn a_document_is_summed_under_its_own_name_and_an_unknown_path_as_other() {
+        assert_eq!(code_key("/docs/lantern_manual.pdf"), "~docs/lantern_manual.pdf");
+        let longest = format!("/docs/{}", "k".repeat(MAX_CODE_CHARS - "~docs/".len()));
+        assert_eq!(code_key(&longest).chars().count(), MAX_CODE_CHARS);
+        assert_eq!(code_key(&format!("/docs/{}", "k".repeat(MAX_CODE_CHARS))), "~docs");
+        assert_eq!(code_key("/docs/"), "~docs");
+        assert_eq!(code_key("/kites/string.txt"), "~other");
+        assert_eq!(document_of("~docs/lantern_manual.pdf"), Some(Some("lantern_manual.pdf")));
+        assert_eq!(document_of("~docs"), Some(None));
+        assert_eq!(document_of("~other"), None);
+        assert_eq!(document_of("10Aa00"), None);
+    }
+
+    #[test]
     fn a_setting_is_trimmed_and_an_empty_one_is_absent() {
         assert_eq!(setting(Some("secret-key\n".to_string())).as_deref(), Some("secret-key"));
         assert_eq!(setting(Some(" \t\n".to_string())), None);
@@ -1064,12 +1151,14 @@ http_request_duration_seconds_count{method="GET"} 2
             daily("/assets/05Kb02/tail.png", 3, 30),
             daily("/assets/99Zz99/spool.png", 1, 5),
             daily("/lanterns/paper.txt", 1, 1),
+            daily("/docs/lantern_manual.pdf", 4, 8),
         ];
         let out = summary_rows(rows, &items, &Filters::default());
         let found: Vec<_> = out.iter().map(|r| (r.collection.as_str(), r.item.as_str(), r.kind, r.requests)).collect();
         assert_eq!(
             found,
             vec![
+                ("Documents", "lantern_manual.pdf", "docs", 4),
                 ("kite-photo", "05Kb02", "file", 3),
                 ("kite-photo", "05Kb02", "archive", 2),
                 ("n/a", "n/a", "other", 1),
@@ -1134,6 +1223,27 @@ http_request_duration_seconds_count{method="GET"} 2
     }
 
     #[test]
+    fn documents_and_other_paths_are_rows_of_their_own_and_documents_list_each_file() {
+        let items = vec![item("10Aa00", "webcam-image", "A", "W", 3)];
+        let t = |requests, bytes| Totals { requests, bytes, ..Default::default() };
+        let paths = vec![
+            ("/assets/10Aa00/a.jpg".to_string(), t(5, 50)),
+            ("/docs/lantern_manual.pdf".to_string(), t(3, 30)),
+            ("/docs/kite_guide.csv".to_string(), t(6, 6)),
+            ("/favicon.ico".to_string(), t(1, 1)),
+        ];
+        let b = breakdown(&paths, &items);
+        let rows: Vec<_> = b.extra_rows().into_iter().map(|r| (r.name, r.requests, r.bytes, r.files_downloaded, r.expands)).collect();
+        assert_eq!(rows, vec![("Documents", 9, 36, 2, true), ("Other", 1, 1, 0, false)]);
+        assert!(b.filtered(&filters(&[("provider", "A")])).extra_rows().is_empty());
+        assert!(breakdown(&paths[..1], &items).extra_rows().is_empty());
+        assert_eq!(
+            documents(&paths),
+            vec![("kite_guide.csv".to_string(), t(6, 6)), ("lantern_manual.pdf".to_string(), t(3, 30))]
+        );
+    }
+
+    #[test]
     fn breakdown_lists_every_item_and_counts_distinct_files() {
         let items = vec![
             item("10Aa00", "webcam-image", "A", "W", 3),
@@ -1193,20 +1303,6 @@ http_request_duration_seconds_count{method="GET"} 2
     }
 
     #[test]
-    fn series_can_group_by_item() {
-        let infos = infos();
-        let t = |requests, bytes| Totals { requests, bytes, ..Default::default() };
-        let rows = vec![
-            (at("2026-10-22 00:00"), "10Aa00".to_string(), t(5, 50)),
-            (at("2026-10-22 00:00"), "11Bb00".to_string(), t(2, 20)),
-        ];
-        let s = series(&rows, &infos, Dim::Item, &Filters::default(), 7, &days("2026-10-22", "2026-10-22"));
-        let got: Vec<_> = s.groups.iter().map(|g| (g.name.as_str(), g.requests[0])).collect();
-        assert_eq!(got, vec![("10Aa00", 5), ("11Bb00", 2)]);
-        assert!(!Dim::ATTRIBUTES.contains(&Dim::Item));
-    }
-
-    #[test]
     fn filters_combine_attributes_and_alternatives() {
         let infos = infos();
         let f = filters(&[("provider", "Alpha"), ("data_type", "Model")]);
@@ -1258,7 +1354,7 @@ http_request_duration_seconds_count{method="GET"} 2
         let s = series(&rows, &infos, Dim::Collection, &none, 1, &days("2026-10-20", "2026-10-22"));
         assert_eq!(s.buckets, vec!["2026-10-20", "2026-10-21", "2026-10-22"]);
         let names: Vec<_> = s.groups.iter().map(|g| g.name.as_str()).collect();
-        assert_eq!(names, vec!["webcam-image", "Documents and other", "Smaller groups"]);
+        assert_eq!(names, vec!["webcam-image", "Documents", "Smaller groups"]);
         assert_eq!(s.groups[0].requests, vec![5, 0, 0]);
         assert_eq!(s.groups[2].requests, vec![0, 0, 3]);
         let total = series(&rows, &infos, Dim::Total, &none, 5, &days("2026-10-21", "2026-10-22"));
@@ -1280,6 +1376,39 @@ http_request_duration_seconds_count{method="GET"} 2
         let s = series(&rows, &infos, Dim::Provider, &filters(&[("data_type", "Model")]), 7, &days("2026-10-22", "2026-10-22"));
         let got: Vec<_> = s.groups.iter().map(|g| (g.name.as_str(), g.requests[0])).collect();
         assert_eq!(got, vec![("Alpha", 4), ("Beta", 2)]);
+    }
+
+    #[test]
+    fn documents_and_unknown_paths_are_two_groups_and_each_document_a_series_by_item() {
+        let infos = infos();
+        let t = |requests| Totals { requests, ..Default::default() };
+        let rows = vec![
+            (at("2026-10-22 00:00"), "10Aa00".to_string(), t(5)),
+            (at("2026-10-22 00:00"), "11Bb00".to_string(), t(2)),
+            (at("2026-10-22 00:00"), "~docs/lantern_manual.pdf".to_string(), t(3)),
+            // An hour summed before documents had keys of their own.
+            (at("2026-10-22 00:00"), "~docs".to_string(), t(1)),
+            (at("2026-10-22 00:00"), "~other".to_string(), t(4)),
+        ];
+        let none = Filters::default();
+        let window = days("2026-10-22", "2026-10-22");
+        let got = |dim| {
+            series(&rows, &infos, dim, &none, 1, &window)
+                .groups
+                .into_iter()
+                .map(|g| (g.name, g.requests[0]))
+                .collect::<Vec<_>>()
+        };
+        let named = |v: &[(&str, u64)]| v.iter().map(|(n, r)| (n.to_string(), *r)).collect::<Vec<_>>();
+        assert_eq!(
+            got(Dim::Collection),
+            named(&[("webcam-image", 5), ("Documents", 4), ("Other", 4), ("Smaller groups", 2)])
+        );
+        assert_eq!(
+            got(Dim::Item),
+            named(&[("10Aa00", 5), ("Other", 4), ("lantern_manual.pdf", 3), ("Documents", 1), ("Smaller groups", 2)])
+        );
+        assert!(!Dim::ATTRIBUTES.contains(&Dim::Item));
     }
 
     fn at(s: &str) -> chrono::NaiveDateTime {
@@ -1363,6 +1492,7 @@ http_request_duration_seconds_count{method="GET"} 2
         assert_eq!(proxy_path("/s3/archives/01Aa00.zip").as_deref(), Some("/archives/01Aa00.zip"));
         assert_eq!(proxy_path("https://h/s3/assets/01Aa00/a%20b%2Bc.tif").as_deref(), Some("/assets/01Aa00/a b+c.tif"));
         assert_eq!(proxy_path("https://h/stac/collections/x"), None);
+        assert_eq!(proxy_path("https://h/s3/docs/kite%20guide.pdf").as_deref(), Some("/docs/kite guide.pdf"));
     }
 
     #[test]

@@ -1,6 +1,6 @@
 // The statistics charts show every group's value at the bucket under the pointer in a tooltip,
 // and dragging across the main chart narrows the period the whole page reads, which the all-time
-// strip shows as its window. An account without the viewer role gets no chart at all.
+// strip shows as its window.
 const { test, expect } = require('@playwright/test');
 
 const PASSWORD = 'password';
@@ -21,7 +21,7 @@ async function chosen(page) {
   return [from, to];
 }
 
-test('hovering the main chart shows every group at that bucket, and dragging narrows the period', async ({ page }) => {
+test('hovering the main chart shows every group at that bucket', async ({ page }) => {
   await signIn(page, 'blatten-admin');
   await preset(page, '30').click();
   await expect(preset(page, '30')).toHaveClass(/\bon\b/);
@@ -44,21 +44,43 @@ test('hovering the main chart shows every group at that bucket, and dragging nar
   const tipBox = await tip.boundingBox();
   expect(tipBox.x).toBeGreaterThanOrEqual(box.x);
   expect(tipBox.y).toBeGreaterThanOrEqual(box.y);
+});
 
-  const before = await page.locator('#window-label').textContent();
+test('dragging across the main chart narrows the period, and a double-click shows all time, from a preset and after a drag', async ({ page }) => {
+  await signIn(page, 'blatten-admin');
+  await preset(page, 'all').click();
+  await expect(page.locator('#window-label')).toContainText(/by (hour|day|week)$/);
+  const all = await chosen(page);
+  expect(all[0] < all[1]).toBe(true);
+
+  await preset(page, '7').click();
+  await expect(preset(page, '7')).toHaveClass(/\bon\b/);
+  await expect.poll(() => chosen(page)).not.toEqual(all);
+  await expect(page.locator('#window-label')).toContainText(/by (hour|day)$/);
+  const over = page.locator('#chart-main .u-over');
+  await expect(over).toBeVisible();
+  const box = await over.boundingBox();
+  const y = box.y + box.height / 2;
+  await page.mouse.dblclick(box.x + box.width * 0.5, y);
+  await expect(preset(page, 'all')).toHaveClass(/\bon\b/);
+  await expect(page.locator('#range button.on')).toHaveCount(1);
+  await expect.poll(() => chosen(page)).toEqual(all);
+
+  await preset(page, '30').click();
+  await expect(page.locator('#window-label')).toContainText('by day');
   await page.mouse.move(box.x + box.width * 0.3, y);
   await page.mouse.down();
   await page.mouse.move(box.x + box.width * 0.5, y, { steps: 5 });
   await page.mouse.up();
   await expect(page.locator('#range button.on')).toHaveCount(0);
-  await expect(page.locator('#window-label')).not.toHaveText(before);
+  await expect.poll(() => chosen(page)).not.toEqual(all);
   const [from, to] = await chosen(page);
   expect(from <= to).toBe(true);
-
   await page.mouse.dblclick(box.x + box.width * 0.5, y);
-  await expect(preset(page, '30')).toHaveClass(/\bon\b/);
-  await expect(page.locator('#range button.on')).toHaveCount(1);
-  await expect(page.locator('#window-label')).toHaveText(before);
+  await expect(preset(page, 'all')).toHaveClass(/\bon\b/);
+  await expect.poll(() => chosen(page)).toEqual(all);
+  await page.reload();
+  await expect(preset(page, 'all')).toHaveClass(/\bon\b/);
 });
 
 test('the strip window and the main chart zoom are the same period', async ({ page }) => {
@@ -159,8 +181,81 @@ test('the header holds no select or input, and grouping and both exports are but
   }
 });
 
-test('an account without the viewer role gets no chart', async ({ page }) => {
-  await signIn(page, 'blatten-guest');
-  await expect(page.locator('#access')).toBeVisible();
-  await expect(page.locator('#chart-main canvas, #chart-live canvas')).toHaveCount(0);
+// The resolution a series request for the main chart asks for, or null when the server chooses.
+const seriesRequest = (page) => page.waitForRequest((r) => {
+  const url = new URL(r.url());
+  return url.pathname === '/stats/api/series' && url.searchParams.get('dim') !== 'total';
+});
+const askedResolution = async (request) => new URL((await request).url()).searchParams.get('resolution');
+
+test('one figure holds the main chart with the all-time strip beneath it, and the Last hour tile holds its numbers only', async ({ page }) => {
+  await signIn(page, 'blatten-admin');
+  await expect(page.locator('#chart-main .u-over')).toBeVisible();
+  await expect(page.locator('#chart-strip .u-over')).toBeVisible();
+  await expect(page.locator('main figure')).toHaveCount(1);
+  const figure = page.locator('main figure');
+  await expect(figure.locator('#chart-main canvas')).toHaveCount(1);
+  await expect(figure.locator('#chart-strip canvas')).toHaveCount(1);
+  await expect(figure.locator('#metric, #range, #resolution, #window-label')).toHaveCount(4);
+  const main = await page.locator('#chart-main').boundingBox();
+  const strip = await page.locator('#chart-strip').boundingBox();
+  expect(strip.y).toBeGreaterThanOrEqual(main.y + main.height - 1);
+  await expect(page.locator('#k-hour-sub')).toHaveText(/ in 24 h$/);
+  const tile = page.locator('.kpi', { has: page.locator('#k-hour') });
+  await expect(tile.locator('canvas, .uplot')).toHaveCount(0);
+  const charts = page.locator('.uplot');
+  await expect(charts).toHaveCount(2);
+  expect(await charts.evaluateAll((els) => els.map((e) => e.parentElement.id))).toEqual(['chart-main', 'chart-strip']);
+});
+
+test('24 h draws the last day by hour, and a resolution chip changes the series asked for', async ({ page }) => {
+  await signIn(page, 'blatten-admin');
+  await expect(page.locator('#chart-main .u-over')).toBeVisible();
+
+  let request = seriesRequest(page);
+  await preset(page, '24h').click();
+  expect(await askedResolution(request)).toBe('hour');
+  await expect(preset(page, '24h')).toHaveClass(/\bon\b/);
+  await expect(page.locator('#window-label')).toContainText('by hour');
+  await expect(page.locator('#cap-main')).toContainText('per hour');
+  await expect(page.locator('#resolution button[data-value="day"]')).toBeDisabled();
+
+  request = seriesRequest(page);
+  await preset(page, '7').click();
+  expect(await askedResolution(request)).toBeNull();
+  await expect(page.locator('#resolution button[data-value="auto"]')).toHaveText('Auto (hour)');
+
+  request = seriesRequest(page);
+  await page.locator('#resolution button[data-value="day"]').click();
+  expect(await askedResolution(request)).toBe('day');
+  await expect(page.locator('#resolution button.on')).toHaveText('Day');
+  await expect(page.locator('#window-label')).toContainText('by day');
+
+  request = seriesRequest(page);
+  await page.locator('#resolution button[data-value="auto"]').click();
+  expect(await askedResolution(request)).toBeNull();
+});
+
+test('the Documents row lists each document, and by item each document is a series of its own', async ({ page }) => {
+  await signIn(page, 'blatten-admin');
+  await preset(page, '30').click();
+  await page.locator('#group button[data-value="item"]').click();
+  await expect(page.locator('#cap-main')).toContainText('by item');
+  const extra = (name) => page.locator('#table tr.extra').filter({ has: page.locator('td:first-child', { hasText: new RegExp('^' + name + '$') }) });
+  const docs = extra('Documents');
+  await expect(docs).toHaveCount(1);
+  await docs.click();
+  const files = page.locator('#table tr.files table tr').filter({ has: page.locator('td') });
+  await expect(files.first()).toBeVisible();
+  const names = await files.locator('td:first-child').allTextContents();
+  expect(names.length).toBeGreaterThanOrEqual(2);
+  const key = page.locator('#chart-main .u-legend .u-series .u-label');
+  await expect.poll(() => key.allTextContents()).toEqual(expect.arrayContaining(names));
+  expect(await key.allTextContents()).not.toContain('Documents');
+
+  await page.locator('#group button[data-value="collection"]').click();
+  await expect(page.locator('#cap-main')).toContainText('by collection');
+  await expect.poll(() => key.allTextContents()).toContain('Documents');
+  for (const n of names) expect(await key.allTextContents()).not.toContain(n);
+  await expect(extra('Documents')).toHaveCount(1);
 });

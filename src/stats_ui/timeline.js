@@ -108,9 +108,23 @@ function windowView(period) {
   return { range: 'custom', from: period.from, to: period.to };
 }
 
+// The last 24 hours up to `now` (ms): the series routes take whole days, so they are asked for
+// yesterday and today, and `x` (seconds) shows from the start of this hour yesterday until now.
+function last24Hours(now) {
+  return {
+    from: isoDay(now - DAY_MS),
+    to: isoDay(now),
+    x: [Math.floor((now - DAY_MS) / STEP_MS.hour) * STEP_MS.hour / 1000, now / 1000],
+  };
+}
+
 // The period of a view: a preset counted back from today, a custom window, or all time.
 function periodOf(view, now) {
   if (view.range === 'all') return {};
+  if (view.range === '24h') {
+    const { from, to } = last24Hours(now.getTime());
+    return { from, to };
+  }
   if (view.range === 'custom') {
     const p = {};
     if (view.from) p.from = view.from;
@@ -122,9 +136,68 @@ function periodOf(view, now) {
 }
 
 // The preset whose button is lit for a view; a dragged or saved custom window lights none.
-const PRESETS = ['1', '7', '30', 'all'];
+const PRESETS = ['24h', '1', '7', '30', 'all'];
 function litPreset(view) {
   return PRESETS.includes(view.range) ? view.range : null;
+}
+
+// The start of the bucket holding `ms`; weeks start on Monday, UTC.
+function bucketFloor(resolution, ms) {
+  if (resolution === 'week') {
+    const day = Math.floor(ms / DAY_MS) * DAY_MS;
+    return day - ((new Date(day).getUTCDay() + 6) % 7) * DAY_MS;
+  }
+  return Math.floor(ms / STEP_MS[resolution]) * STEP_MS[resolution];
+}
+
+// The bars a series by `resolution` has over the days `from..=to`, counted as the series route
+// counts them before refusing more than its limit: from the bucket holding the first day to the
+// one holding the end of the last day, or `now` (ms) when that comes first.
+function barCount(resolution, from, to, now) {
+  const first = bucketFloor(resolution, dayStart(from));
+  const last = bucketFloor(resolution, Math.min(dayStart(to) + DAY_MS - 1000, now));
+  return Math.floor((last - first) / STEP_MS[resolution]) + 1;
+}
+
+// The resolution chips for a view over `period`. While Auto is in effect it names the resolution
+// the server chose, `effective`, once a series has come back. A chip whose bars would pass `maxBuckets` is disabled
+// with the reason; without a start, the window opens on `firstDay`, the first day with data, and
+// until that is known only Auto can be chosen. The last 24 hours are always by hour.
+const RESOLUTIONS = ['hour', 'day', 'week'];
+function resolutionChips(view, period, firstDay, maxBuckets, now, effective) {
+  const from = period.from || firstDay;
+  const to = period.to || isoDay(now);
+  const chips = [{ value: 'auto', label: 'Auto (' + effective + ')', disabled: false, title: '' }];
+  for (const r of RESOLUTIONS) {
+    const chip = { value: r, label: r.charAt(0).toUpperCase() + r.slice(1), disabled: false, title: '' };
+    if (view.range === '24h') {
+      if (r !== 'hour') Object.assign(chip, { disabled: true, title: 'The last 24 hours are shown by hour' });
+    } else if (!from || !maxBuckets) {
+      Object.assign(chip, { disabled: true, title: 'Waiting for the first day with data' });
+    } else {
+      const n = barCount(r, from, to, now);
+      if (n > maxBuckets) {
+        const fmt = (v) => v.toLocaleString('en-GB');
+        Object.assign(chip, { disabled: true, title: 'By ' + r + ' this period has ' + fmt(n) + ' bars, more than the ' + fmt(maxBuckets) + ' a chart shows' });
+      }
+    }
+    chips.push(chip);
+  }
+  if (!effective || litResolution(view, chips) !== 'auto') chips[0].label = 'Auto';
+  return chips;
+}
+
+// The chip lit for a view: its chosen resolution, or Auto when that one is disabled.
+function litResolution(view, chips) {
+  const chip = chips.find((c) => c.value === view.resolution);
+  return chip && !chip.disabled ? chip.value : 'auto';
+}
+
+// The resolution a series request asks for, or null to let the server choose.
+function chosenResolution(view, chips) {
+  if (view.range === '24h') return 'hour';
+  const lit = litResolution(view, chips);
+  return lit === 'auto' ? null : lit;
 }
 
 // Runs `load(signal, ...args)` for the latest call only. `soon` waits until calls have stopped

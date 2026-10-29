@@ -6,9 +6,9 @@
 //! and the routes each exist only when their settings are present and non-empty.
 
 use crate::stats::{
-    breakdown, code_key, code_passes, facet_values, file_name_in_item, group_totals, parse_scrape,
-    series, series_window, setting, summary_rows, to_csv, Dim, Filters, ItemInfo,
-    Resolution, Totals,
+    breakdown, code_key, code_passes, documents, facet_values, file_name_in_item, group_totals, parse_scrape,
+    series, series_window, MAX_BUCKETS, setting, summary_rows, to_csv, Dim, Filters, ItemInfo,
+    Resolution, Totals, DOCS_KEY,
 };
 use crate::stats_store::{database_options, Store};
 use axum::{
@@ -633,7 +633,7 @@ async fn groups(
         Err(r) => return r,
     };
     let b = breakdown(&paths, &state.items).filtered(&p.filters());
-    Json(serde_json::json!({ "rows": group_totals(&b.items, dim) })).into_response()
+    Json(serde_json::json!({ "rows": group_totals(&b.items, dim), "extra": b.extra_rows() })).into_response()
 }
 
 /// Requests and bytes per group by hour, day or week, for the stacked chart. `resolution` is
@@ -687,7 +687,10 @@ async fn items_list(
         Ok(p) => p,
         Err(r) => return r,
     };
-    let mut rows = breakdown(&paths, &state.items).filtered(&p.filters()).items;
+    let b = breakdown(&paths, &state.items).filtered(&p.filters());
+    // Documents and other paths are no item, so a search for items leaves them out.
+    let extra = if p.get("q").is_some() { Vec::new() } else { b.extra_rows() };
+    let mut rows = b.items;
     if let Some(needle) = p.get("q").map(str::to_lowercase) {
         rows.retain(|r| {
             [&r.item, &r.title, &r.facets.collection, &r.facets.provider, &r.facets.data_type, &r.facets.dataset, &r.facets.sensor]
@@ -715,9 +718,10 @@ async fn items_list(
     let limit = p.number("limit", 25).clamp(1, MAX_PAGE);
     let offset = p.number("offset", 0).min(total);
     let page: Vec<_> = rows.into_iter().skip(offset).take(limit).collect();
-    Json(serde_json::json!({ "total": total, "offset": offset, "rows": page })).into_response()
+    Json(serde_json::json!({ "total": total, "offset": offset, "rows": page, "extra": extra })).into_response()
 }
 
+/// The files of an item, or the documents under `DOCS_KEY`, with their totals over the period.
 async fn item_files(
     State(state): State<StatsState>,
     Path(code): Path<String>,
@@ -727,18 +731,35 @@ async fn item_files(
         Ok(p) => p,
         Err(r) => return r,
     };
-    if !state.items.iter().any(|i| i.code == code) {
+    let is_docs = code == DOCS_KEY;
+    if !is_docs && !state.items.iter().any(|i| i.code == code) {
         return StatusCode::NOT_FOUND.into_response();
     }
-    let mut rows: Vec<(String, Totals)> =
+    let paths: Vec<(String, Totals)> =
         match db(state.store.path_totals(p.day("from"), p.day("to")).await) {
             Ok(p) => p,
             Err(r) => return r,
         };
-    let prefix = format!("/assets/{code}/");
-    let archive = format!("/archives/{code}.zip");
-    rows.retain(|(p, _)| p.starts_with(&prefix) || *p == archive);
-    rows.sort_by(|a, b| b.1.requests.cmp(&a.1.requests).then(a.0.cmp(&b.0)));
+    let rows = if is_docs {
+        documents(&paths)
+    } else {
+        let prefix = format!("/assets/{code}/");
+        let archive = format!("/archives/{code}.zip");
+        let mut rows: Vec<(String, Totals)> = paths
+            .into_iter()
+            .filter(|(p, _)| p.starts_with(&prefix) || *p == archive)
+            .map(|(path, t)| {
+                let name = if path == archive {
+                    format!("{code}.zip (archive)")
+                } else {
+                    file_name_in_item(&path, &code).to_string()
+                };
+                (name, t)
+            })
+            .collect();
+        rows.sort_by(|a, b| b.1.requests.cmp(&a.1.requests).then(a.0.cmp(&b.0)));
+        rows
+    };
     let total = rows.len();
     let limit = p.number("limit", 25).clamp(1, MAX_PAGE);
     let offset = p.number("offset", 0).min(total);
@@ -746,12 +767,7 @@ async fn item_files(
         .iter()
         .skip(offset)
         .take(limit)
-        .map(|(path, t)| {
-            let name = if *path == archive {
-                format!("{code}.zip (archive)")
-            } else {
-                file_name_in_item(path, &code).to_string()
-            };
+        .map(|(name, t)| {
             serde_json::json!({ "file": name, "requests": t.requests, "bytes": t.bytes, "whole_files": t.whole_files() })
         })
         .collect();
@@ -867,6 +883,7 @@ async fn browser_config(State(state): State<StatsState>) -> Response {
         "tokenUrl": format!("{base}/token"),
         "logoutUrl": format!("{base}/logout"),
         "clientId": kc.client_id,
+        "maxBuckets": MAX_BUCKETS,
     }))
     .into_response()
 }
@@ -921,16 +938,12 @@ mod tests {
     const BAD_DB: &str = "postgres://orchard:p/ear@db:5432/harvest";
 
     #[test]
-    fn an_unparsable_database_url_turns_statistics_off_with_a_reason() {
+    fn a_bad_database_or_keycloak_url_turns_off_its_part_with_a_reason() {
         match check_settings(vars(&[("STATS_DATABASE_URL", BAD_DB)])) {
             StatsSettings::Off(reason) => assert!(reason.contains("STATS_DATABASE_URL"), "{reason}"),
             _ => panic!("expected statistics off"),
         }
         assert!(matches!(check_settings(vars(&[])), StatsSettings::Absent));
-    }
-
-    #[test]
-    fn a_keycloak_url_without_scheme_leaves_out_the_page_with_a_reason() {
         let settings = check_settings(vars(&[
             ("STATS_DATABASE_URL", GOOD_DB),
             ("KEYCLOAK_URL", "keycloak:8080"),
@@ -1056,18 +1069,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "needs STATS_TEST_DATABASE_URL"]
-    async fn the_first_read_into_an_empty_store_counts_nothing() {
-        let store = crate::stats_store::tests::test_store().await;
-        let state = StatsState { store: Arc::new(store.clone()), ..state() };
-        let proxy = fake_proxy().await;
-        let scraper = Scraper::with_timeout(proxy.join("metrics").unwrap(), Duration::from_secs(1)).unwrap();
-        scrape_once(&scraper, &state).await.unwrap();
-        assert!(store.path_totals(None, None).await.unwrap().is_empty());
-        assert!(store.last_ingest().await.unwrap().is_some());
-    }
-
-    #[tokio::test]
     async fn a_read_waits_for_the_database_to_be_ready() {
         let proxy = fake_proxy().await;
         let scraper = Scraper::new(proxy.join("metrics").unwrap()).unwrap();
@@ -1162,15 +1163,7 @@ mod tests {
 
     #[tokio::test]
     async fn the_vendored_chart_library_is_served_with_its_content_types() {
-        let mut s = state();
-        s.keycloak = Some(Arc::new(KeycloakSettings {
-            url: Url::parse("http://127.0.0.1:1/").unwrap(),
-            browser_url: "http://127.0.0.1:1/".to_string(),
-            realm: "orchard".to_string(),
-            client_id: "pears".to_string(),
-            role: "picker".to_string(),
-        }));
-        let app = router(s);
+        let app = router(state_with_keycloak("http://127.0.0.1:1/"));
         for (path, content_type, body) in [
             ("/stats/vendor/uPlot.iife.min.js", "text/javascript; charset=utf-8", include_str!("stats_ui/vendor/uPlot.iife.min.js")),
             ("/stats/vendor/uPlot.min.css", "text/css; charset=utf-8", include_str!("stats_ui/vendor/uPlot.min.css")),
@@ -1205,6 +1198,8 @@ mod tests {
         assert_eq!(cfg["tokenUrl"], format!("{base}/token"));
         assert_eq!(cfg["logoutUrl"], format!("{base}/logout"));
         assert_eq!(cfg["clientId"], "pears");
+        // The page disables a resolution the series route would refuse by this limit.
+        assert_eq!(cfg["maxBuckets"], MAX_BUCKETS);
     }
 
     const SIGNING_SECRET: &[u8] = b"orchard-test-signing-secret-01234";
@@ -1383,9 +1378,16 @@ mod tests {
             }
             // A good token passes the check and reaches the handler, which waits for the database.
             assert_eq!(read(&app, path, Some(&token(GOOD))).await, StatusCode::SERVICE_UNAVAILABLE, "{path}");
-            // The page needs no name or address from the token.
-            let anonymous = token(Claims { profile: false, ..GOOD });
-            assert_eq!(read(&app, path, Some(&anonymous)).await, StatusCode::SERVICE_UNAVAILABLE, "{path}");
+            // The page needs no name or address from the token. On a shared realm a token's
+            // audience lists the clients whose roles the user holds, so a viewer without the
+            // realm's default account roles carries only this client's id.
+            for accepted in [
+                Claims { profile: false, ..GOOD },
+                Claims { audience: &["pears"], ..GOOD },
+                Claims { audience: &["pears", "account"], ..GOOD },
+            ] {
+                assert_eq!(read(&app, path, Some(&token(accepted))).await, StatusCode::SERVICE_UNAVAILABLE, "{path}");
+            }
         }
         assert_eq!(read(&app, "/stats", None).await, StatusCode::OK);
     }
@@ -1412,21 +1414,6 @@ mod tests {
         discovering.await.unwrap();
         assert_eq!(read(&app, "/stats/api/new", Some(&token(Claims { client: "plums", ..GOOD }))).await, StatusCode::FORBIDDEN);
         assert_eq!(read(&app, "/stats/api/new", Some(&token(GOOD))).await, StatusCode::OK);
-    }
-
-    /// On a shared realm a token's audience lists the clients whose roles the user holds, so a
-    /// viewer without the realm's default account roles carries only this client's id.
-    #[tokio::test]
-    async fn read_routes_accept_a_token_whose_audience_is_this_client() {
-        let app = guarded(Store::lazy(GOOD_DB).unwrap()).await;
-        let for_this_client = Claims { audience: &["pears"], ..GOOD };
-        let beside_account = Claims { audience: &["pears", "account"], ..GOOD };
-        let for_another_app = Claims { audience: &["plums"], ..GOOD };
-        for path in READ_ROUTES {
-            assert_eq!(read(&app, path, Some(&token(for_this_client))).await, StatusCode::SERVICE_UNAVAILABLE, "{path}");
-            assert_eq!(read(&app, path, Some(&token(beside_account))).await, StatusCode::SERVICE_UNAVAILABLE, "{path}");
-            assert_eq!(read(&app, path, Some(&token(for_another_app))).await, StatusCode::UNAUTHORIZED, "{path}");
-        }
     }
 
     #[tokio::test]

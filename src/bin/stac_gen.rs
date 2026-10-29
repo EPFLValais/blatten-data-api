@@ -149,6 +149,9 @@ struct LinkConfig {
     link_type: Option<String>,
     #[serde(default)]
     title: Option<String>,
+    /// Size of the published document the link points to, read from its source at generation
+    #[serde(skip)]
+    file_size: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -3182,6 +3185,57 @@ fn remove_unwritten_files(dir: &Path, written: &HashSet<String>) -> Vec<PathBuf>
 }
 
 /// Returns (num_collections, num_items, total_assets, issues)
+/// The documents published under `docs/`, each by its name there and its source: the dataset
+/// overview, and the PDFs at the top of the documentation folder (technical documentation,
+/// supplements). Factsheets live in subfolders and go into each item's assets instead.
+fn published_documents(input_file: &Path, factsheets_dir: &Path) -> Vec<(String, PathBuf)> {
+    let mut docs = vec![("dataset_overview.csv".to_string(), input_file.to_path_buf())];
+    if let Ok(entries) = fs::read_dir(factsheets_dir) {
+        for entry in entries.filter_map(|e| e.ok()) {
+            let path = entry.path();
+            let is_pdf = path.extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(|e| e.eq_ignore_ascii_case("pdf"));
+            if is_pdf && path.is_file() {
+                docs.push((entry.file_name().to_string_lossy().to_string(), path));
+            }
+        }
+    }
+    docs
+}
+
+/// Gives each config link to a published document (`href_suffix` under `/docs/`) the document's
+/// size, so the link carries `file:size` and its downloads count as whole files.
+fn size_document_links(links: &mut [LinkConfig], document_sizes: &HashMap<String, u64>) {
+    for link in links {
+        let document = link.href_suffix.as_deref()
+            .and_then(|suffix| suffix.trim_start_matches('/').strip_prefix("docs/"));
+        link.file_size = document.and_then(|name| document_sizes.get(name)).copied();
+    }
+}
+
+/// A catalog link from config, its href resolved
+fn config_link(link: &LinkConfig, s3_base_url: &str) -> serde_json::Value {
+    let mut link_obj = serde_json::Map::new();
+    link_obj.insert("rel".to_string(), serde_json::json!(link.rel));
+    // Resolve href: use href_suffix (relative to s3_base_url, as asset hrefs are) or absolute href
+    if let Some(ref suffix) = link.href_suffix {
+        link_obj.insert("href".to_string(), serde_json::json!(s3_href(s3_base_url, suffix)));
+    } else if let Some(ref href) = link.href {
+        link_obj.insert("href".to_string(), serde_json::json!(href));
+    }
+    if let Some(ref t) = link.link_type {
+        link_obj.insert("type".to_string(), serde_json::json!(t));
+    }
+    if let Some(ref title) = link.title {
+        link_obj.insert("title".to_string(), serde_json::json!(title));
+    }
+    if let Some(size) = link.file_size {
+        link_obj.insert("file:size".to_string(), serde_json::json!(size));
+    }
+    serde_json::Value::Object(link_obj)
+}
+
 fn generate_catalog(
     items: &[ItemMetadata],
     output_dir: &PathBuf,
@@ -3401,23 +3455,7 @@ fn generate_catalog(
     }
 
     // Add links from config (describedby, license, about, etc.)
-    for link in &config.catalog.links {
-        let mut link_obj = serde_json::Map::new();
-        link_obj.insert("rel".to_string(), serde_json::json!(link.rel));
-        // Resolve href: use href_suffix (relative to s3_base_url, as asset hrefs are) or absolute href
-        if let Some(ref suffix) = link.href_suffix {
-            link_obj.insert("href".to_string(), serde_json::json!(s3_href(s3_base_url, suffix)));
-        } else if let Some(ref href) = link.href {
-            link_obj.insert("href".to_string(), serde_json::json!(href));
-        }
-        if let Some(ref t) = link.link_type {
-            link_obj.insert("type".to_string(), serde_json::json!(t));
-        }
-        if let Some(ref title) = link.title {
-            link_obj.insert("title".to_string(), serde_json::json!(title));
-        }
-        catalog_links.push(serde_json::Value::Object(link_obj));
-    }
+    catalog_links.extend(config.catalog.links.iter().map(|link| config_link(link, s3_base_url)));
 
     // Write root catalog
     let catalog = serde_json::json!({
@@ -3603,7 +3641,7 @@ fn main() -> Result<()> {
 
     {
             // Load config
-            let config = load_config(&config_path)?;
+            let mut config = load_config(&config_path)?;
             info!("  Loaded config from {:?}", config_path);
 
             // Resolve assets_dir and archives_dir from organised_dir
@@ -4510,6 +4548,11 @@ fn main() -> Result<()> {
             }
 
             // Generate STAC catalog
+            let documents = published_documents(&input_file, &factsheets_dir);
+            let document_sizes: HashMap<String, u64> = documents.iter()
+                .filter_map(|(name, path)| Some((name.clone(), fs::metadata(path).ok()?.len())))
+                .collect();
+            size_document_links(&mut config.catalog.links, &document_sizes);
             let (num_collections, num_items, num_assets, issues) = generate_catalog(&items, &output, &base_url, &s3_base_url, archives_dir.as_deref(), &multi_progress, &config)?;
             info!(
                 "  Generated {} collections, {} items, {} assets",
@@ -4520,28 +4563,11 @@ fn main() -> Result<()> {
             if let Some(ref org) = organised_dir {
                 let docs_dir = org.join("docs");
                 fs::create_dir_all(&docs_dir)?;
-                let dest = docs_dir.join("dataset_overview.csv");
-                fs::copy(&input_file, &dest)
-                    .with_context(|| format!("Failed to copy {} → {:?}", input_file.display(), dest))?;
-                info!("  Copied {} → docs/dataset_overview.csv", input_file.display());
-
-                // PDFs at the top of the documentation folder (technical documentation,
-                // supplements) are published as-is; factsheets live in subfolders and go
-                // into each item's assets instead
-                if let Ok(entries) = fs::read_dir(&factsheets_dir) {
-                    for entry in entries.filter_map(|e| e.ok()) {
-                        let path = entry.path();
-                        let is_pdf = path.extension()
-                            .and_then(|e| e.to_str())
-                            .is_some_and(|e| e.eq_ignore_ascii_case("pdf"));
-                        if !is_pdf || !path.is_file() {
-                            continue;
-                        }
-                        let dest = docs_dir.join(entry.file_name());
-                        fs::copy(&path, &dest)
-                            .with_context(|| format!("Failed to copy {:?} → {:?}", path, dest))?;
-                        info!("  Copied {} → docs/{}", path.display(), entry.file_name().to_string_lossy());
-                    }
+                for (name, source) in &documents {
+                    let dest = docs_dir.join(name);
+                    fs::copy(source, &dest)
+                        .with_context(|| format!("Failed to copy {} → {:?}", source.display(), dest))?;
+                    info!("  Copied {} → docs/{}", source.display(), name);
                 }
             }
 
@@ -6095,11 +6121,13 @@ mod tests {
     }
 
     #[test]
-    fn item_under_the_size_budget_has_no_manifest() {
+    fn item_under_the_size_budget_has_no_manifest_and_is_written_whole() {
         let (stac, manifest) = build_kite_item(&kite_item("99Za06", 3));
         assert!(!is_series(&stac));
         assert!(manifest.is_none());
         assert!(stac["assets"].get("manifest").is_none());
+        let (source, _) = build_kite_item(&kite_series("99Za09", 2, 2));
+        assert_eq!(series_and_days(source.clone(), "${STAC_BASE_URL}"), vec![source]);
     }
 
     /// A kite series: `first_day` files on 2024-03-01, `second_day` on 2024-03-02 and one
@@ -6240,12 +6268,6 @@ mod tests {
     }
 
     #[test]
-    fn item_under_the_size_budget_is_written_whole() {
-        let (source, _) = build_kite_item(&kite_series("99Za09", 2, 2));
-        assert_eq!(series_and_days(source.clone(), "${STAC_BASE_URL}"), vec![source]);
-    }
-
-    #[test]
     fn written_items_that_lose_a_file_or_exceed_the_limit_are_errors() {
         let (source, _) = build_kite_item(&kite_series("99Za10", 40, 900));
         let mut written = series_and_days(source.clone(), "${STAC_BASE_URL}");
@@ -6351,16 +6373,13 @@ mod tests {
     }
 
     #[test]
-    fn item_names_its_mapped_producer() {
+    fn item_names_its_mapped_producer_and_an_unmapped_source_none() {
         let providers = item_providers(Some("Guild (Glaze)"), &producer_map());
         assert_eq!(providers, vec![serde_json::json!({"name": "Glaze Guild", "roles": ["producer"]})]);
 
         let providers = item_providers(Some("Kiln"), &producer_map());
         assert_eq!(providers, vec![serde_json::json!({"name": "Kiln Works AG", "roles": ["producer"], "url": "https://kiln.example/"})]);
-    }
 
-    #[test]
-    fn item_without_mapped_source_has_no_producer() {
         assert!(item_providers(Some("Unknown Potter"), &producer_map()).is_empty());
         assert!(item_providers(None, &producer_map()).is_empty());
     }
@@ -6384,26 +6403,18 @@ mod tests {
     const PROJCRS_WITH_BASE_ID: &str = r#"PROJCRS["CH1903+ / LV95",BASEGEOGCRS["CH1903+",DATUM["CH1903+",ELLIPSOID["Bessel 1841",6377397.155,299.1528128,LENGTHUNIT["metre",1]]],PRIMEM["Greenwich",0,ANGLEUNIT["degree",0.0174532925199433]],ID["EPSG",4150]],CONVERSION["Swiss Oblique Mercator 1995",METHOD["Hotine Oblique Mercator (variant B)",ID["EPSG",9815]],PARAMETER["Latitude of projection centre",46.9524055555556,ANGLEUNIT["degree",0.0174532925199433],ID["EPSG",8811]]],CS[Cartesian,2],AXIS["(E)",east,ORDER[1],LENGTHUNIT["metre",1]],AXIS["(N)",north,ORDER[2],LENGTHUNIT["metre",1]],USAGE[SCOPE["Cadastre."],AREA["Liechtenstein; Switzerland."],BBOX[45.82,5.96,47.81,10.49]],ID["EPSG",2056]]"#;
 
     #[test]
-    fn epsg_of_projected_wkt2_is_the_root_id() {
-        assert_eq!(extract_epsg_from_crs(PROJCRS_WITH_BASE_ID).as_deref(), Some("EPSG:2056"));
-    }
-
-    #[test]
-    fn epsg_of_projected_wkt1_is_the_root_authority() {
-        let wkt = r#"PROJCS["CH1903+ / LV95",GEOGCS["CH1903+",DATUM["CH1903+",SPHEROID["Bessel 1841",6377397.155,299.1528128,AUTHORITY["EPSG","7004"]],AUTHORITY["EPSG","6150"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4150"]],PROJECTION["Hotine_Oblique_Mercator_Azimuth_Center"],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["Easting",EAST],AXIS["Northing",NORTH],AUTHORITY["EPSG","2056"]]"#;
-        assert_eq!(extract_epsg_from_crs(wkt).as_deref(), Some("EPSG:2056"));
-    }
-
-    #[test]
-    fn epsg_of_projected_wkt_without_root_id_is_not_a_nested_id() {
-        let wkt = PROJCRS_WITH_BASE_ID.replace(r#",ID["EPSG",2056]]"#, "]").replace("CH1903+ / LV95", "Test grid").replace("CH1903+", "Test datum");
-        assert_eq!(extract_epsg_from_crs(&wkt), None);
-    }
-
-    #[test]
-    fn epsg_of_plain_identifiers() {
-        assert_eq!(extract_epsg_from_crs("EPSG:2056").as_deref(), Some("EPSG:2056"));
-        assert_eq!(extract_epsg_from_crs("urn:ogc:def:crs:EPSG::4326").as_deref(), Some("EPSG:4326"));
+    fn epsg_of_crs_text_is_the_root_identifier_never_a_nested_one() {
+        let wkt1 = r#"PROJCS["CH1903+ / LV95",GEOGCS["CH1903+",DATUM["CH1903+",SPHEROID["Bessel 1841",6377397.155,299.1528128,AUTHORITY["EPSG","7004"]],AUTHORITY["EPSG","6150"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4150"]],PROJECTION["Hotine_Oblique_Mercator_Azimuth_Center"],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["Easting",EAST],AXIS["Northing",NORTH],AUTHORITY["EPSG","2056"]]"#;
+        let without_root_id = PROJCRS_WITH_BASE_ID.replace(r#",ID["EPSG",2056]]"#, "]").replace("CH1903+ / LV95", "Test grid").replace("CH1903+", "Test datum");
+        for (case, crs, expected) in [
+            ("WKT2 root ID", PROJCRS_WITH_BASE_ID, Some("EPSG:2056")),
+            ("WKT1 root AUTHORITY", wkt1, Some("EPSG:2056")),
+            ("WKT2 without a root ID", without_root_id.as_str(), None),
+            ("plain code", "EPSG:2056", Some("EPSG:2056")),
+            ("URN", "urn:ogc:def:crs:EPSG::4326", Some("EPSG:4326")),
+        ] {
+            assert_eq!(extract_epsg_from_crs(crs).as_deref(), expected, "{case}");
+        }
     }
 
     #[test]
@@ -6430,6 +6441,53 @@ mod tests {
         assert_eq!(map.get(&sensor_key("07")), Some(&sheet));
         assert_eq!(map.get(&sensor_key("7")), Some(&sheet));
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn published_documents_are_the_overview_and_top_level_pdfs() {
+        let dir = scratch_dir("documents");
+        let overview = dir.join("kites.csv");
+        fs::write(&overview, b"a;b").unwrap();
+        let sheets = dir.join("sheets");
+        fs::create_dir_all(sheets.join("01_Station")).unwrap();
+        fs::write(sheets.join("Kite_Manual.PDF"), b"pdf").unwrap();
+        fs::write(sheets.join("notes.txt"), b"txt").unwrap();
+        fs::write(sheets.join("01_Station").join("Factsheet.pdf"), b"pdf").unwrap();
+
+        let mut docs = published_documents(&overview, &sheets);
+        docs.sort();
+        assert_eq!(
+            docs,
+            vec![
+                ("Kite_Manual.PDF".to_string(), sheets.join("Kite_Manual.PDF")),
+                ("dataset_overview.csv".to_string(), overview.clone()),
+            ]
+        );
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn document_links_carry_their_size() {
+        let link = |rel: &str, href_suffix: Option<&str>, href: Option<&str>| LinkConfig {
+            rel: rel.into(),
+            href: href.map(str::to_string),
+            href_suffix: href_suffix.map(str::to_string),
+            link_type: None,
+            title: None,
+            file_size: None,
+        };
+        let mut links = [
+            link("describedby", Some("/docs/kite manual.pdf"), None),
+            link("describedby", Some("/docs/unknown.pdf"), None),
+            link("about", None, Some("https://kites.test/")),
+        ];
+        let sizes = HashMap::from([("kite manual.pdf".to_string(), 4096u64)]);
+        size_document_links(&mut links, &sizes);
+        let out: Vec<_> = links.iter().map(|l| config_link(l, "/s3")).collect();
+        assert_eq!(out[0]["href"], "/s3/docs/kite%20manual.pdf");
+        assert_eq!(out[0]["file:size"], 4096);
+        assert!(out[1].get("file:size").is_none());
+        assert!(out[2].get("file:size").is_none());
     }
 
     #[test]
@@ -6604,17 +6662,13 @@ mod tests {
     }
 
     #[test]
-    fn csv_range_matching_files_reports_nothing() {
-        let files = [day("2025-07-01"), day("2025-08-12"), day("2025-09-30")];
+    fn csv_range_matching_files_within_a_day_reports_nothing() {
+        let exact = [day("2025-07-01"), day("2025-08-12"), day("2025-09-30")];
+        let one_day_out = [day("2025-06-30"), day("2025-10-01")];
 
-        assert!(check_item_dates(Some(day("2025-07-01")), Some(day("2025-09-30")), &files).is_empty());
-    }
-
-    #[test]
-    fn one_day_of_slack_is_allowed() {
-        let files = [day("2025-06-30"), day("2025-10-01")];
-
-        assert!(check_item_dates(Some(day("2025-07-01")), Some(day("2025-09-30")), &files).is_empty());
+        for files in [&exact[..], &one_day_out[..]] {
+            assert!(check_item_dates(Some(day("2025-07-01")), Some(day("2025-09-30")), files).is_empty(), "{:?}", files);
+        }
     }
 
     #[test]

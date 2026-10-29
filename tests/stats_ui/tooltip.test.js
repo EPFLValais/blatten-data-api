@@ -14,19 +14,15 @@ const plain = (o) => JSON.parse(JSON.stringify(o));
 const plot = { width: 600, height: 200 };
 const box = { width: 120, height: 60 };
 
-test('the box sits right of and below the pointer', () => {
+test('the box sits right of and below the pointer, flipping at the right and bottom edges', () => {
   const t = load();
-  assert.deepStrictEqual(plain(t.tooltipPlace({ left: 100, top: 40 }, box, plot)), { left: 112, top: 52 });
-});
-
-test('the box flips left of the pointer at the right edge', () => {
-  const t = load();
-  assert.deepStrictEqual(plain(t.tooltipPlace({ left: 520, top: 40 }, box, plot)), { left: 388, top: 52 });
-});
-
-test('the box flips above the pointer at the bottom', () => {
-  const t = load();
-  assert.deepStrictEqual(plain(t.tooltipPlace({ left: 100, top: 180 }, box, plot)), { left: 112, top: 108 });
+  for (const [pointer, expected] of [
+    [{ left: 100, top: 40 }, { left: 112, top: 52 }],
+    [{ left: 520, top: 40 }, { left: 388, top: 52 }],
+    [{ left: 100, top: 180 }, { left: 112, top: 108 }],
+  ]) {
+    assert.deepStrictEqual(plain(t.tooltipPlace(pointer, box, plot)), expected, JSON.stringify(pointer));
+  }
 });
 
 test('the box never leaves the left or top of the plot', () => {

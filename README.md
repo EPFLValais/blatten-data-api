@@ -30,6 +30,21 @@ The server reads the catalog in `stac/` at startup.
 docker compose up
 ```
 
+### Statistics History for Local Development
+
+The local stack's statistics database holds only what the local proxy was scraped for. To try the
+statistics page over longer periods, fill it with a year of synthetic downloads of real catalog
+paths:
+
+```bash
+docker exec -i blatten-stats-db psql -U stats -d stats -v ON_ERROR_STOP=1 < scripts/seed_stats.sql
+```
+
+**Never run this against production.** The script refuses any database not named `stats`. It
+replaces every row of the last year in `daily`, `daily_code` and `hourly_code`, and the last 24
+hours in `recent`, and leaves the scrape baseline (`series_last`,
+`proxy_process`, `meta`) alone. Running it again gives the same history.
+
 ## API Endpoints
 
 | Endpoint | Description |

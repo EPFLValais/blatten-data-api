@@ -1065,15 +1065,7 @@ async fn main() -> Result<()> {
 
     let stat_items = stat_items(&catalog.items);
 
-    let mut file_sizes: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
-    for item in &catalog.items {
-        for asset in item.assets.values() {
-            let size = asset.additional_fields.get("file:size").and_then(|v| v.as_u64());
-            if let (Some(size), Some(path)) = (size, stats::proxy_path(&asset.href)) {
-                file_sizes.insert(path, size);
-            }
-        }
-    }
+    let file_sizes = file_sizes(&catalog);
 
     let state = AppState {
         catalog: Arc::new(catalog),
@@ -1580,6 +1572,20 @@ fn perform_search(
         .into_response()
 }
 
+/// The size of each whole file the proxy serves, by its proxy path: every item asset and every root
+/// catalog link (the documents) that carries `file:size`.
+fn file_sizes(catalog: &StacCatalog) -> std::collections::HashMap<String, u64> {
+    let assets = catalog.items.iter().flat_map(|i| i.assets.values()).map(|a| (&a.href, &a.additional_fields));
+    let links = catalog.root.links.iter().map(|l| (&l.href, &l.additional_fields));
+    assets
+        .chain(links)
+        .filter_map(|(href, fields)| {
+            let size = fields.get("file:size").and_then(|v| v.as_u64())?;
+            Some((stats::proxy_path(href.as_ref())?, size))
+        })
+        .collect()
+}
+
 /// The items the download statistics list: each series-level item (one without
 /// `blatten:series`), its files counted with those of its days. Downloads are keyed by the
 /// item code in the file path, which a series and its days share.
@@ -1904,6 +1910,32 @@ mod tests {
             "collection": "orchards"
         }))
         .unwrap()
+    }
+
+    #[test]
+    fn sizes_hold_sized_assets_and_documents() {
+        let root = serde_json::from_value(serde_json::json!({
+            "type": "Catalog",
+            "stac_version": "1.1.0",
+            "id": "orchards-root",
+            "description": "Fruit trees",
+            "links": [
+                {"rel": "describedby", "href": "/s3/docs/pruning_guide.pdf", "file:size": 2048},
+                {"rel": "describedby", "href": "/s3/docs/unsized.pdf"},
+                {"rel": "about", "href": "https://orchard.test/", "file:size": 7}
+            ]
+        }))
+        .unwrap();
+        let mut pear = item("pear-01");
+        pear.assets.insert(
+            "leaf".into(),
+            serde_json::from_value(serde_json::json!({"href": "/s3/assets/pear-01/leaf.jpg", "file:size": 64})).unwrap(),
+        );
+        let catalog = StacCatalog::from_parts(root, Default::default(), vec![pear], "v".into());
+        let sizes = file_sizes(&catalog);
+        assert_eq!(sizes.get("/docs/pruning_guide.pdf"), Some(&2048));
+        assert_eq!(sizes.get("/assets/pear-01/leaf.jpg"), Some(&64));
+        assert_eq!(sizes.len(), 2);
     }
 
     fn orchard_app() -> Router {
@@ -2304,33 +2336,6 @@ mod tests {
         assert!(link_href(&last, "next").is_none());
     }
 
-    #[tokio::test]
-    async fn following_next_from_a_filtered_get_keeps_the_filter() {
-        let app = orchard_app();
-        for first in [
-            "/stac/search?datetime=2024-01-01T00:00:00Z%2F..&exclude_assets=true&limit=1",
-            "/stac/collections/orchards/items?datetime=2024-01-01T00:00:00Z%2F..&exclude_assets=true&limit=1",
-        ] {
-            let (status, _, body) = send(&app, first, &[]).await;
-            assert_eq!(status, StatusCode::OK, "{first}");
-            let page: serde_json::Value = serde_json::from_slice(&body).unwrap();
-            assert_eq!(page["numberMatched"], 2, "{first}");
-            assert_eq!(page["features"][0]["id"], "pear-01", "{first}");
-
-            let next = link_href(page["links"].as_array().unwrap(), "next").unwrap().to_string();
-            let path = next.strip_prefix("http://orchard.test").unwrap();
-            let (status, _, body) = send(&app, path, &[]).await;
-            assert_eq!(status, StatusCode::OK, "{next}");
-            let page: serde_json::Value = serde_json::from_slice(&body).unwrap();
-            assert_eq!(page["numberMatched"], 2, "{next}");
-            let features = page["features"].as_array().unwrap();
-            assert_eq!(features.len(), 1, "{next}");
-            assert_eq!(features[0]["id"], "plum-02", "{next}");
-            assert!(features[0]["assets"].get("photo").is_none(), "{next}");
-            assert!(link_href(page["links"].as_array().unwrap(), "next").is_none(), "{next}");
-        }
-    }
-
     async fn send_json(app: &Router, uri: &str, body: Option<serde_json::Value>) -> (StatusCode, serde_json::Value) {
         use tower::ServiceExt;
         let req = match body {
@@ -2451,19 +2456,27 @@ mod tests {
     async fn following_next_from_a_filtered_page_keeps_the_filter() {
         let app = orchard_app();
         let filter = encoded("blatten:series='orchard-a'");
-        for first in [
-            format!("/stac/search?filter={filter}&filter-lang=cql2-text&limit=1"),
-            format!("/stac/collections/orchards/items?filter={filter}&limit=1"),
+        for (first, ids) in [
+            ("/stac/search?datetime=2024-01-01T00:00:00Z%2F..&exclude_assets=true&limit=1".to_string(), ["pear-01", "plum-02"]),
+            (
+                "/stac/collections/orchards/items?datetime=2024-01-01T00:00:00Z%2F..&exclude_assets=true&limit=1".to_string(),
+                ["pear-01", "plum-02"],
+            ),
+            (format!("/stac/search?filter={filter}&filter-lang=cql2-text&limit=1"), ["quince-03", "quince-04"]),
+            (format!("/stac/collections/orchards/items?filter={filter}&limit=1"), ["quince-03", "quince-04"]),
         ] {
+            let excluded = first.contains("exclude_assets=true");
             let (status, page) = send_json(&app, &first, None).await;
             assert_eq!(status, StatusCode::OK, "{first}");
             assert_eq!(page["numberMatched"], 2, "{first}");
-            assert_eq!(feature_ids(&page), ["quince-03"], "{first}");
+            assert_eq!(feature_ids(&page), [ids[0]], "{first}");
             let next = link_href(page["links"].as_array().unwrap(), "next").unwrap().to_string();
             let (status, page) = send_json(&app, next.strip_prefix("http://orchard.test").unwrap(), None).await;
             assert_eq!(status, StatusCode::OK, "{next}");
             assert_eq!(page["numberMatched"], 2, "{next}");
-            assert_eq!(feature_ids(&page), ["quince-04"], "{next}");
+            assert_eq!(feature_ids(&page), [ids[1]], "{next}");
+            assert_eq!(page["features"][0]["assets"].get("photo").is_none(), excluded, "{next}");
+            assert!(link_href(page["links"].as_array().unwrap(), "next").is_none(), "{next}");
         }
     }
 

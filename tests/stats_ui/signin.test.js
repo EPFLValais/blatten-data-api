@@ -66,19 +66,14 @@ test('signing out forgets every key the page keeps in session storage and no oth
   assert.strictEqual(storage.getItem('another_page'), 'kept');
 });
 
-test('the sign-out address ends the realm session and returns to the page', () => {
+test('the sign-out address ends the realm session and returns to the page, with the ID token as hint when there is one', () => {
   const { signOutUrl } = helpers();
   const cfg = { logoutUrl: 'https://sso.orchard.test/realms/orchard/protocol/openid-connect/logout', clientId: 'pears' };
-  const url = new URL(signOutUrl(cfg, 'id.token.value', 'https://orchard.test/stats'));
-  assert.strictEqual(url.origin + url.pathname, cfg.logoutUrl);
-  assert.strictEqual(url.searchParams.get('client_id'), 'pears');
-  assert.strictEqual(url.searchParams.get('id_token_hint'), 'id.token.value');
-  assert.strictEqual(url.searchParams.get('post_logout_redirect_uri'), 'https://orchard.test/stats');
-});
-
-test('without an ID token the sign-out address leaves out the hint', () => {
-  const { signOutUrl } = helpers();
-  const url = new URL(signOutUrl({ logoutUrl: 'https://sso.orchard.test/logout', clientId: 'pears' }, null, 'https://orchard.test/stats'));
-  assert.strictEqual(url.searchParams.has('id_token_hint'), false);
-  assert.strictEqual(url.searchParams.get('client_id'), 'pears');
+  for (const idToken of ['id.token.value', null]) {
+    const url = new URL(signOutUrl(cfg, idToken, 'https://orchard.test/stats'));
+    assert.strictEqual(url.origin + url.pathname, cfg.logoutUrl);
+    assert.strictEqual(url.searchParams.get('client_id'), 'pears');
+    assert.strictEqual(url.searchParams.get('id_token_hint'), idToken);
+    assert.strictEqual(url.searchParams.get('post_logout_redirect_uri'), 'https://orchard.test/stats');
+  }
 });

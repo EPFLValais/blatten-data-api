@@ -44,40 +44,30 @@
     <div class="kpi"><span class="label">Last hour</span><span class="value" id="k-hour">–</span><span class="sub" id="k-hour-sub"></span></div>
   </section>
 
-  <figure>
-    <figcaption>Last 24 hours</figcaption>
-    <div id="chart-live" class="chart" role="img" aria-label="Last 24 hours"></div>
-  </figure>
-
-  <figure>
-    <figcaption>
-      <span>All time · drag to choose the period, drag it or its handles to change it, click to zoom in</span>
-      <span class="chart-controls">
-        <span id="window-label"></span>
-        <span class="segmented" id="range" role="group" aria-label="Period">
-          <button type="button" data-value="1">Today</button>
-          <button type="button" data-value="7">7 days</button>
-          <button type="button" data-value="30">30 days</button>
-          <button type="button" data-value="all">All</button>
-        </span>
-      </span>
-    </figcaption>
-    <div id="chart-strip" class="chart strip" role="img" aria-label="All time, with the chosen period"></div>
-    <div id="strip-dates" class="strip-dates" aria-hidden="true"></div>
-  </figure>
-
-  <figure>
+  <figure id="chart">
     <figcaption>
       <span id="cap-main"></span>
-      <span class="chart-controls">
-        <span class="segmented" id="metric" role="group" aria-label="Measure">
-          <button type="button" data-value="requests">File requests</button>
-          <button type="button" data-value="bytes">Data sent</button>
-          <button type="button" data-value="whole_files">Whole files (est.)</button>
-        </span>
+      <span class="segmented" id="metric" role="group" aria-label="Measure">
+        <button type="button" data-value="requests">File requests</button>
+        <button type="button" data-value="bytes">Data sent</button>
+        <button type="button" data-value="whole_files">Whole files (est.)</button>
       </span>
     </figcaption>
-    <div id="chart-main" class="chart" role="img" aria-label="Chart over time, drag across it to choose the period and double-click to go back"></div>
+    <div class="chart-controls">
+      <span class="segmented" id="range" role="group" aria-label="Period">
+        <button type="button" data-value="24h">24 h</button>
+        <button type="button" data-value="1">Today</button>
+        <button type="button" data-value="7">7 days</button>
+        <button type="button" data-value="30">30 days</button>
+        <button type="button" data-value="all">All</button>
+      </span>
+      <span id="window-label"></span>
+      <span class="segmented" id="resolution" role="group" aria-label="Resolution"></span>
+    </div>
+    <div id="chart-main" class="chart" role="img" aria-label="Chart over time, drag across it to choose the period and double-click to show all time"></div>
+    <div id="chart-strip" class="chart strip" role="img" aria-label="All time, with the chosen period"></div>
+    <div id="strip-dates" class="strip-dates" aria-hidden="true"></div>
+    <p class="strip-hint">All time · drag to choose the period, drag it or its handles to change it, click to zoom in</p>
   </figure>
 
   <div id="item-tools" class="tools" hidden>

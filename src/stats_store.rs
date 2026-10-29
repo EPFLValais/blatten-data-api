@@ -45,6 +45,9 @@ pub fn database_options(url: &str) -> Result<PgConnectOptions> {
 pub struct Store {
     pool: PgPool,
     ready: Arc<AtomicBool>,
+    /// The schema a test store lives in, dropped with the last clone of the store.
+    #[cfg(test)]
+    schema: Option<Arc<tests::DropSchema>>,
 }
 
 fn as_u64(v: i64) -> u64 {
@@ -74,7 +77,12 @@ impl Store {
             .max_connections(5)
             .acquire_timeout(Duration::from_secs(5))
             .connect_lazy_with(options);
-        Self { pool, ready: Arc::new(AtomicBool::new(false)) }
+        Self {
+            pool,
+            ready: Arc::new(AtomicBool::new(false)),
+            #[cfg(test)]
+            schema: None,
+        }
     }
 
     /// Apply the migrations, retrying until the database accepts them. Run it in a background task.
@@ -429,8 +437,9 @@ async fn set_meta(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>, key: &str, val
 }
 
 // These tests need a Postgres to run against. Each test creates its own schema in it, so they can
-// run side by side. Run them with
-//   STATS_TEST_DATABASE_URL=postgres://stats:stats@localhost:5433/stats cargo test -- --include-ignored
+// run side by side, and drops it when the test ends. Run them against the test database, never the
+// development database `stats`, which they refuse:
+//   STATS_TEST_DATABASE_URL=postgres://stats:stats-local-development@localhost:5433/stats_test cargo test -- --include-ignored
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
@@ -438,16 +447,59 @@ pub(crate) mod tests {
 
     static NEXT: AtomicUsize = AtomicUsize::new(0);
 
+    /// The options of the test database at `url`, which is never the development database.
+    fn test_database_options(url: &str) -> PgConnectOptions {
+        let options = PgConnectOptions::from_str(url).expect("STATS_TEST_DATABASE_URL is a Postgres URL");
+        assert_ne!(
+            options.get_database(),
+            Some("stats"),
+            "STATS_TEST_DATABASE_URL names the development database stats; point it at stats_test"
+        );
+        options
+    }
+
+    /// Drops a test schema when the last store using it goes, whether the test passed or panicked.
+    pub(crate) struct DropSchema {
+        options: PgConnectOptions,
+        schema: String,
+    }
+
+    impl Drop for DropSchema {
+        fn drop(&mut self) {
+            // Drop may run inside the test's runtime, which cannot be blocked on, so the schema is
+            // dropped from a thread with a runtime of its own.
+            let options = self.options.clone();
+            let sql = format!("DROP SCHEMA IF EXISTS {} CASCADE", self.schema);
+            let dropped = std::thread::spawn(move || {
+                tokio::runtime::Builder::new_current_thread().enable_all().build()?.block_on(async {
+                    use sqlx::{Connection, PgConnection};
+                    let mut conn = PgConnection::connect_with(&options.options([("lock_timeout", "10000")])).await?;
+                    sqlx::query(&sql).execute(&mut conn).await?;
+                    conn.close().await?;
+                    anyhow::Ok(())
+                })
+            })
+            .join();
+            // A panic here, during a test's unwinding, would abort every test left to run.
+            if !matches!(dropped, Ok(Ok(()))) {
+                eprintln!("test schema {} was not dropped", self.schema);
+            }
+        }
+    }
+
     /// A migrated store in a schema of its own.
     pub(crate) async fn test_store() -> Store {
         let url = std::env::var("STATS_TEST_DATABASE_URL")
             .expect("STATS_TEST_DATABASE_URL must point at a Postgres for these tests");
+        let database = test_database_options(&url);
         let schema = format!("t_{}_{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed));
-        let admin = PgPool::connect(&url).await.expect("connect");
+        let admin = PgPool::connect_with(database.clone()).await.expect("connect");
         // The schema name is built here from a process id and a counter, never from outside input.
         sqlx::query(&format!("CREATE SCHEMA {schema}")).execute(&admin).await.expect("schema");
-        let options = PgConnectOptions::from_str(&url).unwrap().options([("search_path", schema.as_str())]);
-        let store = Store::lazy_with(options);
+        admin.close().await;
+        let guard = Arc::new(DropSchema { options: database.clone(), schema: schema.clone() });
+        let mut store = Store::lazy_with(database.options([("search_path", schema.as_str())]));
+        store.schema = Some(guard);
         store.migrate().await.expect("migrate");
         store
     }
@@ -477,6 +529,39 @@ pub(crate) mod tests {
 
     fn none() -> HashMap<String, u64> {
         HashMap::new()
+    }
+
+    #[test]
+    #[should_panic(expected = "stats_test")]
+    fn tests_refuse_the_development_database() {
+        test_database_options("postgres://stats:x@localhost:5433/stats");
+    }
+
+    #[test]
+    fn tests_accept_the_test_database() {
+        let options = test_database_options("postgres://stats:x@localhost:5433/stats_test");
+        assert_eq!(options.get_database(), Some("stats_test"));
+    }
+
+    #[tokio::test]
+    #[ignore = "needs STATS_TEST_DATABASE_URL"]
+    async fn a_store_drops_its_schema_when_it_is_dropped() {
+        let store = test_store().await;
+        let schema: String = sqlx::query_scalar("SELECT current_schema()").fetch_one(&store.pool).await.unwrap();
+        let admin = PgPool::connect(&std::env::var("STATS_TEST_DATABASE_URL").unwrap()).await.unwrap();
+        let exists = || async {
+            sqlx::query_scalar::<_, bool>("SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = $1)")
+                .bind(&schema)
+                .fetch_one(&admin)
+                .await
+                .unwrap()
+        };
+        assert!(exists().await);
+        let copy = store.clone();
+        drop(store);
+        assert!(exists().await, "a clone still holds the schema");
+        drop(copy);
+        assert!(!exists().await, "{schema} is left behind");
     }
 
     #[tokio::test]
@@ -595,7 +680,7 @@ pub(crate) mod tests {
         assert_eq!(tif.1.whole_files(), 2.5);
         let codes = store.code_days(None, None).await.unwrap();
         let find = |c: &str| codes.iter().find(|r| r.1 == c).map(|r| r.2.requests);
-        assert_eq!((find("10Aa00"), find("~docs")), (Some(4), Some(1)));
+        assert_eq!((find("10Aa00"), find("~docs/a.pdf")), (Some(4), Some(1)));
     }
 
     #[tokio::test]
@@ -728,6 +813,153 @@ pub(crate) mod tests {
             .execute(&store.pool)
             .await;
         assert!(bad.is_err());
+    }
+
+    #[tokio::test]
+    #[ignore = "needs STATS_TEST_DATABASE_URL"]
+    async fn the_migration_splits_the_documents_of_each_day_by_file() {
+        let store = test_store().await;
+        let long = format!("/docs/{}.pdf", "k".repeat(70));
+        let paths = [
+            ("2026-10-21", "/docs/lantern_manual.pdf", 2),
+            ("2026-10-22", "/docs/lantern_manual.pdf", 3),
+            ("2026-10-22", "/docs/kite_guide.csv", 5),
+            ("2026-10-22", long.as_str(), 1),
+            ("2026-10-22", "/assets/10Aa00/x.tif", 7),
+        ];
+        for (d, path, n) in paths {
+            sqlx::query("INSERT INTO daily (day, path, requests, bytes, equiv) VALUES ($1, $2, $3, $3 * 10, 0)")
+                .bind(day(d))
+                .bind(path)
+                .bind(n)
+                .execute(&store.pool)
+                .await
+                .unwrap();
+        }
+        let before = [("2026-10-21", "~docs", 2), ("2026-10-22", "~docs", 9), ("2026-10-22", "10Aa00", 7), ("2026-10-23", "~docs", 4)];
+        for (d, code, n) in before {
+            sqlx::query("INSERT INTO daily_code (day, code, requests, bytes, equiv) VALUES ($1, $2, $3, $3 * 10, 0)")
+                .bind(day(d))
+                .bind(code)
+                .bind(n)
+                .execute(&store.pool)
+                .await
+                .unwrap();
+        }
+        sqlx::raw_sql(include_str!("../migrations/20261029090841_name_each_document.sql"))
+            .execute(&store.pool)
+            .await
+            .unwrap();
+        let mut got: Vec<_> = store
+            .code_days(None, None)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|(d, c, t)| (d, c, t.requests, t.bytes))
+            .collect();
+        got.sort();
+        let row = |d: &str, c: &str, n: u64| (d.to_string(), c.to_string(), n, n * 10);
+        assert_eq!(
+            got,
+            vec![
+                row("2026-10-21", "~docs/lantern_manual.pdf", 2),
+                row("2026-10-22", "10Aa00", 7),
+                row("2026-10-22", "~docs", 1),
+                row("2026-10-22", "~docs/kite_guide.csv", 5),
+                row("2026-10-22", "~docs/lantern_manual.pdf", 3),
+                // A day with no rows in `daily` to split it by keeps its total.
+                row("2026-10-23", "~docs", 4),
+            ]
+        );
+        let keys: Vec<_> = paths.iter().map(|(d, p, _)| (d.to_string(), code_key(p))).collect();
+        assert!(keys.iter().all(|k| got.iter().any(|g| (&g.0, &g.1) == (&k.0, &k.1))), "the keys are those of code_key");
+    }
+
+    const SEED: &str = include_str!("../scripts/seed_stats.sql");
+
+    /// Run the development seed into the store's schema, allowing the test database by name.
+    async fn seed(store: &Store) {
+        let db: String = sqlx::query_scalar("SELECT current_database()").fetch_one(&store.pool).await.unwrap();
+        let mut conn = store.pool.acquire().await.unwrap();
+        sqlx::query("SELECT set_config('seed.database', $1, false)").bind(&db).execute(&mut *conn).await.unwrap();
+        sqlx::raw_sql(SEED).execute(&mut *conn).await.expect("seed");
+        sqlx::query("RESET seed.database").execute(&mut *conn).await.unwrap();
+    }
+
+    fn sum_by<K: Ord>(rows: impl IntoIterator<Item = (K, Totals)>) -> BTreeMap<K, (u64, u64, u64)> {
+        let mut out = BTreeMap::new();
+        for (k, t) in rows {
+            let e: &mut (u64, u64, u64) = out.entry(k).or_default();
+            *e = (e.0 + t.requests, e.1 + t.bytes, e.2 + t.equiv);
+        }
+        out
+    }
+
+    #[tokio::test]
+    #[ignore = "needs STATS_TEST_DATABASE_URL"]
+    async fn the_development_seed_fills_every_resolution_consistently_and_repeatably() {
+        let store = baselined_store().await;
+        sqlx::query("INSERT INTO series_last (start_time, path, requests, bytes) VALUES (7, '/assets/10Aa00/x.tif', 3, 30)")
+            .execute(&store.pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO proxy_process (start_time, ts) VALUES (7, 1)").execute(&store.pool).await.unwrap();
+        seed(&store).await;
+
+        let weeks = store.code_buckets(Resolution::Week, None, None).await.unwrap();
+        let days = store.code_buckets(Resolution::Day, None, None).await.unwrap();
+        let hours = store.code_buckets(Resolution::Hour, None, None).await.unwrap();
+        let recent = store.recent_rows(0).await.unwrap();
+        assert!(!weeks.is_empty() && !days.is_empty() && !hours.is_empty() && !recent.is_empty());
+        let first = store.first_day().await.unwrap().unwrap();
+        let today = Utc::now().date_naive();
+        assert!((today - first).num_days() >= 360, "about a year of history, from {first}");
+        assert!(days.iter().map(|d| d.0.date()).max().unwrap() >= today.pred_opt().unwrap());
+        assert!(days.iter().all(|d| d.2.equiv <= d.2.requests * 1000), "bytes never above whole files requested");
+
+        let per_path = sum_by(store.daily(None, None).await.unwrap().into_iter().map(|r| (r.day, r.totals)));
+        let per_code = sum_by(store.code_days(None, None).await.unwrap().into_iter().map(|r| (r.0, r.2)));
+        assert_eq!(per_path, per_code, "daily_code is the sum of daily, day by day");
+        let per_key = sum_by(store.daily(None, None).await.unwrap().into_iter().map(|r| ((r.day, code_key(&r.path)), r.totals)));
+        let stored = sum_by(store.code_days(None, None).await.unwrap().into_iter().map(|r| ((r.0, r.1), r.2)));
+        assert_eq!(per_key, stored, "daily_code is summed under the keys code_key gives");
+        assert!(stored.keys().any(|(_, c)| c.starts_with("~docs/")), "documents are seeded under their own keys");
+        let by_day = sum_by(days.iter().map(|d| ((d.0.date(), d.1.clone()), d.2)));
+        let by_hour = sum_by(hours.iter().map(|h| ((h.0.date(), h.1.clone()), h.2)));
+        assert_eq!(by_hour, by_day, "hourly_code sums to daily_code per day and code over the whole year");
+        let months_back = today - chrono::Days::new(100);
+        let window = store.code_buckets(Resolution::Hour, Some(months_back), Some(months_back + chrono::Days::new(4))).await.unwrap();
+        assert!(!window.is_empty(), "a short window months back has hours to draw");
+        let in_weeks = sum_by(weeks.iter().map(|w| ((), w.2)));
+        assert_eq!(in_weeks, sum_by(days.iter().map(|d| ((), d.2))), "weeks hold every day");
+
+        let paths = store.path_totals(None, None).await.unwrap();
+        assert!(paths.iter().any(|p| p.0.starts_with("/archives/") && p.0.ends_with(".zip")));
+        assert!(paths.iter().any(|p| p.0.starts_with("/assets/")));
+
+        seed(&store).await;
+        assert_eq!(store.code_buckets(Resolution::Day, None, None).await.unwrap(), days);
+        assert_eq!(store.code_buckets(Resolution::Hour, None, None).await.unwrap(), hours);
+        assert_eq!(store.recent_rows(0).await.unwrap(), recent);
+
+        let kept: (i64, i64, i64) = sqlx::query_as(
+            "SELECT (SELECT COUNT(*) FROM series_last), (SELECT requests FROM series_last), (SELECT COUNT(*) FROM proxy_process)",
+        )
+        .fetch_one(&store.pool)
+        .await
+        .unwrap();
+        assert_eq!(kept, (1, 3, 1), "the seed leaves the scrape baseline alone");
+    }
+
+    #[tokio::test]
+    #[ignore = "needs STATS_TEST_DATABASE_URL"]
+    async fn the_development_seed_refuses_a_database_not_named_stats() {
+        let store = test_store().await;
+        let mut conn = store.pool.acquire().await.unwrap();
+        assert!(sqlx::raw_sql(SEED).execute(&mut *conn).await.is_err());
+        sqlx::query("ROLLBACK").execute(&mut *conn).await.unwrap();
+        let rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM daily").fetch_one(&mut *conn).await.unwrap();
+        assert_eq!(rows, 0);
     }
 
     #[tokio::test]

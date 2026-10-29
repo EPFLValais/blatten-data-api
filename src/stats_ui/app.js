@@ -16,12 +16,13 @@
   // ---- state ----------------------------------------------------------------------------------
   const saved = (() => { try { return JSON.parse(sessionStorage.getItem('stats_view') || '{}'); } catch (e) { return {}; } })();
   const view = {
-    range: '7', from: '', to: '', group: 'collection', metric: 'requests',
+    range: '7', from: '', to: '', group: 'collection', metric: 'requests', resolution: 'auto',
     filter: {}, sort: { key: 'requests', dir: 'desc' }, q: '', offset: 0, ...saved,
   };
   delete view.cumulative; // a toggle the page no longer has
   if (!GROUPS[view.group]) view.group = 'collection';
   if (!MEASURES[view.metric]) view.metric = 'requests';
+  if (!['auto', ...RESOLUTIONS].includes(view.resolution)) view.resolution = 'auto';
   const open = new Map(); // item code -> number of file rows loaded
   const persist = () => sessionStorage.setItem('stats_view', JSON.stringify(view));
 
@@ -38,6 +39,7 @@
   let overview = null;
   let series = null;
   let groupRows = [];
+  let groupExtra = [];
   let strip = null; // { series, scale }: all-time totals under the window
 
   // ---- formatting -----------------------------------------------------------------------------
@@ -140,7 +142,7 @@
 
   // ---- charts ---------------------------------------------------------------------------------
   const PALETTE = ['#0072B2', '#E69F00', '#009E73', '#CC79A7', '#56B4E9', '#D55E00', '#8c564b'];
-  const GREYS = { 'Documents and other': '#7f8790', 'Smaller groups': '#b9c0c7' };
+  const GREYS = { Documents: '#7f8790', Other: '#4f5761', 'Smaller groups': '#b9c0c7' };
   const colour = (name, i) => GREYS[name] || PALETTE[i % PALETTE.length];
 
   // A uPlot chart in `box`, made once the box has a width: the dashboard is hidden until access is
@@ -193,13 +195,14 @@
   });
 
   // Dragging across the main chart zooms the window to the days under the selection; a double
-  // click goes back to the period shown before the first zoom.
-  let zoomBack = null;
+  // click shows all time, as the All button does.
+  let mainX = null; // the x range of the last 24 hours, or null to fit the buckets
   const main = lineChart($('chart-main'), (width) => {
     const fmt = fmtOf(view.metric);
+    const x = mainX ? { time: true, range: () => mainX } : { time: true };
     return {
       width, height: 220, tzDate: utc, legend: { live: false },
-      scales: { x: { time: true }, y: fromZero },
+      scales: { x, y: fromZero },
       series: [
         {},
         ...chartData(series, view.metric).names.map((name, i) => lineSeries(name, i, fmt)),
@@ -213,27 +216,20 @@
           const lo = u.posToVal(u.select.left, 'x');
           const hi = u.posToVal(u.select.left + u.select.width, 'x');
           u.setSelect({ left: 0, top: 0, width: 0, height: 0 }, false);
-          if (!zoomBack) zoomBack = { range: view.range, from: view.from, to: view.to };
           setWindow(selectionPeriod(series.buckets, series.resolution, lo, hi), true);
         }],
-        ready: [(u) => u.over.addEventListener('dblclick', zoomOut)],
+        ready: [(u) => u.over.addEventListener('dblclick', () => pickRange('all'))],
       },
     };
   });
-
-  function zoomOut() {
-    if (!zoomBack) return;
-    Object.assign(view, zoomBack);
-    zoomBack = null;
-    rangeChanged();
-  }
 
   function renderMain() {
     if (!series) return;
     const caption = MEASURES[view.metric] + ' per ' + series.resolution + ', by ' + GROUPS[view.group].toLowerCase();
     setText('cap-main', caption.charAt(0).toUpperCase() + caption.slice(1));
     const { names, data } = chartData(series, view.metric);
-    main.set([view.metric, series.resolution, ...names].join('\n'), data);
+    mainX = view.range === '24h' ? last24Hours(serverNow()).x : null;
+    main.set([view.metric, series.resolution, !mainX, ...names].join('\n'), data);
     windowLabel(series.resolution);
   }
 
@@ -246,9 +242,30 @@
     const to = p.to || (strip && strip.scale.lastDay);
     const span = from && to ? spanText(from, to) : 'All time';
     setText('window-label', span + (resolution ? ' · by ' + resolution : ' · loading…'));
+    renderResolution(resolution);
   }
 
-  // The strip and the live chart count requests, or bytes when data sent is the measure.
+  // The resolution chips for the window; Auto names `effective`, the resolution of the series
+  // shown, or nothing while one loads.
+  const serverNow = () => Date.now() + clockSkew * 1000;
+  const chipsFor = (effective) =>
+    resolutionChips(view, period(), strip && strip.scale.firstDay, cfg.maxBuckets, serverNow(), effective);
+  function renderResolution(effective) {
+    const chips = chipsFor(effective);
+    const lit = litResolution(view, chips);
+    $('resolution').replaceChildren(...chips.map((c) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.dataset.value = c.value;
+      b.textContent = c.label;
+      b.disabled = c.disabled;
+      b.title = c.title;
+      b.classList.toggle('on', c.value === lit);
+      return b;
+    }));
+  }
+
+  // The strip counts requests, or bytes when data sent is the measure.
   const totalMetric = () => (view.metric === 'bytes' ? 'bytes' : 'requests');
   // Ticks on the strip are whole days or longer, so its one line of labels always shows the date.
   const DAY_INCRS = [1, 2, 7, 14, 30, 91, 182, 365].map((d) => d * 86400);
@@ -377,24 +394,6 @@
     windowLabel(series && series.resolution);
   }
 
-  const live = lineChart($('chart-live'), (width) => {
-    const fmt = fmtOf(totalMetric());
-    const at = (ts) => new Date(ts * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-    return {
-      width, height: 110, legend: { show: false },
-      scales: { x: { time: true }, y: fromZero },
-      series: [{}, lineSeries('All', 0, fmt)],
-      axes: [timeAxis(undefined), yAxis(fmt)],
-      cursor: { drag: { x: false, y: false }, points: hoverPoints },
-      plugins: [tooltipPlugin({ title: (ts) => 'Quarter hour from ' + at(ts), value: fmt })],
-    };
-  });
-
-  function renderLive() {
-    if (!overview) return;
-    live.set(totalMetric(), liveData(overview.timeline, overview.now, totalMetric()));
-  }
-
   // ---- numbers --------------------------------------------------------------------------------
   function renderOverview(o) {
     overview = o;
@@ -409,7 +408,6 @@
     setText('k-items-sub', 'of ' + num(o.items_total));
     setText('k-hour', num(o.last_hour.requests));
     setText('k-hour-sub', num(o.last_24h.requests) + ' in 24 h');
-    renderLive();
     updateAge();
   }
 
@@ -456,7 +454,35 @@
     cell(tr, whole(r.whole_files), true);
     cell(tr, bytes(r.bytes), true);
     cell(tr, num(r.files_downloaded), true);
-    cell(tr, num(r.files_total), true);
+    cell(tr, r.files_total == null ? '–' : num(r.files_total), true);
+  }
+
+  // A click on the row opens the list of its files beneath it, and a second click closes it.
+  function expandable(t, tr, code) {
+    tr.classList.add('item');
+    let detail = null;
+    const toggle = async () => {
+      if (detail) { detail.remove(); detail = null; tr.classList.remove('open'); open.delete(code); return; }
+      detail = t.insertRow(tr.rowIndex + 1);
+      detail.classList.add('files');
+      const td = detail.insertCell();
+      td.colSpan = COLUMNS.length;
+      tr.classList.add('open');
+      await loadFiles(code, open.get(code) || FILE_PAGE, td);
+    };
+    tr.addEventListener('click', toggle);
+    if (open.has(code)) toggle();
+  }
+
+  // Documents and other paths belong to no item, so they follow the item rows, unsorted.
+  function renderExtra(t, extra) {
+    for (const r of extra || []) {
+      const tr = t.insertRow();
+      tr.classList.add('row', 'extra');
+      cell(tr, r.name);
+      valueRow(tr, r);
+      if (r.expands) expandable(t, tr, r.code);
+    }
   }
 
   function renderGroups() {
@@ -478,6 +504,7 @@
         filtersChanged();
       });
     }
+    renderExtra(t, groupExtra);
   }
 
   async function loadFiles(code, count, box) {
@@ -516,26 +543,16 @@
     headerRow(t, 'Item', setSort);
     for (const r of data.rows) {
       const tr = t.insertRow();
-      tr.classList.add('row', 'item');
+      tr.classList.add('row');
       const first = cell(tr, r.item);
       const sub = document.createElement('span');
       sub.className = 'title';
       sub.textContent = r.title + ' · ' + r.provider + ' · ' + r.data_type;
       first.appendChild(sub);
       valueRow(tr, r);
-      let detail = null;
-      const toggle = async () => {
-        if (detail) { detail.remove(); detail = null; tr.classList.remove('open'); open.delete(r.item); return; }
-        detail = t.insertRow(tr.rowIndex + 1);
-        detail.classList.add('files');
-        const td = detail.insertCell();
-        td.colSpan = COLUMNS.length;
-        tr.classList.add('open');
-        await loadFiles(r.item, open.get(r.item) || FILE_PAGE, td);
-      };
-      tr.addEventListener('click', toggle);
-      if (open.has(r.item)) toggle();
+      expandable(t, tr, r.item);
     }
+    renderExtra(t, data.extra);
     const from = data.total ? data.offset + 1 : 0;
     setText('count', num(from) + '–' + num(data.offset + data.rows.length) + ' of ' + num(data.total));
     $('prev').disabled = data.offset === 0;
@@ -555,18 +572,25 @@
       const data = await (await api('/stats/api/groups?' + query({ dim: view.group }), signal)).json();
       if (id !== loadId) return;
       groupRows = data.rows;
+      groupExtra = data.extra;
       renderGroups();
     }
   }
 
   // ---- loading and live updates ---------------------------------------------------------------
+  // The main chart's series by group, at the chosen resolution when the server takes it.
+  function seriesQuery() {
+    const resolution = chosenResolution(view, chipsFor(null));
+    return query(resolution ? { dim: view.group, resolution } : { dim: view.group });
+  }
+
   // The numbers, chart and table all read one period, the window's. A later load aborts the one
   // before it, so dragging the window applies only where it was let go.
   async function loadAll(signal) {
     const id = ++loadId;
     const jobs = [
       api('/stats/api/overview?' + query(), signal).then((r) => r.json()).then((o) => { if (id === loadId) renderOverview(o); }),
-      api('/stats/api/series?' + query({ dim: view.group }), signal).then((r) => r.json()).then((s) => { if (id === loadId) { series = s; renderMain(); } }),
+      api('/stats/api/series?' + seriesQuery(), signal).then((r) => r.json()).then((s) => { if (id === loadId) { series = s; renderMain(); } }),
       loadTable(id, signal),
     ];
     await Promise.allSettled(jobs);
@@ -693,7 +717,9 @@
     const [dim, ...rest] = $('add-filter').value.split('|');
     if (dim) { view.filter[dim] = rest.join('|'); filtersChanged(); }
   });
-  function rangeChanged() {
+  // Shows the preset period `range`, as its button does.
+  function pickRange(range) {
+    view.range = range;
     view.offset = 0;
     open.clear();
     persist();
@@ -702,14 +728,19 @@
     windowLabel(null);
     loads.now();
   }
-  onPick('range', (value) => { view.range = value; zoomBack = null; rangeChanged(); });
+  onPick('range', pickRange);
+  onPick('resolution', (value) => {
+    view.resolution = value;
+    persist();
+    windowLabel(null);
+    loads.now();
+  });
   onPick('metric', (value) => {
     view.metric = value;
     view.sort = { key: value, dir: 'desc' };
     persist();
     light();
     renderMain();
-    renderLive();
     renderStrip();
     loadTable(loadId);
   });
