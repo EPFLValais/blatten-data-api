@@ -4,7 +4,7 @@
 //! ever written into SQL text. The tables are created by the migrations in `migrations/`, which are
 //! embedded in the binary and applied once the database can be reached.
 
-use crate::stats::{changes, code_key, DailyRow, Resolution, Scrape, Totals, MAX_COUNTER};
+use crate::stats::{changes, code_key, DailyRow, FileIndex, Resolution, Scrape, Totals, MAX_COUNTER};
 use anyhow::{Context, Result};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use sqlx::{
@@ -86,9 +86,9 @@ impl Store {
     }
 
     /// Apply the migrations, retrying until the database accepts them. Run it in a background task.
-    pub async fn migrate_until_ready(&self) {
+    pub async fn migrate_until_ready(&self, files: &FileIndex) {
         loop {
-            match self.migrate().await {
+            match self.migrate(files).await {
                 Ok(()) => {
                     info!("Statistics database is ready");
                     return;
@@ -101,12 +101,88 @@ impl Store {
         }
     }
 
-    pub async fn migrate(&self) -> Result<()> {
+    /// Apply the migrations, then label the totals they left without a file format, reading the
+    /// formats from the catalog's `files`.
+    pub async fn migrate(&self, files: &FileIndex) -> Result<()> {
         sqlx::migrate!("./migrations")
             .run(&self.pool)
             .await
             .context("apply statistics migrations")?;
+        self.label_formats(files).await.context("label the formats of earlier totals")?;
         self.ready.store(true, Ordering::Release);
+        Ok(())
+    }
+
+    /// Give a file format to the day and hour totals summed before totals were kept per format,
+    /// which the migration leaves at ''. The days are summed again from `daily` per path, under the
+    /// keys `code_key` and the formats `files` give; a day with no paths to sum keeps its totals as
+    /// `Unknown`. An hour takes the format of its day's totals of the code when they are all of one
+    /// format, else `Unknown`. Once every row has a format this does nothing.
+    pub async fn label_formats(&self, files: &FileIndex) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("SELECT pg_advisory_xact_lock($1)").bind(INGEST_LOCK).execute(&mut *tx).await?;
+        let pending: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM daily_code WHERE format = '') OR EXISTS (SELECT 1 FROM hourly_code WHERE format = '')",
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+        if !pending {
+            return Ok(());
+        }
+
+        let paths: Vec<String> = sqlx::query_scalar(
+            "SELECT DISTINCT path FROM daily WHERE day IN (SELECT day FROM daily_code WHERE format = '')",
+        )
+        .fetch_all(&mut *tx)
+        .await?;
+        let codes: Vec<String> = paths.iter().map(|p| code_key(p)).collect();
+        let formats: Vec<String> = paths.iter().map(|p| files.format(p)).collect();
+        sqlx::query("CREATE TEMP TABLE path_label (path text PRIMARY KEY, code text NOT NULL, format text NOT NULL) ON COMMIT DROP")
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("INSERT INTO path_label (path, code, format) SELECT * FROM UNNEST($1::text[], $2::text[], $3::text[])")
+            .bind(&paths)
+            .bind(&codes)
+            .bind(&formats)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query(
+            "CREATE TEMP TABLE day_label ON COMMIT DROP AS
+             SELECT d.day, l.code, l.format,
+                    LEAST(SUM(d.requests), 9223372036854775807)::bigint AS requests,
+                    LEAST(SUM(d.bytes), 9223372036854775807)::bigint AS bytes,
+                    LEAST(SUM(d.equiv), 9223372036854775807)::bigint AS equiv
+             FROM daily d JOIN path_label l USING (path)
+             WHERE d.day IN (SELECT day FROM daily_code WHERE format = '')
+             GROUP BY d.day, l.code, l.format",
+        )
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query(
+            "DELETE FROM daily_code c WHERE c.format = ''
+                 AND EXISTS (SELECT 1 FROM day_label l WHERE l.day = c.day AND l.code = c.code)",
+        )
+        .execute(&mut *tx)
+        .await?;
+        // A day is summed again only while none of its rows has a format, so nothing is counted twice:
+        // a row already there is a conflict, which fails the labelling rather than adding to it.
+        sqlx::query(
+            "INSERT INTO daily_code (day, code, format, requests, bytes, equiv)
+             SELECT day, code, format, requests, bytes, equiv FROM day_label",
+        )
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query("UPDATE daily_code SET format = 'Unknown' WHERE format = ''").execute(&mut *tx).await?;
+        sqlx::query(
+            "UPDATE hourly_code h SET format = s.format
+             FROM (SELECT day, code, MIN(format) AS format FROM daily_code GROUP BY day, code HAVING COUNT(*) = 1) s
+             WHERE h.format = '' AND s.day = (h.hour AT TIME ZONE 'UTC')::date AND s.code = h.code",
+        )
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query("UPDATE hourly_code SET format = 'Unknown' WHERE format = ''").execute(&mut *tx).await?;
+        tx.commit().await?;
+        info!("Labelled the formats of {} earlier file paths", paths.len());
         Ok(())
     }
 
@@ -123,7 +199,7 @@ impl Store {
         day: NaiveDate,
         now: i64,
         scrape: &Scrape,
-        sizes: &HashMap<String, u64>,
+        files: &FileIndex,
     ) -> Result<()> {
         let mut tx = self.pool.begin().await?;
         sqlx::query("SELECT pg_advisory_xact_lock($1)").bind(INGEST_LOCK).execute(&mut *tx).await?;
@@ -153,7 +229,7 @@ impl Store {
                 .collect();
 
         // Only paths whose reading changed are written.
-        let changed = changes(scrape, &saved, sizes, baseline);
+        let changed = changes(scrape, &saved, &files.sizes, baseline);
 
         if !changed.added.is_empty() {
             let paths: Vec<String> = changed.added.keys().cloned().collect();
@@ -189,25 +265,27 @@ impl Store {
             .execute(&mut *tx)
             .await?;
 
-            // One row per code, so no code appears twice in the one statement.
-            let mut by_code: BTreeMap<String, Totals> = BTreeMap::new();
+            // One row per code and format, so no key appears twice in the one statement.
+            let mut by_code: BTreeMap<(String, String), Totals> = BTreeMap::new();
             for (path, totals) in &changed.added {
-                by_code.entry(code_key(path)).or_default().add(*totals);
+                by_code.entry((code_key(path), files.format(path))).or_default().add(*totals);
             }
-            let codes: Vec<String> = by_code.keys().cloned().collect();
+            let codes: Vec<String> = by_code.keys().map(|k| k.0.clone()).collect();
+            let formats: Vec<String> = by_code.keys().map(|k| k.1.clone()).collect();
             let c_requests: Vec<i64> = by_code.values().map(|t| as_i64(t.requests)).collect();
             let c_bytes: Vec<i64> = by_code.values().map(|t| as_i64(t.bytes)).collect();
             let c_equiv: Vec<i64> = by_code.values().map(|t| as_i64(t.equiv)).collect();
             sqlx::query(
-                "INSERT INTO daily_code (day, code, requests, bytes, equiv)
-                 SELECT $1, c, r, b, e FROM UNNEST($2::text[], $3::bigint[], $4::bigint[], $5::bigint[]) AS u(c, r, b, e)
-                 ON CONFLICT (day, code) DO UPDATE SET
+                "INSERT INTO daily_code (day, code, format, requests, bytes, equiv)
+                 SELECT $1, c, f, r, b, e FROM UNNEST($2::text[], $3::text[], $4::bigint[], $5::bigint[], $6::bigint[]) AS u(c, f, r, b, e)
+                 ON CONFLICT (day, code, format) DO UPDATE SET
                      requests = LEAST(daily_code.requests::numeric + EXCLUDED.requests, 9223372036854775807)::bigint,
                      bytes = LEAST(daily_code.bytes::numeric + EXCLUDED.bytes, 9223372036854775807)::bigint,
                      equiv = LEAST(daily_code.equiv::numeric + EXCLUDED.equiv, 9223372036854775807)::bigint",
             )
             .bind(day)
             .bind(&codes)
+            .bind(&formats)
             .bind(&c_requests)
             .bind(&c_bytes)
             .bind(&c_equiv)
@@ -216,15 +294,16 @@ impl Store {
             let hour = DateTime::<Utc>::from_timestamp(now - now.rem_euclid(3600), 0)
                 .context("scrape time out of range")?;
             sqlx::query(
-                "INSERT INTO hourly_code (hour, code, requests, bytes, equiv)
-                 SELECT $1, c, r, b, e FROM UNNEST($2::text[], $3::bigint[], $4::bigint[], $5::bigint[]) AS u(c, r, b, e)
-                 ON CONFLICT (hour, code) DO UPDATE SET
+                "INSERT INTO hourly_code (hour, code, format, requests, bytes, equiv)
+                 SELECT $1, c, f, r, b, e FROM UNNEST($2::text[], $3::text[], $4::bigint[], $5::bigint[], $6::bigint[]) AS u(c, f, r, b, e)
+                 ON CONFLICT (hour, code, format) DO UPDATE SET
                      requests = LEAST(hourly_code.requests::numeric + EXCLUDED.requests, 9223372036854775807)::bigint,
                      bytes = LEAST(hourly_code.bytes::numeric + EXCLUDED.bytes, 9223372036854775807)::bigint,
                      equiv = LEAST(hourly_code.equiv::numeric + EXCLUDED.equiv, 9223372036854775807)::bigint",
             )
             .bind(hour)
             .bind(&codes)
+            .bind(&formats)
             .bind(&c_requests)
             .bind(&c_bytes)
             .bind(&c_equiv)
@@ -314,16 +393,16 @@ impl Store {
         Ok(rows.iter().map(|r| (r.get(0), totals(r, 1))).collect())
     }
 
-    /// Totals per day and item code (or `~docs`, `~other`) over the days `from..=to`.
+    /// Totals per day, item code (or `~docs`, `~other`) and file format over the days `from..=to`.
     pub async fn code_days(
         &self,
         from: Option<NaiveDate>,
         to: Option<NaiveDate>,
-    ) -> Result<Vec<(String, String, Totals)>> {
+    ) -> Result<Vec<(String, String, String, Totals)>> {
         let rows = sqlx::query(
-            "SELECT day, code, requests, bytes, equiv FROM daily_code
+            "SELECT day, code, format, requests, bytes, equiv FROM daily_code
              WHERE ($1::date IS NULL OR day >= $1) AND ($2::date IS NULL OR day <= $2)
-             ORDER BY day, code",
+             ORDER BY day, code, format",
         )
         .bind(from)
         .bind(to)
@@ -331,25 +410,25 @@ impl Store {
         .await?;
         Ok(rows
             .iter()
-            .map(|r| (r.get::<NaiveDate, _>(0).to_string(), r.get(1), totals(r, 2)))
+            .map(|r| (r.get::<NaiveDate, _>(0).to_string(), r.get(1), r.get(2), totals(r, 3)))
             .collect())
     }
 
-    /// Totals per bucket start (UTC) and item code over the days `from..=to`, by hour, day or week.
-    /// Weeks start on Monday and are summed from the daily totals.
+    /// Totals per bucket start (UTC), item code and file format over the days `from..=to`, by hour,
+    /// day or week. Weeks start on Monday and are summed from the daily totals.
     pub async fn code_buckets(
         &self,
         resolution: Resolution,
         from: Option<NaiveDate>,
         to: Option<NaiveDate>,
-    ) -> Result<Vec<(NaiveDateTime, String, Totals)>> {
+    ) -> Result<Vec<(NaiveDateTime, String, String, Totals)>> {
         let start_of = |d: NaiveDate| d.and_time(chrono::NaiveTime::MIN).and_utc();
         let rows = match resolution {
             Resolution::Hour => {
                 sqlx::query(
-                    "SELECT hour, code, requests, bytes, equiv FROM hourly_code
+                    "SELECT hour, code, format, requests, bytes, equiv FROM hourly_code
                      WHERE ($1::timestamptz IS NULL OR hour >= $1) AND ($2::timestamptz IS NULL OR hour < $2)
-                     ORDER BY hour, code",
+                     ORDER BY hour, code, format",
                 )
                 .bind(from.map(start_of))
                 .bind(to.and_then(|d| d.succ_opt()).map(start_of))
@@ -360,10 +439,10 @@ impl Store {
                 let bucket = if resolution == Resolution::Week { "date_trunc('week', day::timestamp)::date" } else { "day" };
                 // `bucket` is one of the two constant expressions above, never outside input.
                 sqlx::query(&format!(
-                    "SELECT {bucket} AS b, code, LEAST(SUM(requests), 9223372036854775807)::bigint, LEAST(SUM(bytes), 9223372036854775807)::bigint, LEAST(SUM(equiv), 9223372036854775807)::bigint
+                    "SELECT {bucket} AS b, code, format, LEAST(SUM(requests), 9223372036854775807)::bigint, LEAST(SUM(bytes), 9223372036854775807)::bigint, LEAST(SUM(equiv), 9223372036854775807)::bigint
                      FROM daily_code
                      WHERE ($1::date IS NULL OR day >= $1) AND ($2::date IS NULL OR day <= $2)
-                     GROUP BY b, code ORDER BY b, code"
+                     GROUP BY b, code, format ORDER BY b, code, format"
                 ))
                 .bind(from)
                 .bind(to)
@@ -378,7 +457,7 @@ impl Store {
                     Resolution::Hour => r.get::<DateTime<Utc>, _>(0).naive_utc(),
                     _ => r.get::<NaiveDate, _>(0).and_time(chrono::NaiveTime::MIN),
                 };
-                (start, r.get(1), totals(r, 2))
+                (start, r.get(1), r.get(2), totals(r, 3))
             })
             .collect())
     }
@@ -489,6 +568,23 @@ pub(crate) mod tests {
 
     /// A migrated store in a schema of its own.
     pub(crate) async fn test_store() -> Store {
+        let store = empty_store().await;
+        store.migrate(&FileIndex::default()).await.expect("migrate");
+        store
+    }
+
+    /// A store in a schema of its own with only the migrations before `version` applied, to seed
+    /// rows the way earlier versions wrote them.
+    async fn store_before(version: i64) -> Store {
+        let store = empty_store().await;
+        let mut migrator = sqlx::migrate!("./migrations");
+        migrator.migrations = migrator.migrations.iter().filter(|m| m.version < version).cloned().collect::<Vec<_>>().into();
+        migrator.run(&store.pool).await.expect("migrate");
+        store
+    }
+
+    /// A store in a schema of its own, with no table in it.
+    async fn empty_store() -> Store {
         let url = std::env::var("STATS_TEST_DATABASE_URL")
             .expect("STATS_TEST_DATABASE_URL must point at a Postgres for these tests");
         let database = test_database_options(&url);
@@ -500,7 +596,6 @@ pub(crate) mod tests {
         let guard = Arc::new(DropSchema { options: database.clone(), schema: schema.clone() });
         let mut store = Store::lazy_with(database.options([("search_path", schema.as_str())]));
         store.schema = Some(guard);
-        store.migrate().await.expect("migrate");
         store
     }
 
@@ -527,8 +622,8 @@ pub(crate) mod tests {
         s
     }
 
-    fn none() -> HashMap<String, u64> {
-        HashMap::new()
+    fn none() -> FileIndex {
+        FileIndex::default()
     }
 
     #[test]
@@ -671,7 +766,7 @@ pub(crate) mod tests {
     #[ignore = "needs STATS_TEST_DATABASE_URL"]
     async fn whole_files_and_item_totals_are_stored() {
         let store = baselined_store().await;
-        let sizes = HashMap::from([("/assets/10Aa00/x.tif".to_string(), 1_000u64)]);
+        let sizes = FileIndex { sizes: HashMap::from([("/assets/10Aa00/x.tif".to_string(), 1_000u64)]), ..Default::default() };
         let mut s = scrape(100, 4, 2_500);
         s.paths.insert("/docs/a.pdf".into(), Totals { requests: 1, bytes: 10, ..Default::default() });
         store.ingest(day("2026-10-22"), 1, &s, &sizes).await.unwrap();
@@ -679,7 +774,7 @@ pub(crate) mod tests {
         let tif = by_path.iter().find(|p| p.0.ends_with("x.tif")).unwrap();
         assert_eq!(tif.1.whole_files(), 2.5);
         let codes = store.code_days(None, None).await.unwrap();
-        let find = |c: &str| codes.iter().find(|r| r.1 == c).map(|r| r.2.requests);
+        let find = |c: &str| codes.iter().find(|r| r.1 == c).map(|r| r.3.requests);
         assert_eq!((find("10Aa00"), find("~docs/a.pdf")), (Some(4), Some(1)));
     }
 
@@ -693,7 +788,7 @@ pub(crate) mod tests {
         store.ingest(d, ten + 1_800, &scrape(100, 8, 80), &none()).await.unwrap();
         store.ingest(d, ten + 3_600 + 5, &scrape(100, 9, 90), &none()).await.unwrap();
         let rows = store.code_buckets(Resolution::Hour, Some(d), Some(d)).await.unwrap();
-        let got: Vec<_> = rows.iter().map(|(h, c, t)| (h.format("%H:%M").to_string(), c.as_str(), t.requests, t.bytes)).collect();
+        let got: Vec<_> = rows.iter().map(|(h, c, _, t)| (h.format("%H:%M").to_string(), c.as_str(), t.requests, t.bytes)).collect();
         assert_eq!(got, vec![("10:00".into(), "10Aa00", 8, 80), ("11:00".into(), "10Aa00", 1, 10)]);
         // Hourly totals outlive the per-scrape detail.
         store.ingest(d, ten + 72 * 3600, &scrape(100, 9, 90), &none()).await.unwrap();
@@ -711,7 +806,7 @@ pub(crate) mod tests {
         store.ingest(day("2026-10-19"), 2, &scrape(100, 5, 50), &none()).await.unwrap();
         store.ingest(day("2026-10-25"), 3, &scrape(100, 6, 60), &none()).await.unwrap();
         let rows = store.code_buckets(Resolution::Week, None, None).await.unwrap();
-        let got: Vec<_> = rows.iter().map(|(w, _, t)| (w.format("%Y-%m-%d").to_string(), t.requests)).collect();
+        let got: Vec<_> = rows.iter().map(|(w, _, _, t)| (w.format("%Y-%m-%d").to_string(), t.requests)).collect();
         assert_eq!(got, vec![("2026-10-12".into(), 2), ("2026-10-19".into(), 4)]);
         let days = store.code_buckets(Resolution::Day, Some(day("2026-10-19")), None).await.unwrap();
         assert_eq!(days.len(), 2);
@@ -736,7 +831,7 @@ pub(crate) mod tests {
         let totals = store.path_totals(None, None).await.unwrap();
         assert_eq!(totals.iter().find(|p| p.0.ends_with("x.tif")).unwrap().1.requests, max);
         let codes = store.code_days(None, None).await.unwrap();
-        assert!(codes.iter().all(|c| c.2.requests <= max));
+        assert!(codes.iter().all(|c| c.3.requests <= max));
         assert_eq!(store.last_ingest().await.unwrap(), Some(4));
     }
 
@@ -782,7 +877,7 @@ pub(crate) mod tests {
         .await
         .unwrap();
         let allowed = [
-            "day", "hour", "path", "requests", "bytes", "equiv", "code", "ts", "key", "value", "start_time",
+            "day", "hour", "path", "requests", "bytes", "equiv", "code", "format", "ts", "key", "value", "start_time",
         ];
         for (table, column) in &columns {
             assert!(allowed.contains(&column.as_str()), "{table}.{column} is not an allowed column");
@@ -818,7 +913,7 @@ pub(crate) mod tests {
     #[tokio::test]
     #[ignore = "needs STATS_TEST_DATABASE_URL"]
     async fn the_migration_splits_the_documents_of_each_day_by_file() {
-        let store = test_store().await;
+        let store = store_before(20261029090841).await;
         let long = format!("/docs/{}.pdf", "k".repeat(70));
         let paths = [
             ("2026-10-21", "/docs/lantern_manual.pdf", 2),
@@ -846,16 +941,13 @@ pub(crate) mod tests {
                 .await
                 .unwrap();
         }
-        sqlx::raw_sql(include_str!("../migrations/20261029090841_name_each_document.sql"))
-            .execute(&store.pool)
-            .await
-            .unwrap();
+        store.migrate(&FileIndex::default()).await.unwrap();
         let mut got: Vec<_> = store
             .code_days(None, None)
             .await
             .unwrap()
             .into_iter()
-            .map(|(d, c, t)| (d, c, t.requests, t.bytes))
+            .map(|(d, c, _, t)| (d, c, t.requests, t.bytes))
             .collect();
         got.sort();
         let row = |d: &str, c: &str, n: u64| (d.to_string(), c.to_string(), n, n * 10);
@@ -873,6 +965,153 @@ pub(crate) mod tests {
         );
         let keys: Vec<_> = paths.iter().map(|(d, p, _)| (d.to_string(), code_key(p))).collect();
         assert!(keys.iter().all(|k| got.iter().any(|g| (&g.0, &g.1) == (&k.0, &k.1))), "the keys are those of code_key");
+    }
+
+    fn kite_files() -> FileIndex {
+        FileIndex {
+            media_types: HashMap::from([
+                ("/assets/kites-a/tail.laz".to_string(), "application/vnd.laszip".to_string()),
+                ("/assets/kites-a/flight_notes.pdf".to_string(), "application/pdf".to_string()),
+                ("/assets/kites-b/sail.jpeg".to_string(), "image/jpeg".to_string()),
+            ]),
+            ..Default::default()
+        }
+    }
+
+    /// One kite item whose catalog format is LAZ, holding a laz and a pdf.
+    fn kite_items() -> Vec<crate::stats::ItemInfo> {
+        vec![crate::stats::ItemInfo {
+            code: "kites-a".into(),
+            title: "Kites".into(),
+            files_by_format: BTreeMap::from([("LAZ".to_string(), 1), ("PDF".to_string(), 1)]),
+            facets: crate::stats::Facets { format: "LAZ".into(), ..Default::default() },
+        }]
+    }
+
+    #[tokio::test]
+    #[ignore = "needs STATS_TEST_DATABASE_URL"]
+    async fn hour_and_day_series_count_each_file_under_its_own_format() {
+        use crate::stats::{series, series_window, Dim, Filters};
+        let store = baselined_store().await;
+        let d = day("2026-10-22");
+        let ten = 1_792_663_200; // 2026-10-22 10:00 UTC
+        let mut s = Scrape { start_time: Some(1), ..Default::default() };
+        for path in ["/assets/kites-a/tail.laz", "/assets/kites-a/flight_notes.pdf"] {
+            s.paths.insert(path.into(), Totals { requests: 1, bytes: 10, ..Default::default() });
+        }
+        store.ingest(d, ten + 60, &s, &kite_files()).await.unwrap();
+
+        let now = d.and_hms_opt(23, 0, 0).unwrap();
+        let items = kite_items();
+        let by_format = |rows: &[_], resolution, filters: &Filters| {
+            let window = series_window(Some(resolution), Some(d), Some(d), None, now).unwrap();
+            let s = series(rows, &items, Dim::Format, filters, 7, &window);
+            s.groups.into_iter().map(|g| (g.name, g.requests.iter().sum::<u64>())).collect::<Vec<_>>()
+        };
+        let both = vec![("LAZ".to_string(), 1), ("PDF".to_string(), 1)];
+        let pdf = Filters::from_lookup(|k| (k == "format").then_some("PDF"));
+        for resolution in [Resolution::Hour, Resolution::Day, Resolution::Week] {
+            let rows = store.code_buckets(resolution, Some(d), Some(d)).await.unwrap();
+            assert_eq!(by_format(&rows, resolution, &Filters::default()), both, "{resolution:?}");
+            assert_eq!(by_format(&rows, resolution, &pdf), vec![("PDF".to_string(), 1)], "{resolution:?}");
+        }
+        let today: Vec<_> = store.code_days(None, None).await.unwrap().into_iter().map(|r| (r.1, r.2, r.3.requests)).collect();
+        assert_eq!(today, vec![("kites-a".into(), "LAZ".into(), 1), ("kites-a".into(), "PDF".into(), 1)]);
+    }
+
+    #[tokio::test]
+    #[ignore = "needs STATS_TEST_DATABASE_URL"]
+    async fn the_migration_splits_days_by_file_format_and_reads_a_mixed_hour_as_unknown() {
+        let store = store_before(20261029130002).await;
+        let paths = [
+            ("2026-10-22", "/assets/kites-a/tail.laz", 2),
+            ("2026-10-22", "/assets/kites-a/flight_notes.pdf", 1),
+            ("2026-10-22", "/archives/kites-b.zip", 3),
+            ("2026-10-22", "/assets/kites-b/sail.jpeg", 4),
+            ("2026-10-22", "/docs/lantern_manual.pdf", 5),
+        ];
+        for (d, path, n) in paths {
+            sqlx::query("INSERT INTO daily (day, path, requests, bytes, equiv) VALUES ($1, $2, $3, $3 * 10, 0)")
+                .bind(day(d))
+                .bind(path)
+                .bind(n)
+                .execute(&store.pool)
+                .await
+                .unwrap();
+        }
+        let before = [
+            ("2026-10-22", "kites-a", 3),
+            ("2026-10-22", "kites-b", 7),
+            ("2026-10-22", "~docs/lantern_manual.pdf", 5),
+            ("2026-10-23", "kites-a", 6),
+        ];
+        for (d, code, n) in before {
+            sqlx::query("INSERT INTO daily_code (day, code, requests, bytes, equiv) VALUES ($1, $2, $3, $3 * 10, 0)")
+                .bind(day(d))
+                .bind(code)
+                .bind(n)
+                .execute(&store.pool)
+                .await
+                .unwrap();
+        }
+        let hours = [
+            ("2026-10-22 09:00:00+00", "kites-a", 3),
+            ("2026-10-22 09:00:00+00", "kites-b", 7),
+            ("2026-10-22 23:00:00+00", "~docs/lantern_manual.pdf", 5),
+            ("2026-10-23 00:00:00+00", "kites-a", 6),
+        ];
+        for (h, code, n) in hours {
+            sqlx::query("INSERT INTO hourly_code (hour, code, requests, bytes, equiv) VALUES ($1::timestamptz, $2, $3, $3 * 10, 0)")
+                .bind(h)
+                .bind(code)
+                .bind(n)
+                .execute(&store.pool)
+                .await
+                .unwrap();
+        }
+
+        store.migrate(&kite_files()).await.unwrap();
+        let row = |d: &str, c: &str, f: &str, n: u64| (d.to_string(), c.to_string(), f.to_string(), n, n * 10);
+        let days: Vec<_> = store
+            .code_days(None, None)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|(d, c, f, t)| (d, c, f, t.requests, t.bytes))
+            .collect();
+        assert_eq!(
+            days,
+            vec![
+                row("2026-10-22", "kites-a", "LAZ", 2),
+                row("2026-10-22", "kites-a", "PDF", 1),
+                // A jpeg is named by its media type from the catalog, as the API names it.
+                row("2026-10-22", "kites-b", "JPG", 4),
+                row("2026-10-22", "kites-b", "ZIP", 3),
+                row("2026-10-22", "~docs/lantern_manual.pdf", "PDF", 5),
+                // A day with no rows in `daily` to split it by keeps its total.
+                row("2026-10-23", "kites-a", "Unknown", 6),
+            ]
+        );
+        let hours: Vec<_> = store
+            .code_buckets(Resolution::Hour, None, None)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|(h, c, f, t)| (h.format("%d %H").to_string(), c, f, t.requests, t.bytes))
+            .collect();
+        assert_eq!(
+            hours,
+            vec![
+                row("22 09", "kites-a", "Unknown", 3),
+                row("22 09", "kites-b", "Unknown", 7),
+                row("22 23", "~docs/lantern_manual.pdf", "PDF", 5),
+                row("23 00", "kites-a", "Unknown", 6),
+            ]
+        );
+
+        // Labelling again finds nothing left to label and changes nothing.
+        store.label_formats(&FileIndex::default()).await.unwrap();
+        assert_eq!(store.code_days(None, None).await.unwrap().len(), 6);
     }
 
     const SEED: &str = include_str!("../scripts/seed_stats.sql");
@@ -915,23 +1154,26 @@ pub(crate) mod tests {
         let today = Utc::now().date_naive();
         assert!((today - first).num_days() >= 360, "about a year of history, from {first}");
         assert!(days.iter().map(|d| d.0.date()).max().unwrap() >= today.pred_opt().unwrap());
-        assert!(days.iter().all(|d| d.2.equiv <= d.2.requests * 1000), "bytes never above whole files requested");
+        assert!(days.iter().all(|d| d.3.equiv <= d.3.requests * 1000), "bytes never above whole files requested");
 
         let per_path = sum_by(store.daily(None, None).await.unwrap().into_iter().map(|r| (r.day, r.totals)));
-        let per_code = sum_by(store.code_days(None, None).await.unwrap().into_iter().map(|r| (r.0, r.2)));
+        let per_code = sum_by(store.code_days(None, None).await.unwrap().into_iter().map(|r| (r.0, r.3)));
         assert_eq!(per_path, per_code, "daily_code is the sum of daily, day by day");
-        let per_key = sum_by(store.daily(None, None).await.unwrap().into_iter().map(|r| ((r.day, code_key(&r.path)), r.totals)));
-        let stored = sum_by(store.code_days(None, None).await.unwrap().into_iter().map(|r| ((r.0, r.1), r.2)));
-        assert_eq!(per_key, stored, "daily_code is summed under the keys code_key gives");
-        assert!(stored.keys().any(|(_, c)| c.starts_with("~docs/")), "documents are seeded under their own keys");
-        let by_day = sum_by(days.iter().map(|d| ((d.0.date(), d.1.clone()), d.2)));
-        let by_hour = sum_by(hours.iter().map(|h| ((h.0.date(), h.1.clone()), h.2)));
-        assert_eq!(by_hour, by_day, "hourly_code sums to daily_code per day and code over the whole year");
+        let files = FileIndex::default();
+        let per_key = sum_by(
+            store.daily(None, None).await.unwrap().into_iter().map(|r| ((r.day, code_key(&r.path), files.format(&r.path)), r.totals)),
+        );
+        let stored = sum_by(store.code_days(None, None).await.unwrap().into_iter().map(|r| ((r.0, r.1, r.2), r.3)));
+        assert_eq!(per_key, stored, "daily_code is summed under the keys code_key and the formats file_format give");
+        assert!(stored.keys().any(|(_, c, _)| c.starts_with("~docs/")), "documents are seeded under their own keys");
+        let by_day = sum_by(days.iter().map(|d| ((d.0.date(), d.1.clone(), d.2.clone()), d.3)));
+        let by_hour = sum_by(hours.iter().map(|h| ((h.0.date(), h.1.clone(), h.2.clone()), h.3)));
+        assert_eq!(by_hour, by_day, "hourly_code sums to daily_code per day, code and format over the whole year");
         let months_back = today - chrono::Days::new(100);
         let window = store.code_buckets(Resolution::Hour, Some(months_back), Some(months_back + chrono::Days::new(4))).await.unwrap();
         assert!(!window.is_empty(), "a short window months back has hours to draw");
-        let in_weeks = sum_by(weeks.iter().map(|w| ((), w.2)));
-        assert_eq!(in_weeks, sum_by(days.iter().map(|d| ((), d.2))), "weeks hold every day");
+        let in_weeks = sum_by(weeks.iter().map(|w| ((), w.3)));
+        assert_eq!(in_weeks, sum_by(days.iter().map(|d| ((), d.3))), "weeks hold every day");
 
         let paths = store.path_totals(None, None).await.unwrap();
         assert!(paths.iter().any(|p| p.0.starts_with("/archives/") && p.0.ends_with(".zip")));

@@ -42,6 +42,9 @@ pub const MAX_PATH_CHARS: usize = 2048;
 /// The longest item code the database stores.
 pub const MAX_CODE_CHARS: usize = 64;
 
+/// The longest format label the database stores; a longer extension names no format.
+pub const MAX_FORMAT_CHARS: usize = 16;
+
 /// The largest counter the database stores (a Postgres `bigint`).
 pub const MAX_COUNTER: u64 = i64::MAX as u64;
 
@@ -225,6 +228,65 @@ pub fn classify(path: &str) -> (Kind, Option<&str>) {
     }
 }
 
+/// The format label of the file a proxy path serves, given the catalog's media type for it: ZIP for
+/// every `.zip`, generated archives included; else the label of the media type; else the file's
+/// extension upper-cased. A media type shared by several extensions (`text/plain`) has no label, and
+/// an extension longer than `MAX_FORMAT_CHARS` is no format.
+pub fn file_format(path: &str, media_type: Option<&str>) -> String {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    let extension = name
+        .rsplit_once('.')
+        .map(|(_, e)| e)
+        .filter(|e| !e.is_empty() && e.chars().count() <= MAX_FORMAT_CHARS);
+    if extension.is_some_and(|e| e.eq_ignore_ascii_case("zip")) {
+        return "ZIP".to_string();
+    }
+    let essence = media_type.and_then(|t| t.split(';').next()).map(|t| t.trim().to_ascii_lowercase());
+    let label = match essence.as_deref() {
+        Some("image/tiff") => Some("TIF"),
+        Some("application/vnd.laszip") => Some("LAZ"),
+        Some("application/vnd.las") => Some("LAS"),
+        Some("image/jpeg") => Some("JPG"),
+        Some("image/png") => Some("PNG"),
+        Some("image/gif") => Some("GIF"),
+        Some("application/zip") => Some("ZIP"),
+        Some("text/csv") => Some("CSV"),
+        Some("application/json") => Some("JSON"),
+        Some("application/geo+json") => Some("GEOJSON"),
+        Some("application/xml") => Some("XML"),
+        Some("application/pdf") => Some("PDF"),
+        Some("model/obj") => Some("OBJ"),
+        Some("model/mtl") => Some("MTL"),
+        Some("image/vnd.dxf") => Some("DXF"),
+        Some("application/vnd.shp") => Some("SHP"),
+        Some("video/mp4") => Some("MP4"),
+        Some("video/matroska") => Some("MKV"),
+        _ => None,
+    };
+    match (label, extension) {
+        (Some(label), _) => label.to_string(),
+        (None, Some(e)) => e.to_ascii_uppercase(),
+        (None, None) => "Unknown".to_string(),
+    }
+}
+
+/// What the catalog says about each whole file the proxy serves, by its proxy path: every item
+/// asset and every root catalog link (the documents).
+#[derive(Debug, Clone, Default)]
+pub struct FileIndex {
+    /// The size of each file that carries `file:size`.
+    pub sizes: HashMap<String, u64>,
+    /// The media type of each file that carries `type`.
+    pub media_types: HashMap<String, String>,
+}
+
+impl FileIndex {
+    /// The format label of the file at `path` (see `file_format`).
+    pub fn format(&self, path: &str) -> String {
+        file_format(path, self.media_types.get(path).map(String::as_str))
+    }
+}
+
 /// Bytes sent as thousandths of the file's size; zero when the size is not known.
 pub fn whole_file_thousandths(bytes: u64, size: Option<u64>) -> u64 {
     match size {
@@ -329,9 +391,14 @@ pub fn summarize(rows: &[DailyRow], collections: &HashMap<String, String>) -> Ve
 
 /// The rows of the summary, the same for its JSON and its CSV: daily rows that pass `filters`,
 /// grouped by day, collection, item and archive or file, with collections taken from the catalog.
-pub fn summary_rows(mut rows: Vec<DailyRow>, items: &[ItemInfo], filters: &Filters) -> Vec<SummaryRow> {
+pub fn summary_rows(
+    mut rows: Vec<DailyRow>,
+    items: &[ItemInfo],
+    files: &FileIndex,
+    filters: &Filters,
+) -> Vec<SummaryRow> {
     let by_code: HashMap<&str, &ItemInfo> = items.iter().map(|i| (i.code.as_str(), i)).collect();
-    rows.retain(|r| code_passes(&code_key(&r.path), &by_code, filters).is_some());
+    rows.retain(|r| path_passes(&r.path, files, &by_code, filters));
     let collections: HashMap<String, String> =
         items.iter().map(|i| (i.code.clone(), i.facets.collection.clone())).collect();
     summarize(&rows, &collections)
@@ -445,10 +512,24 @@ impl Filters {
         !self.0.is_empty()
     }
 
-    pub fn matches(&self, f: &Facets) -> bool {
-        self.0.iter().all(|(dim, values)| values.iter().any(|v| v == dim.of(f)))
+    /// Whether an item passes the filters on its attributes; format is a file's and is left out.
+    pub fn matches_item(&self, f: &Facets) -> bool {
+        self.0
+            .iter()
+            .filter(|(dim, _)| *dim != Dim::Format)
+            .all(|(dim, values)| values.iter().any(|v| v == dim.of(f)))
+    }
+
+    /// Whether a file of this format (see `file_format`) passes the format filter.
+    pub fn keeps_format(&self, format: &str) -> bool {
+        self.0.iter().filter(|(dim, _)| *dim == Dim::Format).all(|(_, values)| values.iter().any(|v| v == format))
+    }
+
+    fn filters_format(&self) -> bool {
+        self.0.iter().any(|(dim, _)| *dim == Dim::Format)
     }
 }
+
 
 /// What the catalog says about an item: used to list items that were never downloaded and to
 /// compare downloaded files with the files that exist.
@@ -456,31 +537,35 @@ impl Filters {
 pub struct ItemInfo {
     pub code: String,
     pub title: String,
-    /// Number of files, not counting the archive.
-    pub files: usize,
+    /// Number of files by format (see `file_format`), not counting the archive.
+    pub files_by_format: BTreeMap<String, usize>,
     pub facets: Facets,
 }
 
-/// Every value of every attribute with the number of items that have it, for the filter menus.
+/// Every value of every attribute with the number of items that have it, for the filter menus;
+/// format, being a file's, with the number of files.
 pub fn facet_values(items: &[ItemInfo]) -> BTreeMap<&'static str, Vec<(String, usize)>> {
     Dim::ATTRIBUTES
         .iter()
         .map(|d| {
             let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
             for i in items {
-                *counts.entry(d.of(&i.facets)).or_default() += 1;
+                if *d == Dim::Format {
+                    for (format, files) in &i.files_by_format {
+                        *counts.entry(format).or_default() += files;
+                    }
+                } else {
+                    *counts.entry(d.of(&i.facets)).or_default() += 1;
+                }
             }
             (d.key(), counts.into_iter().map(|(v, n)| (v.to_string(), n)).collect())
         })
         .collect()
 }
 
+/// Download totals over some of an item's files, with how many of those files the catalog has.
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
-pub struct ItemTotals {
-    pub item: String,
-    pub title: String,
-    #[serde(flatten)]
-    pub facets: Facets,
+pub struct Counts {
     pub requests: u64,
     pub bytes: u64,
     /// Bytes sent as a number of whole files (see `Totals::equiv`).
@@ -489,6 +574,47 @@ pub struct ItemTotals {
     /// Distinct files requested at least once.
     pub files_downloaded: usize,
     pub files_total: usize,
+}
+
+impl Counts {
+    pub fn add(&mut self, other: &Counts) {
+        self.requests = self.requests.saturating_add(other.requests);
+        self.bytes = self.bytes.saturating_add(other.bytes);
+        self.whole_files += other.whole_files;
+        self.archive_requests = self.archive_requests.saturating_add(other.archive_requests);
+        self.files_downloaded += other.files_downloaded;
+        self.files_total += other.files_total;
+    }
+
+    fn add_request(&mut self, totals: &Totals) {
+        self.requests = self.requests.saturating_add(totals.requests);
+        self.bytes = self.bytes.saturating_add(totals.bytes);
+        self.whole_files += totals.equiv as f64 / 1000.0;
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
+pub struct ItemTotals {
+    pub item: String,
+    pub title: String,
+    #[serde(flatten)]
+    pub facets: Facets,
+    /// The sum of `formats`.
+    #[serde(flatten)]
+    pub counts: Counts,
+    /// The totals by file format (see `file_format`), the archive under ZIP. A format is listed when
+    /// the item has files of it or one of its paths was requested.
+    #[serde(skip)]
+    pub formats: BTreeMap<String, Counts>,
+}
+
+impl ItemTotals {
+    fn sum_formats(&mut self) {
+        self.counts = Counts::default();
+        for c in self.formats.values() {
+            self.counts.add(c);
+        }
+    }
 }
 
 #[derive(Debug, Default, PartialEq)]
@@ -516,8 +642,9 @@ pub struct ExtraRow {
     pub expands: bool,
 }
 
-/// Fold per-path totals into one row per catalog item.
-pub fn breakdown(paths: &[(String, Totals)], items: &[ItemInfo]) -> Breakdown {
+/// Fold per-path totals into one row per catalog item, each path under its file's format, with
+/// the media types the catalog gives by proxy path.
+pub fn breakdown(paths: &[(String, Totals)], items: &[ItemInfo], files: &FileIndex) -> Breakdown {
     let mut out = Breakdown {
         items: items
             .iter()
@@ -525,7 +652,12 @@ pub fn breakdown(paths: &[(String, Totals)], items: &[ItemInfo]) -> Breakdown {
                 item: i.code.clone(),
                 title: i.title.clone(),
                 facets: i.facets.clone(),
-                files_total: i.files,
+                formats: i
+                    .files_by_format
+                    .iter()
+                    .filter(|(_, files)| **files > 0)
+                    .map(|(format, files)| (format.clone(), Counts { files_total: *files, ..Default::default() }))
+                    .collect(),
                 ..Default::default()
             })
             .collect(),
@@ -537,19 +669,14 @@ pub fn breakdown(paths: &[(String, Totals)], items: &[ItemInfo]) -> Breakdown {
         let (kind, code) = classify(path);
         let known = code.and_then(|c| index.get(c).copied());
         match (kind, known) {
-            (Kind::File, Some(n)) => {
-                let it = &mut out.items[n];
-                it.requests = it.requests.saturating_add(totals.requests);
-                it.bytes = it.bytes.saturating_add(totals.bytes);
-                it.whole_files += totals.equiv as f64 / 1000.0;
-                it.files_downloaded += 1;
-            }
-            (Kind::Archive, Some(n)) => {
-                let it = &mut out.items[n];
-                it.requests = it.requests.saturating_add(totals.requests);
-                it.bytes = it.bytes.saturating_add(totals.bytes);
-                it.whole_files += totals.equiv as f64 / 1000.0;
-                it.archive_requests = it.archive_requests.saturating_add(totals.requests);
+            (Kind::File | Kind::Archive, Some(n)) => {
+                let c = out.items[n].formats.entry(files.format(path)).or_default();
+                c.add_request(totals);
+                if kind == Kind::Archive {
+                    c.archive_requests = c.archive_requests.saturating_add(totals.requests);
+                } else {
+                    c.files_downloaded += 1;
+                }
             }
             (Kind::Docs, _) => {
                 out.docs.add(*totals);
@@ -557,6 +684,9 @@ pub fn breakdown(paths: &[(String, Totals)], items: &[ItemInfo]) -> Breakdown {
             }
             _ => out.unknown.add(*totals),
         }
+    }
+    for it in &mut out.items {
+        it.sum_formats();
     }
     out
 }
@@ -575,11 +705,20 @@ pub fn documents(paths: &[(String, Totals)]) -> Vec<(String, Totals)> {
 }
 
 impl Breakdown {
-    /// Keep the items that pass the filters. With a filter active, documents and unknown paths
-    /// belong to no item and are dropped from the totals.
+    /// Keep the items that pass the filters on their attributes and, under a format filter, only
+    /// their files of the formats kept: an item with no such file and no request for one is
+    /// dropped. With a filter active, documents and unknown paths belong to no item and are
+    /// dropped from the totals.
     pub fn filtered(mut self, filters: &Filters) -> Breakdown {
         if filters.is_active() {
-            self.items.retain(|i| filters.matches(&i.facets));
+            self.items.retain(|i| filters.matches_item(&i.facets));
+            if filters.filters_format() {
+                for it in &mut self.items {
+                    it.formats.retain(|format, _| filters.keeps_format(format));
+                    it.sum_formats();
+                }
+                self.items.retain(|i| !i.formats.is_empty());
+            }
             self.docs = Totals::default();
             self.docs_downloaded = 0;
             self.unknown = Totals::default();
@@ -610,27 +749,26 @@ pub struct GroupTotals {
     pub name: String,
     pub items: usize,
     pub items_with_downloads: usize,
-    pub requests: u64,
-    pub bytes: u64,
-    pub whole_files: f64,
-    pub archive_requests: u64,
-    pub files_downloaded: usize,
-    pub files_total: usize,
+    #[serde(flatten)]
+    pub counts: Counts,
 }
 
-/// Sum item rows by an attribute, largest by requests first.
+/// Sum item rows by an attribute, largest by requests first. By format, each item adds its files
+/// of a format to that format's group.
 pub fn group_totals(items: &[ItemTotals], dim: Dim) -> Vec<GroupTotals> {
     let mut groups: BTreeMap<&str, GroupTotals> = BTreeMap::new();
     for row in items {
-        let g = groups.entry(dim.of(&row.facets)).or_default();
-        g.items += 1;
-        g.items_with_downloads += (row.requests > 0) as usize;
-        g.requests = g.requests.saturating_add(row.requests);
-        g.bytes = g.bytes.saturating_add(row.bytes);
-        g.whole_files += row.whole_files;
-        g.archive_requests = g.archive_requests.saturating_add(row.archive_requests);
-        g.files_downloaded += row.files_downloaded;
-        g.files_total += row.files_total;
+        let parts: Vec<(&str, &Counts)> = if dim == Dim::Format {
+            row.formats.iter().map(|(f, c)| (f.as_str(), c)).collect()
+        } else {
+            vec![(dim.of(&row.facets), &row.counts)]
+        };
+        for (name, c) in parts {
+            let g = groups.entry(name).or_default();
+            g.items += 1;
+            g.items_with_downloads += (c.requests > 0) as usize;
+            g.counts.add(c);
+        }
     }
     let mut out: Vec<_> = groups
         .into_iter()
@@ -639,7 +777,7 @@ pub fn group_totals(items: &[ItemTotals], dim: Dim) -> Vec<GroupTotals> {
             g
         })
         .collect();
-    out.sort_by(|a, b| b.requests.cmp(&a.requests).then(a.name.cmp(&b.name)));
+    out.sort_by(|a, b| b.counts.requests.cmp(&a.counts.requests).then(a.name.cmp(&b.name)));
     out
 }
 
@@ -773,27 +911,37 @@ pub struct Series {
     pub groups: Vec<SeriesGroup>,
 }
 
-/// Whether the daily total kept under `code` belongs in a view with these filters. Without a
-/// filter everything counts; with one, only catalog items that match.
+/// Whether the total kept under `code` and file `format` belongs in a view with these filters.
+/// Without a filter everything counts; with one, only the files of catalog items that match, a
+/// format filter read against the file's own format.
 pub fn code_passes<'a>(
     code: &str,
+    format: &str,
     by_code: &HashMap<&'a str, &'a ItemInfo>,
     filters: &Filters,
 ) -> Option<Option<&'a ItemInfo>> {
     match by_code.get(code) {
-        Some(info) if filters.matches(&info.facets) => Some(Some(info)),
+        Some(info) if filters.matches_item(&info.facets) && filters.keeps_format(format) => {
+            Some(Some(info))
+        }
         Some(_) => None,
         None if filters.is_active() => None,
         None => Some(None),
     }
 }
 
-/// Totals per group and bucket of `window`, from rows of (bucket start, code, totals). The largest
-/// `top` groups by requests are kept and the rest are summed as "Smaller groups". Documents are
+/// Whether the totals of the file at `path` belong in a view with these filters (see `code_passes`).
+pub fn path_passes(path: &str, files: &FileIndex, by_code: &HashMap<&str, &ItemInfo>, filters: &Filters) -> bool {
+    code_passes(&code_key(path), &files.format(path), by_code, filters).is_some()
+}
+
+/// Totals per group and bucket of `window`, from rows of (bucket start, code, file format, totals).
+/// Grouped by format, an item's files fall in the group of their own format. The largest `top`
+/// groups by requests are kept and the rest are summed as "Smaller groups". Documents are
 /// "Documents", or each its own group named by its file name when grouped by item, and unknown
 /// paths are "Other"; neither counts towards `top`.
 pub fn series(
-    rows: &[(chrono::NaiveDateTime, String, Totals)],
+    rows: &[(chrono::NaiveDateTime, String, String, Totals)],
     infos: &[ItemInfo],
     dim: Dim,
     filters: &Filters,
@@ -807,11 +955,12 @@ pub fn series(
 
     let mut sums: BTreeMap<String, Vec<Totals>> = BTreeMap::new();
     let mut outside: BTreeSet<String> = BTreeSet::new();
-    for (start, code, t) in rows {
+    for (start, code, format, t) in rows {
         let Some(&n) = slot.get(&window.resolution.align(*start)) else { continue };
-        let Some(info) = code_passes(code, &by_code, filters) else { continue };
+        let Some(info) = code_passes(code, format, &by_code, filters) else { continue };
         let name = match (info, document_of(code)) {
             (Some(info), _) if dim == Dim::Item => info.code.clone(),
+            (Some(_), _) if dim == Dim::Format => format.clone(),
             (Some(info), _) => dim.of(&info.facets).to_string(),
             (None, Some(Some(doc))) if dim == Dim::Item => doc.to_string(),
             (None, Some(_)) => "Documents".to_string(),
@@ -936,11 +1085,37 @@ pub fn setting(value: Option<String>) -> Option<String> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn a_file_is_named_by_its_own_media_type_not_its_item_format() {
+        assert_eq!(file_format("/assets/kites-a/flight_notes.pdf", Some("application/pdf")), "PDF");
+        assert_eq!(file_format("/assets/kites-a/tail.laz", Some("application/vnd.laszip")), "LAZ");
+        assert_eq!(file_format("/assets/kites-a/sail.tif", Some("image/tiff; application=geotiff")), "TIF");
+        assert_eq!(file_format("/assets/kites-a/sail.jpeg", Some("image/jpeg")), "JPG");
+    }
+
+    #[test]
+    fn every_zip_is_zip_generated_archives_included() {
+        assert_eq!(file_format("/archives/pear-01.zip", None), "ZIP");
+        assert_eq!(file_format("/assets/pear-01/bundle.zip", Some("application/octet-stream")), "ZIP");
+        assert_eq!(file_format("/assets/pear-01/BUNDLE.ZIP", Some("application/zip")), "ZIP");
+    }
+
+    #[test]
+    fn a_path_without_a_labelled_media_type_is_named_by_its_extension() {
+        assert_eq!(file_format("/assets/pear-01/rows.asc", None), "ASC");
+        assert_eq!(file_format("/assets/pear-01/rows.asc", Some("text/plain")), "ASC");
+        assert_eq!(file_format("/assets/pear-01/rows.tfw", Some("text/plain")), "TFW");
+        assert_eq!(file_format("/assets/pear-01/orchard.v2.Kml", Some("application/x-unlisted")), "KML");
+        assert_eq!(file_format("/docs/pruning guide", None), "Unknown");
+        assert_eq!(file_format("/assets/pear-01/rows.abcdefghijklmnop", None), "ABCDEFGHIJKLMNOP");
+        assert_eq!(file_format("/assets/pear-01/rows.abcdefghijklmnopq", None), "Unknown", "too long to store");
+    }
+
     fn item(code: &str, collection: &str, provider: &str, data_type: &str, files: usize) -> ItemInfo {
         ItemInfo {
             code: code.into(),
             title: code.into(),
-            files,
+            files_by_format: BTreeMap::from([("TIF".to_string(), files)]),
             facets: Facets {
                 collection: collection.into(),
                 provider: provider.into(),
@@ -1153,7 +1328,7 @@ http_request_duration_seconds_count{method="GET"} 2
             daily("/lanterns/paper.txt", 1, 1),
             daily("/docs/lantern_manual.pdf", 4, 8),
         ];
-        let out = summary_rows(rows, &items, &Filters::default());
+        let out = summary_rows(rows, &items, &FileIndex::default(), &Filters::default());
         let found: Vec<_> = out.iter().map(|r| (r.collection.as_str(), r.item.as_str(), r.kind, r.requests)).collect();
         assert_eq!(
             found,
@@ -1183,7 +1358,7 @@ http_request_duration_seconds_count{method="GET"} 2
         };
         let filters = [Filters::default(), Filters::from_lookup(|k| (k == "provider").then_some("Gust"))];
         for f in &filters {
-            let out = summary_rows(rows(), &items, f);
+            let out = summary_rows(rows(), &items, &FileIndex::default(), f);
             let json = serde_json::to_value(&out).unwrap();
             let from_json: Vec<String> = json
                 .as_array()
@@ -1204,7 +1379,7 @@ http_request_duration_seconds_count{method="GET"} 2
             let from_csv: Vec<&str> = csv.lines().skip(1).collect();
             assert_eq!(from_csv, from_json);
         }
-        let gust = summary_rows(rows(), &items, &filters[1]);
+        let gust = summary_rows(rows(), &items, &FileIndex::default(), &filters[1]);
         assert_eq!(gust.len(), 1);
         assert_eq!(gust[0].item, "06Kc01");
     }
@@ -1232,11 +1407,11 @@ http_request_duration_seconds_count{method="GET"} 2
             ("/docs/kite_guide.csv".to_string(), t(6, 6)),
             ("/favicon.ico".to_string(), t(1, 1)),
         ];
-        let b = breakdown(&paths, &items);
+        let b = breakdown(&paths, &items, &FileIndex::default());
         let rows: Vec<_> = b.extra_rows().into_iter().map(|r| (r.name, r.requests, r.bytes, r.files_downloaded, r.expands)).collect();
         assert_eq!(rows, vec![("Documents", 9, 36, 2, true), ("Other", 1, 1, 0, false)]);
         assert!(b.filtered(&filters(&[("provider", "A")])).extra_rows().is_empty());
-        assert!(breakdown(&paths[..1], &items).extra_rows().is_empty());
+        assert!(breakdown(&paths[..1], &items, &FileIndex::default()).extra_rows().is_empty());
         assert_eq!(
             documents(&paths),
             vec![("kite_guide.csv".to_string(), t(6, 6)), ("lantern_manual.pdf".to_string(), t(3, 30))]
@@ -1258,12 +1433,12 @@ http_request_duration_seconds_count{method="GET"} 2
             ("/assets/99Zz99/a.jpg".to_string(), t(3, 30)),
             ("/favicon.ico".to_string(), t(1, 1)),
         ];
-        let b = breakdown(&paths, &items);
+        let b = breakdown(&paths, &items, &FileIndex::default());
         assert_eq!(b.items.len(), 2);
         let cam = &b.items[0];
-        assert_eq!((cam.requests, cam.bytes, cam.archive_requests), (8, 260, 2));
-        assert_eq!((cam.files_downloaded, cam.files_total), (2, 3));
-        assert_eq!(b.items[1].requests, 0);
+        assert_eq!((cam.counts.requests, cam.counts.bytes, cam.counts.archive_requests), (8, 260, 2));
+        assert_eq!((cam.counts.files_downloaded, cam.counts.files_total), (2, 3));
+        assert_eq!(b.items[1].counts.requests, 0);
         assert_eq!(b.docs, t(7, 70));
         assert_eq!(b.unknown, t(4, 31));
         assert_eq!(file_name_in_item("/assets/10Aa00/sub/a.jpg", "10Aa00"), "sub/a.jpg");
@@ -1290,14 +1465,14 @@ http_request_duration_seconds_count{method="GET"} 2
             ("/assets/11Bb00/a.tif".to_string(), t(2, 20)),
             ("/assets/12Cc00/a.tif".to_string(), t(4, 40)),
         ];
-        let b = breakdown(&paths, &infos);
+        let b = breakdown(&paths, &infos, &FileIndex::default());
         let by_provider = group_totals(&b.items, Dim::Provider);
         assert_eq!(by_provider[0].name, "Alpha");
-        assert_eq!((by_provider[0].requests, by_provider[0].items, by_provider[0].items_with_downloads), (9, 2, 2));
+        assert_eq!((by_provider[0].counts.requests, by_provider[0].items, by_provider[0].items_with_downloads), (9, 2, 2));
         assert_eq!(by_provider[1].name, "Beta");
         let by_collection = group_totals(&b.items, Dim::Collection);
         assert_eq!(
-            by_collection.iter().map(|g| (g.name.as_str(), g.requests)).collect::<Vec<_>>(),
+            by_collection.iter().map(|g| (g.name.as_str(), g.counts.requests)).collect::<Vec<_>>(),
             vec![("dem", 6), ("webcam-image", 5)]
         );
     }
@@ -1307,10 +1482,10 @@ http_request_duration_seconds_count{method="GET"} 2
         let infos = infos();
         let f = filters(&[("provider", "Alpha"), ("data_type", "Model")]);
         assert!(f.is_active());
-        let kept: Vec<_> = infos.iter().filter(|i| f.matches(&i.facets)).map(|i| i.code.as_str()).collect();
+        let kept: Vec<_> = infos.iter().filter(|i| f.matches_item(&i.facets)).map(|i| i.code.as_str()).collect();
         assert_eq!(kept, vec!["12Cc00"]);
         let either = filters(&[("collection", "dem|webcam-image")]);
-        assert_eq!(infos.iter().filter(|i| either.matches(&i.facets)).count(), 3);
+        assert_eq!(infos.iter().filter(|i| either.matches_item(&i.facets)).count(), 3);
         assert!(!filters(&[("provider", "")]).is_active());
         assert!(!filters(&[("unknown_key", "x")]).is_active());
     }
@@ -1324,13 +1499,78 @@ http_request_duration_seconds_count{method="GET"} 2
             ("/assets/12Cc00/a.tif".to_string(), t(4, 40)),
             ("/docs/x.pdf".to_string(), t(9, 9)),
         ];
-        let b = breakdown(&paths, &infos).filtered(&filters(&[("provider", "Alpha")]));
+        let b = breakdown(&paths, &infos, &FileIndex::default()).filtered(&filters(&[("provider", "Alpha")]));
         assert_eq!(b.items.len(), 2);
         assert_eq!(b.docs, Totals::default());
         assert_eq!(b.unknown, Totals::default());
-        let all = breakdown(&paths, &infos).filtered(&Filters::default());
+        let all = breakdown(&paths, &infos, &FileIndex::default()).filtered(&Filters::default());
         assert_eq!(all.items.len(), 3);
         assert_eq!(all.docs, t(9, 9));
+    }
+
+    /// An item declared as LAZ that also holds a PDF, and an item with no PDF.
+    fn kites() -> Vec<ItemInfo> {
+        let mut tree = item("kites-a", "point-cloud", "Alpha", "Model", 0);
+        tree.facets.format = "LAZ".into();
+        tree.files_by_format = BTreeMap::from([("LAZ".to_string(), 2), ("PDF".to_string(), 1)]);
+        let mut sail = item("kites-b", "point-cloud", "Alpha", "Model", 0);
+        sail.facets.format = "LAZ".into();
+        sail.files_by_format = BTreeMap::from([("LAZ".to_string(), 4)]);
+        vec![tree, sail]
+    }
+
+    fn kite_paths() -> Vec<(String, Totals)> {
+        let t = |requests, bytes| Totals { requests, bytes, ..Default::default() };
+        vec![
+            ("/assets/kites-a/tail.laz".to_string(), t(1, 100)),
+            ("/assets/kites-a/flight_notes.pdf".to_string(), t(1, 10)),
+            ("/archives/kites-a.zip".to_string(), t(1, 1000)),
+            ("/assets/kites-b/wing.laz".to_string(), t(2, 200)),
+        ]
+    }
+
+    fn kite_files() -> FileIndex {
+        FileIndex { media_types: HashMap::from([("/assets/kites-a/flight_notes.pdf".to_string(), "application/pdf".to_string())]), ..Default::default() }
+    }
+
+    #[test]
+    fn grouping_by_format_counts_each_file_under_its_own_format_and_archives_under_zip() {
+        let b = breakdown(&kite_paths(), &kites(), &kite_files());
+        let groups: Vec<_> = group_totals(&b.items, Dim::Format)
+            .into_iter()
+            .map(|g| (g.name, g.items, g.counts.requests, g.counts.bytes, g.counts.archive_requests, g.counts.files_downloaded, g.counts.files_total))
+            .collect();
+        assert_eq!(
+            groups,
+            vec![
+                ("LAZ".to_string(), 2, 3, 300, 0, 2, 6),
+                ("PDF".to_string(), 1, 1, 10, 0, 1, 1),
+                ("ZIP".to_string(), 1, 1, 1000, 1, 0, 0),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_format_filter_keeps_only_the_files_of_that_format() {
+        let pdf = breakdown(&kite_paths(), &kites(), &kite_files()).filtered(&filters(&[("format", "PDF")]));
+        let rows: Vec<_> = pdf.items.iter().map(|i| (i.item.as_str(), i.counts.clone())).collect();
+        let only_the_pdf = Counts { requests: 1, bytes: 10, files_downloaded: 1, files_total: 1, ..Default::default() };
+        assert_eq!(rows, vec![("kites-a", only_the_pdf)]);
+
+        let zip = breakdown(&kite_paths(), &kites(), &kite_files()).filtered(&filters(&[("format", "ZIP")]));
+        let rows: Vec<_> = zip.items.iter().map(|i| (i.item.as_str(), i.counts.requests, i.counts.archive_requests, i.counts.files_total)).collect();
+        assert_eq!(rows, vec![("kites-a", 1, 1, 0)]);
+
+        let laz = breakdown(&kite_paths(), &kites(), &kite_files()).filtered(&filters(&[("format", "LAZ"), ("provider", "Alpha")]));
+        let rows: Vec<_> = laz.items.iter().map(|i| (i.item.as_str(), i.counts.requests, i.counts.files_total)).collect();
+        assert_eq!(rows, vec![("kites-a", 1, 2), ("kites-b", 2, 4)]);
+    }
+
+    #[test]
+    fn the_format_menu_counts_files_and_the_other_menus_count_items() {
+        let menus = facet_values(&kites());
+        assert_eq!(menus["format"], vec![("LAZ".to_string(), 6), ("PDF".to_string(), 1)]);
+        assert_eq!(menus["provider"], vec![("Alpha".to_string(), 2)]);
     }
 
     #[test]
@@ -1345,10 +1585,10 @@ http_request_duration_seconds_count{method="GET"} 2
         let infos = infos();
         let t = |requests, bytes| Totals { requests, bytes, ..Default::default() };
         let rows = vec![
-            (at("2026-10-20 00:00"), "10Aa00".to_string(), t(5, 50)),
-            (at("2026-10-20 00:00"), "~docs".to_string(), t(1, 1)),
-            (at("2026-10-22 00:00"), "11Bb00".to_string(), t(2, 20)),
-            (at("2026-10-22 00:00"), "12Cc00".to_string(), t(1, 10)),
+            (at("2026-10-20 00:00"), "10Aa00".to_string(), "TIF".to_string(), t(5, 50)),
+            (at("2026-10-20 00:00"), "~docs".to_string(), "PDF".to_string(), t(1, 1)),
+            (at("2026-10-22 00:00"), "11Bb00".to_string(), "TIF".to_string(), t(2, 20)),
+            (at("2026-10-22 00:00"), "12Cc00".to_string(), "TIF".to_string(), t(1, 10)),
         ];
         let none = Filters::default();
         let s = series(&rows, &infos, Dim::Collection, &none, 1, &days("2026-10-20", "2026-10-22"));
@@ -1367,10 +1607,10 @@ http_request_duration_seconds_count{method="GET"} 2
         let infos = infos();
         let t = |requests, bytes| Totals { requests, bytes, ..Default::default() };
         let rows = vec![
-            (at("2026-10-22 00:00"), "10Aa00".to_string(), t(5, 50)),
-            (at("2026-10-22 00:00"), "11Bb00".to_string(), t(2, 20)),
-            (at("2026-10-22 00:00"), "12Cc00".to_string(), t(4, 40)),
-            (at("2026-10-22 00:00"), "~docs".to_string(), t(7, 7)),
+            (at("2026-10-22 00:00"), "10Aa00".to_string(), "TIF".to_string(), t(5, 50)),
+            (at("2026-10-22 00:00"), "11Bb00".to_string(), "TIF".to_string(), t(2, 20)),
+            (at("2026-10-22 00:00"), "12Cc00".to_string(), "TIF".to_string(), t(4, 40)),
+            (at("2026-10-22 00:00"), "~docs".to_string(), "PDF".to_string(), t(7, 7)),
         ];
         // Models only, compared by provider; documents are not part of a filtered view.
         let s = series(&rows, &infos, Dim::Provider, &filters(&[("data_type", "Model")]), 7, &days("2026-10-22", "2026-10-22"));
@@ -1383,12 +1623,12 @@ http_request_duration_seconds_count{method="GET"} 2
         let infos = infos();
         let t = |requests| Totals { requests, ..Default::default() };
         let rows = vec![
-            (at("2026-10-22 00:00"), "10Aa00".to_string(), t(5)),
-            (at("2026-10-22 00:00"), "11Bb00".to_string(), t(2)),
-            (at("2026-10-22 00:00"), "~docs/lantern_manual.pdf".to_string(), t(3)),
+            (at("2026-10-22 00:00"), "10Aa00".to_string(), "TIF".to_string(), t(5)),
+            (at("2026-10-22 00:00"), "11Bb00".to_string(), "TIF".to_string(), t(2)),
+            (at("2026-10-22 00:00"), "~docs/lantern_manual.pdf".to_string(), "PDF".to_string(), t(3)),
             // An hour summed before documents had keys of their own.
-            (at("2026-10-22 00:00"), "~docs".to_string(), t(1)),
-            (at("2026-10-22 00:00"), "~other".to_string(), t(4)),
+            (at("2026-10-22 00:00"), "~docs".to_string(), "PDF".to_string(), t(1)),
+            (at("2026-10-22 00:00"), "~other".to_string(), "Unknown".to_string(), t(4)),
         ];
         let none = Filters::default();
         let window = days("2026-10-22", "2026-10-22");
@@ -1409,6 +1649,27 @@ http_request_duration_seconds_count{method="GET"} 2
             named(&[("10Aa00", 5), ("Other", 4), ("lantern_manual.pdf", 3), ("Documents", 1), ("Smaller groups", 2)])
         );
         assert!(!Dim::ATTRIBUTES.contains(&Dim::Item));
+    }
+
+    #[test]
+    fn series_by_format_puts_each_file_in_its_own_format_and_filters_per_file() {
+        let infos = infos();
+        let t = |requests| Totals { requests, ..Default::default() };
+        let rows = vec![
+            (at("2026-10-22 00:00"), "11Bb00".to_string(), "LAZ".to_string(), t(1)),
+            (at("2026-10-22 00:00"), "11Bb00".to_string(), "PDF".to_string(), t(2)),
+            (at("2026-10-22 00:00"), "12Cc00".to_string(), "TIF".to_string(), t(4)),
+        ];
+        let window = days("2026-10-22", "2026-10-22");
+        let got = |dim, f: &Filters| {
+            series(&rows, &infos, dim, f, 7, &window).groups.into_iter().map(|g| (g.name, g.requests[0])).collect::<Vec<_>>()
+        };
+        let named = |v: &[(&str, u64)]| v.iter().map(|(n, r)| (n.to_string(), *r)).collect::<Vec<_>>();
+        let none = Filters::default();
+        assert_eq!(got(Dim::Format, &none), named(&[("TIF", 4), ("PDF", 2), ("LAZ", 1)]));
+        let pdf = filters(&[("format", "PDF")]);
+        assert_eq!(got(Dim::Item, &pdf), named(&[("11Bb00", 2)]), "the item's other files are left out");
+        assert_eq!(got(Dim::Format, &filters(&[("format", "LAZ|TIF"), ("provider", "Beta")])), named(&[("LAZ", 1)]));
     }
 
     fn at(s: &str) -> chrono::NaiveDateTime {
@@ -1458,8 +1719,8 @@ http_request_duration_seconds_count{method="GET"} 2
         let infos = infos();
         let t = |requests| Totals { requests, ..Default::default() };
         let rows = vec![
-            (at("2026-10-22 09:00"), "10Aa00".to_string(), t(3)),
-            (at("2026-10-22 12:00"), "10Aa00".to_string(), t(4)),
+            (at("2026-10-22 09:00"), "10Aa00".to_string(), "TIF".to_string(), t(3)),
+            (at("2026-10-22 12:00"), "10Aa00".to_string(), "TIF".to_string(), t(4)),
         ];
         let window = series_window(None, Some(date("2026-10-22")), None, None, at("2026-10-22 12:30")).unwrap();
         let s = series(&rows, &infos, Dim::Total, &Filters::default(), 7, &window);
@@ -1477,8 +1738,8 @@ http_request_duration_seconds_count{method="GET"} 2
         let infos = infos();
         let t = |requests| Totals { requests, ..Default::default() };
         let rows = vec![
-            (at("2026-09-28 00:00"), "10Aa00".to_string(), t(2)),
-            (at("2026-10-12 00:00"), "10Aa00".to_string(), t(5)),
+            (at("2026-09-28 00:00"), "10Aa00".to_string(), "TIF".to_string(), t(2)),
+            (at("2026-10-12 00:00"), "10Aa00".to_string(), "TIF".to_string(), t(5)),
         ];
         let window = series_window(Some(Resolution::Week), Some(date("2026-10-01")), Some(date("2026-10-14")), None, at("2026-10-22 12:00")).unwrap();
         let s = series(&rows, &infos, Dim::Total, &Filters::default(), 7, &window);

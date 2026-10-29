@@ -6,9 +6,9 @@
 //! and the routes each exist only when their settings are present and non-empty.
 
 use crate::stats::{
-    breakdown, code_key, code_passes, documents, facet_values, file_name_in_item, group_totals, parse_scrape,
-    series, series_window, MAX_BUCKETS, setting, summary_rows, to_csv, Dim, Filters, ItemInfo,
-    Resolution, Totals, DOCS_KEY,
+    breakdown, code_passes, documents, facet_values, file_name_in_item, group_totals, parse_scrape,
+    path_passes, series, series_window, MAX_BUCKETS, setting, summary_rows, to_csv, Dim, FileIndex, Filters,
+    ItemInfo, Resolution, Totals, DOCS_KEY,
 };
 use crate::stats_store::{database_options, Store};
 use axum::{
@@ -83,8 +83,8 @@ pub struct ScrapeSettings {
 pub struct StatsState {
     pub store: Arc<Store>,
     pub items: Arc<Vec<ItemInfo>>,
-    /// Size in bytes of each file, by the path the file proxy reports.
-    pub sizes: Arc<HashMap<String, u64>>,
+    /// Size and media type of each file, by the path the file proxy reports.
+    pub files: Arc<FileIndex>,
     pub keycloak: Option<Arc<KeycloakSettings>>,
 }
 
@@ -160,7 +160,7 @@ pub fn keycloak_server_url(raw: &str) -> Result<Url, String> {
 fn settings_from(
     var: impl Fn(&str) -> Option<String>,
     items: Vec<ItemInfo>,
-    sizes: HashMap<String, u64>,
+    files: FileIndex,
 ) -> Option<StatsState> {
     let (database, scrape, keycloak) = match check_settings(var) {
         StatsSettings::Absent => return None,
@@ -172,9 +172,11 @@ fn settings_from(
     };
     // The pool connects on first use, so the STAC API starts whether or not the database is up.
     let store = Store::lazy_with(*database);
+    let files = Arc::new(files);
     {
         let store = store.clone();
-        tokio::spawn(async move { store.migrate_until_ready().await });
+        let files = files.clone();
+        tokio::spawn(async move { store.migrate_until_ready(&files).await });
     }
 
     let keycloak = match keycloak {
@@ -189,7 +191,7 @@ fn settings_from(
         }
     };
 
-    let state = StatsState { store: Arc::new(store), items: Arc::new(items), sizes: Arc::new(sizes), keycloak };
+    let state = StatsState { store: Arc::new(store), items: Arc::new(items), files, keycloak };
     match scrape {
         Ok(Some(settings)) => match Scraper::new(settings.url) {
             Ok(scraper) => {
@@ -209,9 +211,9 @@ pub fn mount(
     app: Router,
     var: impl Fn(&str) -> Option<String>,
     items: Vec<ItemInfo>,
-    sizes: HashMap<String, u64>,
+    files: FileIndex,
 ) -> Router {
-    match settings_from(var, items, sizes) {
+    match settings_from(var, items, files) {
         Some(stats) => app.merge(router(stats)),
         None => app,
     }
@@ -425,7 +427,7 @@ async fn scrape_once(scraper: &Scraper, state: &StatsState) -> anyhow::Result<()
         anyhow::bail!("the metrics carry {} paths, more than {MAX_PATHS_PER_SCRAPE}", scrape.paths.len());
     }
     let now = Utc::now();
-    state.store.ingest(now.date_naive(), now.timestamp(), &scrape, &state.sizes).await
+    state.store.ingest(now.date_naive(), now.timestamp(), &scrape, &state.files).await
 }
 
 /// Read the metrics every `interval`, one read at a time; a failed read is logged and the next
@@ -520,7 +522,8 @@ async fn status(
     }
 }
 
-/// The values each attribute can take, with item counts, for the filter menus.
+/// The values each attribute can take, for the filter menus: with item counts, and for format,
+/// which is a file's, with file counts.
 async fn facets(
     State(state): State<StatsState>,
     Query(raw): Query<HashMap<String, String>>,
@@ -533,7 +536,10 @@ async fn facets(
         .map(|(key, values)| {
             let rows: Vec<_> = values
                 .into_iter()
-                .map(|(value, items)| serde_json::json!({ "value": value, "items": items }))
+                .map(|(value, n)| {
+                    let unit = if key == Dim::Format.key() { "files" } else { "items" };
+                    serde_json::json!({ "value": value, unit: n })
+                })
                 .collect();
             (key.to_string(), serde_json::Value::Array(rows))
         })
@@ -561,14 +567,13 @@ async fn overview(
         let today_rows = store.code_days(Some(today), Some(today)).await?;
         let by_code: HashMap<&str, &ItemInfo> = items.iter().map(|i| (i.code.as_str(), i)).collect();
 
-        let breakdown = breakdown(&paths, items).filtered(f);
+        let breakdown = breakdown(&paths, items, &state.files).filtered(f);
 
         let mut timeline: std::collections::BTreeMap<i64, Totals> = Default::default();
         let mut hour = Totals::default();
         let mut day24 = Totals::default();
         for (ts, path, t) in &recent {
-            let code = code_key(path);
-            if code_passes(&code, &by_code, f).is_none() {
+            if !path_passes(path, &state.files, &by_code, f) {
                 continue;
             }
             timeline.entry(*ts).or_default().add(*t);
@@ -578,8 +583,8 @@ async fn overview(
             }
         }
         let mut today_totals = Totals::default();
-        for (_, code, t) in &today_rows {
-            if code_passes(code, &by_code, f).is_some() {
+        for (_, code, format, t) in &today_rows {
+            if code_passes(code, format, &by_code, f).is_some() {
                 today_totals.add(*t);
             }
         }
@@ -593,7 +598,7 @@ async fn overview(
 
     let mut total = b.docs;
     total.add(b.unknown);
-    for it in &b.items {
+    for it in b.items.iter().map(|i| &i.counts) {
         total.add(Totals { requests: it.requests, bytes: it.bytes, equiv: (it.whole_files * 1000.0).round() as u64 });
     }
 
@@ -605,9 +610,9 @@ async fn overview(
         "today": totals_json(today_totals),
         "last_hour": totals_json(hour),
         "last_24h": totals_json(day24),
-        "files_downloaded": b.items.iter().map(|i| i.files_downloaded).sum::<usize>(),
-        "files_total": b.items.iter().map(|i| i.files_total).sum::<usize>(),
-        "items_with_downloads": b.items.iter().filter(|i| i.requests > 0).count(),
+        "files_downloaded": b.items.iter().map(|i| i.counts.files_downloaded).sum::<usize>(),
+        "files_total": b.items.iter().map(|i| i.counts.files_total).sum::<usize>(),
+        "items_with_downloads": b.items.iter().filter(|i| i.counts.requests > 0).count(),
         "items_total": b.items.len(),
         "docs": totals_json(b.docs),
         "unknown": totals_json(b.unknown),
@@ -632,7 +637,7 @@ async fn groups(
         Ok(p) => p,
         Err(r) => return r,
     };
-    let b = breakdown(&paths, &state.items).filtered(&p.filters());
+    let b = breakdown(&paths, &state.items, &state.files).filtered(&p.filters());
     Json(serde_json::json!({ "rows": group_totals(&b.items, dim), "extra": b.extra_rows() })).into_response()
 }
 
@@ -687,7 +692,7 @@ async fn items_list(
         Ok(p) => p,
         Err(r) => return r,
     };
-    let b = breakdown(&paths, &state.items).filtered(&p.filters());
+    let b = breakdown(&paths, &state.items, &state.files).filtered(&p.filters());
     // Documents and other paths are no item, so a search for items leaves them out.
     let extra = if p.get("q").is_some() { Vec::new() } else { b.extra_rows() };
     let mut rows = b.items;
@@ -703,11 +708,15 @@ async fn items_list(
     match sort {
         "item" => rows.sort_by(|a, b| a.item.cmp(&b.item)),
         "collection" => rows.sort_by(|a, b| a.facets.collection.cmp(&b.facets.collection).then(a.item.cmp(&b.item))),
-        "bytes" => rows.sort_by(|a, b| a.bytes.cmp(&b.bytes).then(a.item.cmp(&b.item))),
-        "whole_files" => rows.sort_by(|a, b| a.whole_files.total_cmp(&b.whole_files).then(a.item.cmp(&b.item))),
-        "files" => rows.sort_by(|a, b| a.files_downloaded.cmp(&b.files_downloaded).then(a.item.cmp(&b.item))),
-        "files_total" => rows.sort_by(|a, b| a.files_total.cmp(&b.files_total).then(a.item.cmp(&b.item))),
-        _ => rows.sort_by(|a, b| a.requests.cmp(&b.requests).then(a.item.cmp(&b.item))),
+        "bytes" => rows.sort_by(|a, b| a.counts.bytes.cmp(&b.counts.bytes).then(a.item.cmp(&b.item))),
+        "whole_files" => {
+            rows.sort_by(|a, b| a.counts.whole_files.total_cmp(&b.counts.whole_files).then(a.item.cmp(&b.item)))
+        }
+        "files" => {
+            rows.sort_by(|a, b| a.counts.files_downloaded.cmp(&b.counts.files_downloaded).then(a.item.cmp(&b.item)))
+        }
+        "files_total" => rows.sort_by(|a, b| a.counts.files_total.cmp(&b.counts.files_total).then(a.item.cmp(&b.item))),
+        _ => rows.sort_by(|a, b| a.counts.requests.cmp(&b.counts.requests).then(a.item.cmp(&b.item))),
     }
     let by_name = matches!(sort, "item" | "collection");
     // Names sort ascending unless asked otherwise; numbers sort descending unless asked otherwise.
@@ -787,7 +796,7 @@ async fn summary(
         Ok(r) => r,
         Err(r) => return r,
     };
-    Json(serde_json::json!({ "rows": summary_rows(rows, &state.items, &p.filters()) })).into_response()
+    Json(serde_json::json!({ "rows": summary_rows(rows, &state.items, &state.files, &p.filters()) })).into_response()
 }
 
 async fn export_csv(
@@ -805,12 +814,12 @@ async fn export_csv(
         if level_file {
             let by_code: HashMap<&str, &ItemInfo> = items.iter().map(|i| (i.code.as_str(), i)).collect();
             let mut rows = state.store.path_totals(p.day("from"), p.day("to")).await?;
-            rows.retain(|(path, _)| code_passes(&code_key(path), &by_code, &filters).is_some());
+            rows.retain(|(path, _)| path_passes(path, &state.files, &by_code, &filters));
             rows.sort_by(|a, b| b.1.requests.cmp(&a.1.requests).then(a.0.cmp(&b.0)));
             anyhow::Ok(crate::stats::file_csv(&rows))
         } else {
             let rows = state.store.daily(p.day("from"), p.day("to")).await?;
-            Ok(to_csv(&summary_rows(rows, items, &filters)))
+            Ok(to_csv(&summary_rows(rows, items, &state.files, &filters)))
         }
     }
     .await;
@@ -900,7 +909,7 @@ mod tests {
         StatsState {
             store: Arc::new(Store::lazy("postgres://nobody:nothing@127.0.0.1:1/none").unwrap()),
             items: Arc::new(vec![]),
-            sizes: Arc::new(HashMap::new()),
+            files: Arc::new(FileIndex::default()),
             keycloak: None,
         }
     }
@@ -976,7 +985,7 @@ mod tests {
                 ("KEYCLOAK_CLIENT_ID", "pears"),
             ],
         ] {
-            let app = mount(Router::new().route("/health", get(|| async { "ok" })), vars(&settings), vec![], HashMap::new());
+            let app = mount(Router::new().route("/health", get(|| async { "ok" })), vars(&settings), vec![], FileIndex::default());
             let res = app.clone().oneshot(HttpRequest::get("/health").body(Body::empty()).unwrap()).await.unwrap();
             assert_eq!(res.status(), StatusCode::OK, "{settings:?}");
             let res = app.oneshot(HttpRequest::get("/stats").body(Body::empty()).unwrap()).await.unwrap();
@@ -987,7 +996,7 @@ mod tests {
     #[tokio::test]
     async fn no_ingest_route_exists_even_with_the_old_key_set() {
         let settings = [("STATS_DATABASE_URL", GOOD_DB), ("STATS_INGEST_KEY", "k")];
-        let app = mount(Router::new(), vars(&settings), vec![], HashMap::new());
+        let app = mount(Router::new(), vars(&settings), vec![], FileIndex::default());
         let req = HttpRequest::post("/internal/stats/ingest").header(header::AUTHORIZATION, "Bearer k");
         let res = app.oneshot(req.body(Body::from(BODY)).unwrap()).await.unwrap();
         assert_eq!(res.status(), StatusCode::NOT_FOUND);

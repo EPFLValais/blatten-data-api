@@ -647,7 +647,8 @@
       for (const v of facets[dim] || []) {
         const o = document.createElement('option');
         o.value = dim + '|' + v.value;
-        o.textContent = v.value + ' (' + num(v.items) + ')';
+        // Format belongs to each file, so its menu counts files; the other menus count items.
+        o.textContent = v.value + ' (' + (v.files == null ? num(v.items) : num(v.files) + ' files') + ')';
         group.appendChild(o);
       }
       select.appendChild(group);

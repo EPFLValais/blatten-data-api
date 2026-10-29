@@ -1063,9 +1063,8 @@ async fn main() -> Result<()> {
         STAC_VERSION
     );
 
-    let stat_items = stat_items(&catalog.items);
-
-    let file_sizes = file_sizes(&catalog);
+    let files = file_index(&catalog);
+    let stat_items = stat_items(&catalog.items, &files);
 
     let state = AppState {
         catalog: Arc::new(catalog),
@@ -1083,7 +1082,7 @@ async fn main() -> Result<()> {
     let app = stac_router(state, asset_limits);
 
     // Download statistics sit outside the CORS layer above and are registered only when configured.
-    let app = stats_routes::mount(app, |name| env::var(name).ok(), stat_items, file_sizes);
+    let app = stats_routes::mount(app, |name| env::var(name).ok(), stat_items, files);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     info!("Starting STAC API server on {}", addr);
@@ -1572,29 +1571,39 @@ fn perform_search(
         .into_response()
 }
 
-/// The size of each whole file the proxy serves, by its proxy path: every item asset and every root
-/// catalog link (the documents) that carries `file:size`.
-fn file_sizes(catalog: &StacCatalog) -> std::collections::HashMap<String, u64> {
-    let assets = catalog.items.iter().flat_map(|i| i.assets.values()).map(|a| (&a.href, &a.additional_fields));
-    let links = catalog.root.links.iter().map(|l| (&l.href, &l.additional_fields));
-    assets
-        .chain(links)
-        .filter_map(|(href, fields)| {
-            let size = fields.get("file:size").and_then(|v| v.as_u64())?;
-            Some((stats::proxy_path(href.as_ref())?, size))
-        })
-        .collect()
+/// The file index of `catalog`: every item asset and every root catalog link (the documents).
+fn file_index(catalog: &StacCatalog) -> stats::FileIndex {
+    let assets = catalog
+        .items
+        .iter()
+        .flat_map(|i| i.assets.values())
+        .map(|a| (&a.href, &a.r#type, &a.additional_fields));
+    let links = catalog.root.links.iter().map(|l| (&l.href, &l.r#type, &l.additional_fields));
+    let mut index = stats::FileIndex::default();
+    for (href, media_type, fields) in assets.chain(links) {
+        let Some(path) = stats::proxy_path(href.as_ref()) else { continue };
+        if let Some(t) = media_type {
+            index.media_types.insert(path.clone(), t.clone());
+        }
+        if let Some(size) = fields.get("file:size").and_then(|v| v.as_u64()) {
+            index.sizes.insert(path, size);
+        }
+    }
+    index
 }
 
 /// The items the download statistics list: each series-level item (one without
 /// `blatten:series`), its files counted with those of its days. Downloads are keyed by the
 /// item code in the file path, which a series and its days share.
-fn stat_items(items: &[StacItem]) -> Vec<stats::ItemInfo> {
-    let files = |i: &StacItem| {
-        i.assets
-            .keys()
-            .filter(|k| k.as_str() != "archive" && k.as_str() != "manifest")
-            .count()
+fn stat_items(items: &[StacItem], files: &stats::FileIndex) -> Vec<stats::ItemInfo> {
+    let count = |i: &StacItem, into: &mut std::collections::BTreeMap<String, usize>| {
+        for (key, asset) in &i.assets {
+            if key == "archive" || key == "manifest" {
+                continue;
+            }
+            let path = stats::proxy_path(&asset.href).unwrap_or_else(|| asset.href.clone());
+            *into.entry(files.format(&path)).or_default() += 1;
+        }
     };
     let series_of = |i: &StacItem| {
         i.properties
@@ -1603,10 +1612,10 @@ fn stat_items(items: &[StacItem]) -> Vec<stats::ItemInfo> {
             .and_then(|v| v.as_str())
             .map(str::to_string)
     };
-    let mut day_files: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut day_files: std::collections::HashMap<String, std::collections::BTreeMap<String, usize>> = std::collections::HashMap::new();
     for i in items {
         if let Some(series) = series_of(i) {
-            *day_files.entry(series).or_default() += files(i);
+            count(i, day_files.entry(series).or_default());
         }
     }
     items
@@ -1624,7 +1633,11 @@ fn stat_items(items: &[StacItem]) -> Vec<stats::ItemInfo> {
             Some(stats::ItemInfo {
                 code: i.id.clone(),
                 title: i.properties.title.clone().unwrap_or_else(|| i.id.clone()),
-                files: files(i) + day_files.get(&i.id).copied().unwrap_or(0),
+                files_by_format: {
+                    let mut files = day_files.remove(&i.id).unwrap_or_default();
+                    count(i, &mut files);
+                    files
+                },
                 facets: stats::Facets {
                     collection: i.collection.clone()?,
                     provider: text("blatten:source"),
@@ -1932,7 +1945,7 @@ mod tests {
             serde_json::from_value(serde_json::json!({"href": "/s3/assets/pear-01/leaf.jpg", "file:size": 64})).unwrap(),
         );
         let catalog = StacCatalog::from_parts(root, Default::default(), vec![pear], "v".into());
-        let sizes = file_sizes(&catalog);
+        let sizes = file_index(&catalog).sizes;
         assert_eq!(sizes.get("/docs/pruning_guide.pdf"), Some(&2048));
         assert_eq!(sizes.get("/assets/pear-01/leaf.jpg"), Some(&64));
         assert_eq!(sizes.len(), 2);
@@ -2074,8 +2087,38 @@ mod tests {
             with(item("kites-a_2019-09-02"), Some("kites-a"), &["k3"]),
             with(item("pear-01"), None, &["leaf"]),
         ];
-        let listed: Vec<(String, usize)> = stat_items(&items).into_iter().map(|i| (i.code, i.files)).collect();
+        let listed: Vec<(String, usize)> =
+            stat_items(&items, &Default::default()).into_iter().map(|i| (i.code.clone(), i.files_by_format.values().sum())).collect();
         assert_eq!(listed, vec![("kites-a".to_string(), 4), ("pear-01".to_string(), 1)]);
+    }
+
+    #[test]
+    fn download_statistics_count_an_items_files_by_each_files_own_format() {
+        let mut tree = item("kites-a");
+        tree.assets.clear();
+        tree.properties.additional_fields.insert("blatten:format".into(), "LAZ".into());
+        for (name, file, media_type) in [
+            ("archive", "archives/kites-a.zip", "application/zip"),
+            ("tail", "assets/kites-a/tail.laz", "application/vnd.laszip"),
+            ("wing", "assets/kites-a/wing.laz", "application/vnd.laszip"),
+            ("notes", "assets/kites-a/flight_notes.pdf", "application/pdf"),
+        ] {
+            tree.assets.insert(
+                name.into(),
+                serde_json::from_value(serde_json::json!({"href": format!("/s3/{file}"), "type": media_type})).unwrap(),
+            );
+        }
+        let root = serde_json::from_value(serde_json::json!({
+            "type": "Catalog", "stac_version": "1.1.0", "id": "kites-root", "description": "Kites", "links": []
+        }))
+        .unwrap();
+        let catalog = StacCatalog::from_parts(root, Default::default(), vec![tree], "v".into());
+        let index = file_index(&catalog);
+        assert_eq!(index.media_types.get("/assets/kites-a/flight_notes.pdf").map(String::as_str), Some("application/pdf"));
+        let listed = stat_items(&catalog.items, &index);
+        let counts: Vec<(&str, usize)> = listed[0].files_by_format.iter().map(|(f, n)| (f.as_str(), *n)).collect();
+        assert_eq!(counts, vec![("LAZ", 2), ("PDF", 1)]);
+        assert_eq!(listed[0].files_by_format.values().sum::<usize>(), 3);
     }
 
     #[tokio::test]

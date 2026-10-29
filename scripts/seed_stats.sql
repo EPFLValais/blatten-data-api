@@ -29,7 +29,14 @@ $$;
 
 -- Paths and sizes from the local catalog (stac/items.ndjson), with requests per day at the
 -- busiest hours.
-CREATE TEMP TABLE seed_path (path text PRIMARY KEY, code text NOT NULL, size bigint NOT NULL, per_day float8 NOT NULL)
+-- `format` is the extension upper-cased, which is what `file_format` gives these paths.
+CREATE TEMP TABLE seed_path (
+    path    text PRIMARY KEY,
+    code    text NOT NULL,
+    size    bigint NOT NULL,
+    per_day float8 NOT NULL,
+    format  text GENERATED ALWAYS AS (upper(substring(path FROM '\.([^./]+)$'))) STORED
+)
 ON COMMIT DROP;
 INSERT INTO seed_path (path, code, size, per_day) VALUES
     ('/archives/01Aa02.zip', '01Aa02', 40383194, 3),
@@ -106,15 +113,15 @@ SELECT t::date, path, SUM(requests), SUM(bytes), SUM(equiv)
 FROM seed_scrape
 GROUP BY 1, 2;
 
-INSERT INTO daily_code (day, code, requests, bytes, equiv)
-SELECT s.t::date, p.code, SUM(s.requests), SUM(s.bytes), SUM(s.equiv)
+INSERT INTO daily_code (day, code, format, requests, bytes, equiv)
+SELECT s.t::date, p.code, p.format, SUM(s.requests), SUM(s.bytes), SUM(s.equiv)
 FROM seed_scrape s JOIN seed_path p USING (path)
-GROUP BY 1, 2;
+GROUP BY 1, 2, 3;
 
-INSERT INTO hourly_code (hour, code, requests, bytes, equiv)
-SELECT date_trunc('hour', s.t) AT TIME ZONE 'UTC', p.code, SUM(s.requests), SUM(s.bytes), SUM(s.equiv)
+INSERT INTO hourly_code (hour, code, format, requests, bytes, equiv)
+SELECT date_trunc('hour', s.t) AT TIME ZONE 'UTC', p.code, p.format, SUM(s.requests), SUM(s.bytes), SUM(s.equiv)
 FROM seed_scrape s JOIN seed_path p USING (path)
-GROUP BY 1, 2;
+GROUP BY 1, 2, 3;
 
 INSERT INTO recent (ts, path, requests, bytes)
 SELECT extract(epoch FROM s.t AT TIME ZONE 'UTC')::bigint, s.path, s.requests, s.bytes
